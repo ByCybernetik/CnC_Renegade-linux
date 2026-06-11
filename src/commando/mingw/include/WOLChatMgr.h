@@ -1,0 +1,1 @@
+../../WOLChatMgr.h

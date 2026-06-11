@@ -1,0 +1,1 @@
+../../dlgcncbattleinfo.h

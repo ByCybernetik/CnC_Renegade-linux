@@ -1,0 +1,30 @@
+// Shared FrameUBO block — layout must match ww3d_vulkan::FrameUBO in vk_renderer.h (std140).
+layout(std140, set = 0, binding = 0) uniform FrameUBO {
+	layout(row_major) mat4 view_proj;
+	layout(row_major) mat4 world;
+	layout(row_major) mat4 view;
+	vec4 material_ambient;
+	vec4 material_diffuse;
+	vec4 material_emissive;
+	vec4 material_specular;
+	vec4 scene_ambient;
+	vec4 fog_color;
+	vec4 light_dir_or_pos[4];
+	vec4 light_diffuse[4];
+	vec4 light_params[4];
+	float fog_start;
+	float fog_end;
+	float fog_mode;
+	float flags;
+	float tex_stage0_mode;
+	float tex_stage1_color_mode;
+	float tex_stage1_alpha_mode;
+	float material_shininess;
+	float specular_enable;
+	float bump_mat[4];
+	float bump_l_scale;
+	float bump_l_offset;
+	float tex_tci[2];
+	float tex_uv_index[2];
+	vec4 tex_mat[2];
+} ubo;

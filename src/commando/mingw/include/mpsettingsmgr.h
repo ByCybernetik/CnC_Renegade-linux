@@ -1,0 +1,1 @@
+../../mpsettingsmgr.h

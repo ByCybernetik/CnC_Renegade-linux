@@ -1,0 +1,1 @@
+../../GameSpyBanList.h

@@ -1,0 +1,44 @@
+#ifndef RENEGADE_WINERROR_H
+#define RENEGADE_WINERROR_H
+
+#include <windows.h>
+
+#ifndef SEVERITY_SUCCESS
+#define SEVERITY_SUCCESS 0
+#endif
+#ifndef SEVERITY_ERROR
+#define SEVERITY_ERROR 1
+#endif
+#ifndef FACILITY_ITF
+#define FACILITY_ITF 4
+#endif
+
+#ifndef ERROR_ALREADY_EXISTS
+#define ERROR_ALREADY_EXISTS 183L
+#endif
+#ifndef ERROR_PATH_NOT_FOUND
+#define ERROR_PATH_NOT_FOUND 3L
+#endif
+#ifndef ERROR_INVALID_PARAMETER
+#define ERROR_INVALID_PARAMETER 87L
+#endif
+#ifndef ERROR_WRITE_FAULT
+#define ERROR_WRITE_FAULT 29L
+#endif
+#ifndef ERROR_INSUFFICIENT_BUFFER
+#define ERROR_INSUFFICIENT_BUFFER 122L
+#endif
+#ifndef ERROR_INVALID_HANDLE
+#define ERROR_INVALID_HANDLE 6L
+#endif
+#ifndef ERROR_MOD_NOT_FOUND
+#define ERROR_MOD_NOT_FOUND 126L
+#endif
+#ifndef ERROR_PROC_NOT_FOUND
+#define ERROR_PROC_NOT_FOUND 127L
+#endif
+#ifndef DRIVE_FIXED
+#define DRIVE_FIXED 3
+#endif
+
+#endif

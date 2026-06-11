@@ -1,0 +1,1 @@
+../../../combat/staticnetworkobject.h

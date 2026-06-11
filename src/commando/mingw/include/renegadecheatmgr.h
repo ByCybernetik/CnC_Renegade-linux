@@ -1,0 +1,1 @@
+../../renegadecheatmgr.h

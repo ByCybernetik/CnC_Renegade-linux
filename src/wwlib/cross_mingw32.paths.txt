@@ -1,0 +1,3 @@
+[binaries]
+c = '/home/cybernetik/Multimedia/CnC_Renegade-main/Code/wwlib/mingw-gcc-static.sh'
+cpp = '/home/cybernetik/Multimedia/CnC_Renegade-main/Code/wwlib/mingw-g++-static.sh'

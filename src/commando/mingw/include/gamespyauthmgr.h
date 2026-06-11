@@ -1,0 +1,1 @@
+../../gamespyauthmgr.h

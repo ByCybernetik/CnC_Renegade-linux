@@ -1,0 +1,1 @@
+../../GameSpy_QnR.h

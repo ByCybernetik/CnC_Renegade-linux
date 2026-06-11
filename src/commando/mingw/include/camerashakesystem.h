@@ -1,0 +1,1 @@
+../../../wwphys/camerashakesystem.h

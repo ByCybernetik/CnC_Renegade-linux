@@ -1,0 +1,1 @@
+../../../combat/conversationmgr.h

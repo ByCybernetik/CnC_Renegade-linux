@@ -1,0 +1,1 @@
+../../renegadedialogmgr.h

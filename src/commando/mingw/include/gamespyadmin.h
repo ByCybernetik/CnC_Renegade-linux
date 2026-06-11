@@ -1,0 +1,1 @@
+../../gamespyadmin.h

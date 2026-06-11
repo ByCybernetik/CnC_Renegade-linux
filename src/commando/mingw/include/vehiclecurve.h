@@ -1,0 +1,1 @@
+../../../wwmath/vehiclecurve.h

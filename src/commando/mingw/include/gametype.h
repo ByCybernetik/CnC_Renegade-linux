@@ -1,0 +1,1 @@
+../../../combat/gametype.h

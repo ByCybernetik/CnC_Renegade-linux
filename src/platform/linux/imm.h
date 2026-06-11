@@ -1,0 +1,131 @@
+#ifndef RENEGADE_IMM_H
+#define RENEGADE_IMM_H
+
+#include <windows.h>
+#include "winuser_extra.h"
+
+typedef void *HIMC;
+
+#define IME_CMODE_NATIVE 0x0001
+#define IME_CAND_CODE 0x0001
+#define IME_PROP_CANDLIST_START_FROM_1 0x00000002
+#define ATTR_TARGET_CONVERTED 0x0010
+#define GL_LEVEL_NOGUIDELINE 0x00000001
+#define IME_CMODE_FULLSHAPE 0x0008
+#define IME_SMODE_NONE 0x0000
+
+#define IGP_PROPERTY 0x00000004
+#define IGP_CONVERSION 0x00000008
+#define IME_PROP_AT_CARET 0x00010000
+#define IME_PROP_SPECIAL_UI 0x00020000
+#define IME_PROP_UNICODE 0x00080000
+
+#define GCS_COMPREADSTR 0x0001
+#define GCS_COMPREADATTR 0x0002
+#define GCS_COMPREADCLAUSE 0x0004
+#define GCS_COMPSTR 0x0008
+#define GCS_COMPATTR 0x0010
+#define GCS_COMPCLAUSE 0x0020
+#define GCS_CURSORPOS 0x0080
+#define GCS_DELTASTART 0x0100
+#define GCS_RESULTREADSTR 0x0200
+#define GCS_RESULTREADCLAUSE 0x0400
+#define GCS_RESULTSTR 0x0800
+#define GCS_RESULTCLAUSE 0x1000
+
+#define GGL_LEVEL 0x0001
+#define GGL_INDEX 0x0002
+#define GGL_STRING 0x0003
+#define GGL_PRIVATE 0x0004
+
+#define NI_OPENCANDIDATE 0x0010
+#define NI_CLOSECANDIDATE 0x0011
+#define NI_SELECTCANDIDATESTR 0x0012
+#define NI_CHANGECANDIDATELIST 0x0013
+#define NI_SETCANDIDATE_PAGESTART 0x0009
+#define NI_SETCANDIDATE_PAGESIZE 0x000c
+
+#define IMN_OPENSTATUSWINDOW 0x0001
+#define IMN_CLOSESTATUSWINDOW 0x0002
+#define IMN_CHANGECANDIDATE 0x0003
+#define IMN_CLOSECANDIDATE 0x0004
+#define IMN_OPENCANDIDATE 0x0005
+#define IMN_SETCONVERSIONMODE 0x0006
+#define IMN_SETSENTENCEMODE 0x0007
+#define IMN_SETOPENSTATUS 0x0008
+#define IMN_SETCANDIDATEPOS 0x0009
+#define IMN_SETCOMPOSITIONFONT 0x000a
+#define IMN_SETCOMPOSITIONWINDOW 0x000b
+#define IMN_SETSTATUSWINDOWPOS 0x000c
+#define IMN_GUIDELINE 0x000d
+
+#ifndef WM_IME_STARTCOMPOSITION
+#define WM_IME_STARTCOMPOSITION 0x010D
+#define WM_IME_ENDCOMPOSITION 0x010E
+#define WM_IME_COMPOSITION 0x010F
+#define WM_IME_SETCONTEXT 0x0281
+#define WM_IME_NOTIFY 0x0282
+#define WM_IME_CONTROL 0x0283
+#define WM_IME_COMPOSITIONFULL 0x0284
+#define WM_IME_SELECT 0x0285
+#define WM_IME_CHAR 0x0286
+#define WM_IME_KEYDOWN 0x0290
+#define WM_IME_KEYUP 0x0291
+#endif
+
+typedef struct tagCANDIDATELIST {
+	DWORD dwSize;
+	DWORD dwStyle;
+	DWORD dwCount;
+	DWORD dwSelection;
+	DWORD dwPageStart;
+	DWORD dwPageSize;
+	DWORD dwOffset[1];
+} CANDIDATELIST, *LPCANDIDATELIST;
+
+typedef struct tagCOMPOSITIONFORM {
+	DWORD dwStyle;
+	POINT ptCurrentPos;
+	RECT rcArea;
+} COMPOSITIONFORM, *LPCOMPOSITIONFORM;
+
+typedef struct tagCANDIDATEFORM {
+	DWORD dwIndex;
+	DWORD dwStyle;
+	POINT ptCurrentPos;
+	RECT rcArea;
+} CANDIDATEFORM, *LPCANDIDATEFORM;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+UINT ImmGetVirtualKey(HWND hwnd);
+HIMC ImmGetContext(HWND hwnd);
+BOOL ImmReleaseContext(HWND hwnd, HIMC imc);
+HIMC ImmCreateContext(void);
+BOOL ImmDestroyContext(HIMC imc);
+HIMC ImmAssociateContext(HWND hwnd, HIMC imc);
+BOOL ImmGetOpenStatus(HIMC imc);
+BOOL ImmSetOpenStatus(HIMC imc, BOOL open);
+BOOL ImmGetConversionStatus(HIMC imc, LPDWORD conv, LPDWORD sent);
+BOOL ImmSetConversionStatus(HIMC imc, DWORD conv, DWORD sent);
+DWORD ImmGetProperty(HKL hkl, DWORD index);
+UINT ImmGetDescriptionW(HKL hkl, LPWSTR buf, UINT buflen);
+UINT ImmGetDescription(HKL hkl, LPSTR buf, UINT buflen);
+LONG ImmGetCompositionStringW(HIMC imc, DWORD index, LPVOID buf, DWORD buflen);
+LONG ImmGetCompositionString(HIMC imc, DWORD index, LPVOID buf, DWORD buflen);
+BOOL ImmGetCompositionFont(HIMC imc, LPVOID logfont);
+DWORD ImmGetGuideLine(HIMC imc, DWORD index, LPVOID buf, DWORD buflen);
+DWORD ImmGetGuideLineW(HIMC imc, DWORD index, LPWSTR buf, DWORD buflen);
+DWORD ImmGetCandidateListW(HIMC imc, DWORD index, LPCANDIDATELIST list, DWORD size);
+DWORD ImmGetCandidateList(HIMC imc, DWORD index, LPCANDIDATELIST list, DWORD size);
+BOOL ImmNotifyIME(HIMC imc, DWORD action, DWORD index, DWORD value);
+BOOL ImmSetCompositionWindow(HIMC imc, LPCOMPOSITIONFORM comp);
+BOOL ImmSetCandidateWindow(HIMC imc, LPCANDIDATEFORM cand);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
