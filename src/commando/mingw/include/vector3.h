@@ -1,1 +1,1 @@
-../../../scripts/vector3.h
+../../../wwmath/vector3.h

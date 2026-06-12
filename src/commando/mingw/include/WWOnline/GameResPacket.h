@@ -1,1 +1,1 @@
-../../../../../Code/WWOnline/GameResPacket.h
+../../../../wwonline/GameResPacket.h

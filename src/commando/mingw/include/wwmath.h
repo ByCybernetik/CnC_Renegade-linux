@@ -1,1 +1,1 @@
-../../../scripts/wwmath.h
+../../../wwmath/wwmath.h

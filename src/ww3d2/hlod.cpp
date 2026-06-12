@@ -1524,9 +1524,10 @@ const SphereClass &HLodClass::Get_Bounding_Sphere(void) const
 		//	Transform the sphere into world coords and return the sphere
 		//
 		CachedBoundingSphere.Center = Get_Transform () * sphere.Center;
-		CachedBoundingSphere.Radius = sphere.Radius;	
+		CachedBoundingSphere.Radius = sphere.Radius;
+		Validate_Cached_Bounding_Volumes ();
 	} else {
-		Animatable3DObjClass::Get_Bounding_Sphere ();
+		return Animatable3DObjClass::Get_Bounding_Sphere ();
 	}
 
 	return CachedBoundingSphere;
@@ -1562,8 +1563,9 @@ const AABoxClass &HLodClass::Get_Bounding_Box(void) const
 																		box.Extent,
 																		&CachedBoundingBox.Center,
 																		&CachedBoundingBox.Extent	);
+		Validate_Cached_Bounding_Volumes ();
 	} else {
-		Animatable3DObjClass::Get_Bounding_Box ();
+		return Animatable3DObjClass::Get_Bounding_Box ();
 	}
 
 	return CachedBoundingBox;
@@ -3197,6 +3199,7 @@ void HLodClass::Set_LOD_Level(int lod)
 	}
 
 	CurLod = lod;
+	Invalidate_Cached_Bounding_Volumes ();
 
 	if (Is_In_Scene()) {
 		int model_count = Lod[CurLod].Count();

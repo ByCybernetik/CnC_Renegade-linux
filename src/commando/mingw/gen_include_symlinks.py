@@ -20,8 +20,8 @@ PREFIX_DIRS = {
     'wwdebug': SRC / 'wwdebug',
     'WOLAPI': CODE / 'wolapi',
     'wolapi': CODE / 'wolapi',
-    'WWOnline': CODE / 'WWOnline',
-    'wwonline': CODE / 'WWOnline',
+    'WWOnline': SRC / 'wwonline',
+    'wwonline': SRC / 'wwonline',
     'WWUI': SRC / 'wwui',
     'wwui': SRC / 'wwui',
     'WWMath': SRC / 'wwmath',
@@ -65,7 +65,7 @@ SCAN_DIRS = [
     SRC / 'wwnet',
     SRC / 'wwphys',
     SRC / 'ww3d2',
-    CODE / 'WWOnline',
+    SRC / 'wwonline',
     CODE / 'wolapi',
     CODE / 'WOLBrowser',
 ]
@@ -108,7 +108,7 @@ def resolve_include(inc: str) -> Path | None:
     if inc.startswith('../'):
         rel = inc[3:].replace('//', '/')
         if rel.lower().startswith('wwonline/'):
-            return find_case_insensitive(CODE / 'WWOnline', rel.split('/', 1)[1])
+            return find_case_insensitive(SRC / 'wwonline', rel.split('/', 1)[1])
         if rel.lower().startswith('wwlib/'):
             return find_case_insensitive(SRC / 'wwlib', rel.split('/', 1)[1])
         return find_case_insensitive(ROOT, rel)

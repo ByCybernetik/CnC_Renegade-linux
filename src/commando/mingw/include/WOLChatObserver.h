@@ -1,1 +1,1 @@
-../../../../Code/WWOnline/WOLChatObserver.h
+../../../wwonline/WOLChatObserver.h

@@ -1,1 +1,1 @@
-../../../../Code/WWOnline/WOLChatMsg.h
+../../../wwonline/WOLChatMsg.h
