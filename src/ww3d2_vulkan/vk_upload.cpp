@@ -1,8 +1,6 @@
 #include "vk_upload.h"
 #include "vk_check.h"
 #include "vk_context.h"
-#include "ww3d_vulkan.h"
-#include <chrono>
 
 namespace ww3d_vulkan {
 
@@ -11,9 +9,6 @@ void Submit_One_Time_Commands(void (*record)(VkCommandBuffer cmd, void *user), v
 	if (record == nullptr) {
 		return;
 	}
-
-	uint64_t upload_start = std::chrono::duration_cast<std::chrono::microseconds>(
-		std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
 	VkContext &ctx = VkContext::Get();
 	VkCommandBuffer cmd = VK_NULL_HANDLE;
@@ -44,14 +39,8 @@ void Submit_One_Time_Commands(void (*record)(VkCommandBuffer cmd, void *user), v
 	fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	VK_CHECK(vkCreateFence(ctx.Device(), &fence_info, nullptr, &fence));
 
-	WW3DVulkan::Get().Renderer().Record_Sync_Upload();
-
 	VK_CHECK(vkQueueSubmit(ctx.Graphics_Queue(), 1, &submit_info, fence));
 	VK_CHECK(vkWaitForFences(ctx.Device(), 1, &fence, VK_TRUE, UINT64_MAX));
-
-	uint64_t upload_end = std::chrono::duration_cast<std::chrono::microseconds>(
-		std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-	WW3DVulkan::Get().Renderer().Record_Sync_Upload_Time(upload_end - upload_start);
 
 	vkDestroyFence(ctx.Device(), fence, nullptr);
 	vkFreeCommandBuffers(ctx.Device(), ctx.Command_Pool(), 1, &cmd);

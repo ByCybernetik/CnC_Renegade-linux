@@ -826,8 +826,7 @@ WWAudioClass::Begin_Reload_Sound_Playback (void)
 	}
 
 	/*
-	** FAudio/Wine backup debounce (logs: 2nd reload beginOk:0 within 3 s on SDL3).
-	** Linux/SDL3: short debounce blocks same-frame double Force_Reload (log b200b0 H3).
+	** Linux/SDL3: short debounce blocks same-frame double Force_Reload.
 	*/
 #if defined(RENEGADE_LINUX)
 	if (m_LastReloadSoundMs != 0 && (now - m_LastReloadSoundMs) < 250) {

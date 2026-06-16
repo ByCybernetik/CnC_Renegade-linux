@@ -14,9 +14,6 @@
 #include "texture.h"
 #include "vector2i.h"
 #include "ww3dformat.h"
-#if defined(RENEGADE_BOOT_LOG)
-#include "renegade_texture_log.h"
-#endif
 
 #include <cstring>
 #include <cstdio>
@@ -433,16 +430,6 @@ bool Apply_Texture_From_Cpu_Surface(TextureClass *texture, const VkCpuSurface *s
 	texture->Set_Vulkan_Texture(vk_tex);
 	texture->Set_Dimensions((int)surface->Width(), (int)surface->Height());
 	texture->Mark_Vulkan_Initialized();
-#if defined(RENEGADE_BOOT_LOG)
-	Tex_Log_Load(
-		"proc_upload",
-		NULL,
-		true,
-		surface->Width(),
-		surface->Height(),
-		vk_tex,
-		NULL);
-#endif
 	return true;
 }
 

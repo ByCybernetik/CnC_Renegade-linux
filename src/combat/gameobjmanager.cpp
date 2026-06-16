@@ -276,6 +276,9 @@ int _HibernatingSoldiers = 0;
 */
 int	GameObjManager::Think()
 {
+	_AwakeSoldiers = 0;
+	_HibernatingSoldiers = 0;
+
 	// Allow each object in the master list to think
 	SLNode<BaseGameObj> *objnode;
 	for (	objnode = GameObjList.Head(); objnode; objnode = objnode->Next()) {

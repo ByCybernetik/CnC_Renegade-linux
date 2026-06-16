@@ -15,20 +15,6 @@ project('cnc-renegade', ['c', 'cpp'],
 
 _platform = get_option('platform')
 _is_linux = _platform == 'linux'
-if get_option('boot_log')
-  add_global_arguments('-DRENEGADE_BOOT_LOG', language : ['c', 'cpp'])
-  add_global_arguments(
-    '-I' + meson.project_source_root() / 'src/platform',
-    language : 'cpp',
-  )
-endif
-if get_option('nav_log')
-  add_global_arguments('-DRENEGADE_NAV_LOG', language : ['c', 'cpp'])
-  add_global_arguments(
-    '-I' + meson.project_source_root() / 'src/platform',
-    language : 'cpp',
-  )
-endif
 if _is_linux and get_option('wwprofile')
   add_global_arguments('-DRENEGADE_WWPROFILE', language : ['cpp'])
 endif

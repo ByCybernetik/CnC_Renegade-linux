@@ -1,1 +1,1 @@
-../../../../wwaudio/WWAudio.h
+../../../../wwaudio/wwaudio.h

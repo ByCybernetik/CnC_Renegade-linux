@@ -404,6 +404,13 @@ void WeatherSystemClass::Set_Density (float density)
 	// Calculate no. of rays required.
 	ParticleDensity = density;
 	raycount			 = Spawn_Count (1.0f) / (ParticlesPerUnitLength * ParticleSpeed);
+#if defined(RENEGADE_LINUX)
+	// Precipitation update raycasts terrain every frame; Linux scene queries are
+	// much slower than Win32, so cap the ray grid to keep WeatherMgr::Update in budget.
+	if (raycount > 24u) {
+		raycount = 24u;
+	}
+#endif
 
 	// Is the ray count increasing or decreasing in size?
 	signedcount = ((int) RayCount) - ((int) raycount);
@@ -472,6 +479,12 @@ bool WeatherSystemClass::Update (WindClass *wind, const Vector3 &cameraposition)
 	const float		oorandomness	= 1.0f / randomness;
 	const float		overlapdelta	= EmitterSize * 2.0f;
 	const unsigned rayupdatecount = MAX (RayCount * 0.018f, 1);
+#if defined(RENEGADE_LINUX)
+	unsigned raycast_budget = RayCount;
+	if (raycast_budget > 24u) {
+		raycast_budget = 24u;
+	}
+#endif
 
 	Vector3				oldemitterposition;
 	float					ooz;
@@ -599,7 +612,6 @@ bool WeatherSystemClass::Update (WindClass *wind, const Vector3 &cameraposition)
 			range = emitterbounds.Max - emitterbounds.Min;
 			range.Scale (alpha, beta);
 			rayptr->StartPosition = emitterbounds.Min + range;
-			rayptr->Initialized	 = true;
 			rayptr->RayCast		 = true;
 
 		} else {
@@ -640,6 +652,16 @@ bool WeatherSystemClass::Update (WindClass *wind, const Vector3 &cameraposition)
 		raystartposition.Set (rayptr->StartPosition.X, rayptr->StartPosition.Y, EmitterPosition.Z);
 
 		// Raycast to find the ray's collision point with the environment.
+#if defined(RENEGADE_LINUX)
+		if (raycast_budget == 0u) {
+			if (rayptr->Initialized) {
+				rayptr->StartPosition -= raystartoffset;
+			}
+			rayptr = rayptr->Next;
+			continue;
+		}
+		raycast_budget--;
+#endif
 		{
 			Vector3						  raycaststartpoint (raystartposition + scenemaxoffset);
 			Vector3						  raycastendpoint (raystartposition + sceneminoffset);
@@ -656,6 +678,7 @@ bool WeatherSystemClass::Update (WindClass *wind, const Vector3 &cameraposition)
 				rayptr->ValidSurfaceNormal = false;
 			}
 		}
+		rayptr->Initialized = true;
 
 		rayptr->ParticleVelocity = ParticleVelocity;
 
@@ -705,6 +728,14 @@ bool WeatherSystemClass::Update (WindClass *wind, const Vector3 &cameraposition)
 				RayUpdatePtr->StartPosition = emitterbounds.Min + range;
 
 				// Raycast to find the ray's collision point with the environment.
+#if defined(RENEGADE_LINUX)
+				if (raycast_budget == 0u) {
+					RayUpdatePtr = RayUpdatePtr->Next;
+					if (RayUpdatePtr == NULL) RayUpdatePtr = RayHead;
+					continue;
+				}
+				raycast_budget--;
+#endif
 				{
 					Vector3						  raystartposition (RayUpdatePtr->StartPosition.X, RayUpdatePtr->StartPosition.Y, EmitterPosition.Z);
 					Vector3						  raycaststartpoint (raystartposition + scenemaxoffset);

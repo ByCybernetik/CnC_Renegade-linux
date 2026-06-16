@@ -49,6 +49,7 @@
 #include "colmath.h"
 #include "wwmath.h"
 #include "coltype.h"
+#include "aabox.h"
 #include "staticphys.h"
 #include "renegade_collision_fix.h"
 
@@ -66,8 +67,6 @@ Linux_Vehicle_Cull_Intersect_Reject_Code
 )
 {
 	//
-	// Logs: group-15 blanket reject blocked lampposts (~8–16 m); removing it
-	// let building culls (~46 m) through → vehicle launched to pos_z ~148.
 	// Allow compact props only; buildings use pathfind / mesh collision.
 	//
 	const AABoxClass &cull = obj->Get_Cull_Box ();
@@ -144,6 +143,27 @@ Linux_Vehicle_Cull_Intersect_Allowed ( PhysClass *obj, const OBBoxClass &query_b
 	return Linux_Vehicle_Cull_Intersect_Reject_Code ( obj, query_box ) == 0;
 }
 
+#if defined(RENEGADE_LINUX)
+/*
+** Vertical weather/terrain rays collapse to zero-thickness AABoxes in XY; overlap
+** tests against scene nodes then reject everything (Collect_Objects returned 0).
+*/
+static void
+Linux_Init_Ray_Query_Bounds ( const LineSegClass &ray, AABoxClass &out_bounds )
+{
+	out_bounds.Init ( ray );
+	const float min_extent = 1.0f;
+	if ( out_bounds.Extent.X < min_extent ) {
+		out_bounds.Extent.X = min_extent;
+	}
+	if ( out_bounds.Extent.Y < min_extent ) {
+		out_bounds.Extent.Y = min_extent;
+	}
+	if ( out_bounds.Extent.Z < min_extent ) {
+		out_bounds.Extent.Z = min_extent;
+	}
+}
+#endif
 
 bool
 PhysicsSceneClass::Linux_Intersect_Static_In_AABox
@@ -349,8 +369,15 @@ bool PhysicsSceneClass::Cast_Ray(PhysRayCollisionTestClass & raytest,bool use_co
 		** Cull the collision check using the culling systems
 		*/
 		if (raytest.CheckStaticObjs) {
+#if defined(RENEGADE_LINUX)
+			/*
+			** LP64 AABTree raycast misses terrain; use padded-bounds linear prefilter.
+			*/
+			res = false;
+#else
 			res |= StaticCullingSystem->Cast_Ray(raytest);
 			if (raytest.Result->StartBad) return true;
+#endif
 
 #if defined(RENEGADE_COLLISION_FIX)
 			//
@@ -360,12 +387,21 @@ bool PhysicsSceneClass::Cast_Ray(PhysRayCollisionTestClass & raytest,bool use_co
 			//	causing harvesters to never detect ground contact.
 			//
 			if ( !res ) {
+#if defined(RENEGADE_LINUX)
+				AABoxClass ray_bounds;
+				Linux_Init_Ray_Query_Bounds ( raytest.Ray, ray_bounds );
+#endif
 				RefPhysListIterator it ( &StaticObjList );
 				for ( it.First (); !it.Is_Done (); it.Next () ) {
 					PhysClass *obj = it.Peek_Obj ();
 					if (	Do_Groups_Collide ( obj->Get_Collision_Group (), raytest.CollisionGroup ) &&
 							!obj->Is_Ignore_Me () )
 					{
+#if defined(RENEGADE_LINUX)
+						if ( CollisionMath::Overlap_Test ( ray_bounds, obj->Get_Cull_Box () ) == CollisionMath::OUTSIDE ) {
+							continue;
+						}
+#endif
 						res |= obj->Cast_Ray ( raytest );
 						if ( raytest.Result->StartBad ) {
 							return true;

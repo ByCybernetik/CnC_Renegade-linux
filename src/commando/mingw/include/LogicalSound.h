@@ -1,1 +1,1 @@
-../../../wwaudio/LogicalSound.h
+../../../wwaudio/logicalsound.h

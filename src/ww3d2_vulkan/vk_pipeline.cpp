@@ -368,8 +368,6 @@ void VkPipelineCache::Destroy()
 
 VkPipeline VkPipelineCache::Get(const MeshPipelineKey &key)
 {
-	++lookup_count_;
-
 	if (last_lookup_valid_ && last_lookup_key_ == key) {
 		return last_lookup_pipeline_;
 	}
@@ -383,11 +381,9 @@ VkPipeline VkPipelineCache::Get(const MeshPipelineKey &key)
 		}
 	}
 
-	++miss_count_;
 	if (!Create_Pipeline(key)) {
 		return VK_NULL_HANDLE;
 	}
-	++creation_count_;
 	last_lookup_key_ = key;
 	last_lookup_pipeline_ = pipelines_.back().pipeline;
 	last_lookup_valid_ = true;

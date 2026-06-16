@@ -48,7 +48,6 @@ static bool path_node_ptr_ok(const PathNodeClass *node)
 #endif
 #include "Pathfind.h"
 #include "PathfindPortal.h"
-#include "renegade_nav_log.h"
 #include "PathNode.h"
 #include "PathDebugPlotter.h"
 #include "PathObject.h"
@@ -294,9 +293,6 @@ PathSolveClass::Reset
 	m_StartPos		= start;
 	m_DestPos		= dest;
 	Initialize (sector_fudge);
-	if (m_State != THINKING) {
-		Nav_Log_Solve_Start (-1, -1, 0, m_State);
-	}
 	return m_State;
 }
 
@@ -414,10 +410,6 @@ PathSolveClass::Resolve_Path (unsigned int milliseconds)
 	//	Keep going until we've either found the path, or we ran out of time.
 	//
 	} while ((m_State == THINKING) && (Get_Time () < end_time));
-
-	if (m_State != THINKING) {
-		Nav_Log_Solve_Done (m_State, m_Path.Count (), iterations);
-	}
 
 	//End_Distributed_Solve ();
 
@@ -561,12 +553,9 @@ PathSolveClass::Process_Initial_Sector (void)
 			m_Path.Delete_All ();
 			m_Path.Add (PathDataStruct (NULL, m_StartPos));
 			m_Path.Add (PathDataStruct (NULL, m_DestPos));
-			Nav_Log_Solve_Start (start_sector, dest_sector, same_sector, m_State);
-			Nav_Log_Solve_Done (m_State, m_Path.Count (), 0);
 
 		} else {
 			m_State = THINKING;
-			Nav_Log_Solve_Start (start_sector, dest_sector, same_sector, m_State);
 		}
 	}
 

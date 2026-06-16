@@ -40,9 +40,6 @@
 #include "wwprofile.h"
 #include "wwmemlog.h"
 #include "dx8wrapper.h"
-#if defined(RENEGADE_BOOT_LOG)
-#include "renegade_texture_log.h"
-#endif
 #if defined(RENEGADE_LINUX)
 #include "ww3d2_gdi_stubs.h"
 #endif
@@ -553,22 +550,6 @@ Render2DSentenceClass::Build_Textures (void)
 			//
 			TextureClass *new_texture = new TextureClass (curr_surface, TextureClass::MIP_LEVELS_1);
 
-#if defined(RENEGADE_BOOT_LOG)
-			{
-				SurfaceClass::SurfaceDescription desc;
-				curr_surface->Get_Description(desc);
-				void *tex_ptr = new_texture->Peek_Vulkan_Texture();
-				Tex_Log_Load(
-					"font_atlas",
-					NULL,
-					true,
-					desc.Width,
-					desc.Height,
-					tex_ptr,
-					"\"source\":\"Build_Textures\"");
-			}
-#endif
-
 			renderer->Set_Texture (new_texture);
 			REF_PTR_RELEASE (new_texture);
 			continue;
@@ -596,17 +577,6 @@ Render2DSentenceClass::Build_Textures (void)
 			texture_surface->Peek_D3D_Surface (),
 			NULL);
 		REF_PTR_RELEASE (texture_surface);
-
-#if defined(RENEGADE_BOOT_LOG)
-		Tex_Log_Load(
-			"font_atlas",
-			NULL,
-			true,
-			desc.Width,
-			desc.Height,
-			(void *)new_texture->Peek_DX8_Texture(),
-			"\"source\":\"Build_Textures\"");
-#endif
 
 		renderer->Set_Texture (new_texture);
 

@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
-#include <ctime>
 
 namespace ww3d_vulkan {
 
@@ -87,101 +86,6 @@ static_assert(sizeof(FrameUBO) == 704, "FrameUBO size must match GLSL std140 lay
 static uint32_t Align_Ubo_Size(uint32_t size, uint32_t alignment)
 {
 	return (size + alignment - 1) & ~(alignment - 1);
-}
-
-uint64_t VkRenderer::Get_Time_Us()
-{
-	return std::chrono::duration_cast<std::chrono::microseconds>(
-		std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-}
-
-void VkRenderer::Open_Stats_Log()
-{
-	if (stats_log_ != nullptr) {
-		return;
-	}
-	stats_log_ = std::fopen("renegade_vulkan_perf.log", "a");
-	if (stats_log_ != nullptr) {
-		std::time_t now = std::time(nullptr);
-		std::tm *tm = std::localtime(&now);
-		char time_buf[64];
-		std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm);
-		std::fprintf(stats_log_, "# Vulkan perf log started at %s\n", time_buf);
-		std::fflush(stats_log_);
-	}
-
-	Reset_Timers();
-}
-
-void VkRenderer::Close_Stats_Log()
-{
-	if (stats_log_ != nullptr) {
-		std::fclose(stats_log_);
-		stats_log_ = nullptr;
-	}
-}
-
-void VkRenderer::Reset_Stats()
-{
-	frame_stats_ = FrameStats();
-	pipelines_.Reset_Stats();
-	pipelines_offscreen_.Reset_Stats();
-}
-
-void VkRenderer::Reset_Timers()
-{
-	frame_time_.Reset();
-	begin_frame_time_.Reset();
-	begin_frame_wait_time_.Reset();
-	flush_time_.Reset();
-	sort_time_.Reset();
-	end_frame_time_.Reset();
-	end_frame_submit_wait_time_.Reset();
-	sync_upload_time_.Reset();
-}
-
-void VkRenderer::Print_Stats()
-{
-	const uint32_t total_lookup = pipelines_.Lookup_Count() + pipelines_offscreen_.Lookup_Count();
-	const uint32_t total_miss = pipelines_.Miss_Count() + pipelines_offscreen_.Miss_Count();
-	const uint32_t total_create = pipelines_.Creation_Count() + pipelines_offscreen_.Creation_Count();
-
-	std::time_t now = std::time(nullptr);
-	std::tm *tm = std::localtime(&now);
-	char time_buf[64];
-	std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm);
-
-	if (stats_log_ != nullptr) {
-		std::fprintf(stats_log_,
-			"%s frame=%u draws=%u pending=%u 2d=%u sort_flushes=%u "
-			"pipe_switches=%u pipe_lookups=%u pipe_misses=%u pipe_creations=%u "
-			"sync_uploads=%u offscreen_stalls=%u ubo_limit_hits=%u "
-			"frame_ms=%.2f/%.2f begin_ms=%.2f/%.2f begin_wait_ms=%.2f/%.2f "
-			"flush_ms=%.2f/%.2f sort_ms=%.2f/%.2f end_ms=%.2f/%.2f "
-			"end_submit_wait_ms=%.2f/%.2f sync_upload_ms=%.2f/%.2f\n",
-			time_buf,
-			stats_frame_counter_,
-			frame_stats_.flushed_draws,
-			frame_stats_.pending_draws,
-			frame_stats_.immediate_2d_draws,
-			frame_stats_.sort_flushes,
-			frame_stats_.pipeline_switches,
-			total_lookup,
-			total_miss,
-			total_create,
-			frame_stats_.sync_uploads,
-			frame_stats_.offscreen_stalls,
-			frame_stats_.ubo_limit_hits,
-			(double)frame_time_.Avg() / 1000.0, (double)frame_time_.Max() / 1000.0,
-			(double)begin_frame_time_.Avg() / 1000.0, (double)begin_frame_time_.Max() / 1000.0,
-			(double)begin_frame_wait_time_.Avg() / 1000.0, (double)begin_frame_wait_time_.Max() / 1000.0,
-			(double)flush_time_.Avg() / 1000.0, (double)flush_time_.Max() / 1000.0,
-			(double)sort_time_.Avg() / 1000.0, (double)sort_time_.Max() / 1000.0,
-			(double)end_frame_time_.Avg() / 1000.0, (double)end_frame_time_.Max() / 1000.0,
-			(double)end_frame_submit_wait_time_.Avg() / 1000.0, (double)end_frame_submit_wait_time_.Max() / 1000.0,
-			(double)sync_upload_time_.Avg() / 1000.0, (double)sync_upload_time_.Max() / 1000.0);
-		std::fflush(stats_log_);
-	}
 }
 
 bool VkRenderer::Init(SDL_Window *window, uint32_t width, uint32_t height, bool vsync)
@@ -264,8 +168,6 @@ bool VkRenderer::Init(SDL_Window *window, uint32_t width, uint32_t height, bool 
 	bound_textures_[0] = &default_texture_;
 	bound_textures_[1] = &default_texture_;
 	textures_dirty_ = true;
-
-	Open_Stats_Log();
 
 	return true;
 }
@@ -359,12 +261,6 @@ void VkRenderer::Flush_Pending_Draws()
 		return;
 	}
 
-	uint64_t flush_start = Get_Time_Us();
-
-	++frame_stats_.sort_flushes;
-	frame_stats_.pending_draws += (uint32_t)pending_draws_.size();
-
-	uint64_t sort_start = Get_Time_Us();
 	std::sort(
 		pending_draws_.begin(),
 		pending_draws_.end(),
@@ -388,8 +284,6 @@ void VkRenderer::Flush_Pending_Draws()
 			return a.depth_bias < b.depth_bias;
 		});
 
-	sort_time_.Add(Get_Time_Us() - sort_start);
-
 	FrameSync &frame = frames_[current_frame_];
 	VkCommandBuffer cmd = frame.command_buffer;
 	VkExtent2D extent = offscreen_target_ != nullptr
@@ -411,7 +305,6 @@ void VkRenderer::Flush_Pending_Draws()
 	for (size_t i = 0; i < pending_draws_.size(); ++i) {
 		const PendingDraw &d = pending_draws_[i];
 		if (frame_ubo_draw_count_ >= kUboDrawsPerFrame) {
-			++frame_stats_.ubo_limit_hits;
 			break;
 		}
 
@@ -424,7 +317,6 @@ void VkRenderer::Flush_Pending_Draws()
 			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 			bound_pipe = pipeline;
 			bound_pipeline_ = pipeline;
-			++frame_stats_.pipeline_switches;
 		}
 
 		if (!have_zbias || d.depth_bias != bound_zbias) {
@@ -458,10 +350,7 @@ void VkRenderer::Flush_Pending_Draws()
 		}
 
 		vkCmdDrawIndexed(cmd, d.index_count, 1, d.first_index, d.vertex_offset, 0);
-		++frame_stats_.flushed_draws;
 	}
-
-	flush_time_.Add(Get_Time_Us() - flush_start);
 
 	pending_draws_.clear();
 }
@@ -547,8 +436,6 @@ void VkRenderer::Shutdown()
 	frag_spirv_.clear();
 	VkContext::Get().Shutdown();
 	frame_active_ = false;
-
-	Close_Stats_Log();
 }
 
 void VkRenderer::Resize(uint32_t width, uint32_t height)
@@ -650,23 +537,16 @@ void VkRenderer::Apply_Viewport(VkCommandBuffer cmd, VkExtent2D extent)
 
 bool VkRenderer::Begin_Frame(float clear_r, float clear_g, float clear_b, float clear_a)
 {
-	frame_start_us_ = Get_Time_Us();
-
 	VkContext &ctx = VkContext::Get();
 	FrameSync &frame = frames_[current_frame_];
 
-	uint64_t wait_start = Get_Time_Us();
 	vkWaitForFences(ctx.Device(), 1, &frame.in_flight, VK_TRUE, UINT64_MAX);
-	begin_frame_wait_time_.Add(Get_Time_Us() - wait_start);
 
 	vkResetFences(ctx.Device(), 1, &frame.in_flight);
 	Reset_Dynamic_Vb_Frame_Slot(current_frame_);
 	Reset_Dynamic_Ib_Frame_Slot(current_frame_);
 	vkResetCommandBuffer(frame.command_buffer, 0);
 	explicit_viewport_ = false;
-
-	++stats_frame_counter_;
-	Reset_Stats();
 
 	pending_draws_.clear();
 	pending_draws_.reserve(512);
@@ -720,8 +600,6 @@ bool VkRenderer::Begin_Frame(float clear_r, float clear_g, float clear_b, float 
 	vkCmdBeginRenderPass(
 		frame.command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 	Apply_Viewport(frame.command_buffer, extent);
-
-	begin_frame_time_.Add(Get_Time_Us() - frame_start_us_);
 
 	frame_active_ = true;
 	return true;
@@ -780,8 +658,6 @@ void VkRenderer::Clear_During_Frame(
 
 bool VkRenderer::End_Frame(bool present)
 {
-	uint64_t end_start = Get_Time_Us();
-
 	if (!frame_active_) {
 		return false;
 	}
@@ -799,13 +675,9 @@ bool VkRenderer::End_Frame(bool present)
 	submit_info.commandBufferCount = 1;
 	submit_info.pCommandBuffers = &frame.command_buffer;
 
-	bool present_ok = true;
 	if (offscreen_target_ != nullptr) {
-		++frame_stats_.offscreen_stalls;
-		uint64_t submit_wait_start = Get_Time_Us();
 		VK_CHECK(vkQueueSubmit(ctx.Graphics_Queue(), 1, &submit_info, frame.in_flight));
 		VK_CHECK(vkWaitForFences(ctx.Device(), 1, &frame.in_flight, VK_TRUE, UINT64_MAX));
-		end_frame_submit_wait_time_.Add(Get_Time_Us() - submit_wait_start);
 	} else if (present) {
 		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		submit_info.waitSemaphoreCount = 1;
@@ -814,32 +686,19 @@ bool VkRenderer::End_Frame(bool present)
 		submit_info.signalSemaphoreCount = 1;
 		submit_info.pSignalSemaphores = &frame.render_finished;
 
-		uint64_t submit_wait_start = Get_Time_Us();
 		VK_CHECK(vkQueueSubmit(ctx.Graphics_Queue(), 1, &submit_info, frame.in_flight));
 
 		if (!swapchain_.Present(current_frame_, frame.render_finished, current_image_)) {
 			Resize(width_, height_);
-			present_ok = false;
 		}
-		end_frame_submit_wait_time_.Add(Get_Time_Us() - submit_wait_start);
 
 		current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
 	} else {
-		uint64_t submit_wait_start = Get_Time_Us();
 		VK_CHECK(vkQueueSubmit(ctx.Graphics_Queue(), 1, &submit_info, frame.in_flight));
 		VK_CHECK(vkWaitForFences(ctx.Device(), 1, &frame.in_flight, VK_TRUE, UINT64_MAX));
-		end_frame_submit_wait_time_.Add(Get_Time_Us() - submit_wait_start);
 	}
 
 	frame_active_ = false;
-
-	uint64_t now = Get_Time_Us();
-	end_frame_time_.Add(now - end_start);
-	frame_time_.Add(now - frame_start_us_);
-
-	if (stats_frame_counter_ % 60 == 0) {
-		Print_Stats();
-	}
 
 	return true;
 }
@@ -918,7 +777,6 @@ void VkRenderer::Draw_Indexed(
 	const bool immediate_2d =
 		(key.fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW;
 	if (immediate_2d) {
-		++frame_stats_.immediate_2d_draws;
 		FrameSync &frame = frames_[current_frame_];
 		VkCommandBuffer cmd = frame.command_buffer;
 		const uint32_t aligned_ubo_size = Align_Ubo_Size(sizeof(FrameUBO), ubo_alignment_);

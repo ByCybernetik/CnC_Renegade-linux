@@ -48,7 +48,6 @@
 #include "PathDebugPlotter.h"
 #include "persistfactory.h"
 #include "waypath.h"
-#include "renegade_nav_log.h"
 #include "waypoint.h"
 #include "wwmemlog.h"
 #include "heightdb.h"
@@ -521,13 +520,6 @@ PathfindClass::Load (ChunkLoadClass &cload)
 	}
 
 	cload.Close_Chunk ();
-
-	Nav_Log_Load(
-		"",
-		m_SectorList.Count (),
-		m_PortalList.Count (),
-		m_WaypathList.Count (),
-		retval ? 1 : 0);
 
 	return retval;
 }

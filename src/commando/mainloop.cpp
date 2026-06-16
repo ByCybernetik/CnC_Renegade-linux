@@ -95,7 +95,6 @@ void _Game_Main_Loop_Loop(void)
 {
 	WWPROFILE( "Main Loop" );
 
-
 	unsigned long time1 = TIMEGETTIME();
 
    TimeManager::Update();
@@ -127,7 +126,7 @@ void _Game_Main_Loop_Loop(void)
    if (COMBAT_CAMERA != NULL) {
 		Vector3 camera_pos = COMBAT_CAMERA->Get_Position();
 		PathMgrClass::Resolve_Paths( camera_pos );
-	}
+   }
 }
 
 {	WWPROFILE( "Think" );

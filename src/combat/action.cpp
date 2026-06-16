@@ -50,7 +50,6 @@
 #include "Pathfind.h"
 #include "PathfindPortal.h"
 #include "debug.h"
-#include "renegade_nav_log.h"
 #include "animcontrol.h"
 #include "conversationmgr.h"
 #include "activeconversation.h"
@@ -1125,33 +1124,15 @@ public:
 		Release_Path();
 
 		const ActionParamsStruct &params = Action->Get_Parameters();
-		SmartGameObj *obj = Action->Get_Action_Obj();
-		int obj_id = (obj != NULL) ? obj->Get_ID() : -1;
 
 		//
 		//	Determine if we should use a waypath instead of trying to solve
 		// the path dynamically
 		//
 		if ( params.WaypathID != 0 ) {
-			Nav_Log_Goto_Init(
-				obj_id,
-				"waypath",
-				params.WaypathID,
-				params.MovePathfind ? 1 : 0,
-				params.MoveLocation.X,
-				params.MoveLocation.Y,
-				params.MoveLocation.Z);
 			Initialize_Waypath();
 			Initialize_Vehicle_AI();
 		} else {
-			Nav_Log_Goto_Init(
-				obj_id,
-				"solver",
-				0,
-				params.MovePathfind ? 1 : 0,
-				params.MoveLocation.X,
-				params.MoveLocation.Y,
-				params.MoveLocation.Z);
 			Initialize_Path_Solver();
 		}
 
@@ -1420,32 +1401,6 @@ Clip_Point (Vector3 *point, const AABoxClass &box)
 		// hold on the path solver.
 		//
 		if ( is_finished ) {
-			SmartGameObj *obj = Action->Get_Action_Obj();
-			int obj_id = (obj != NULL) ? obj->Get_ID() : -1;
-			const char *solve_result = "THINKING";
-
-			switch (result) {
-				case PathSolveClass::SOLVED_PATH:
-					solve_result = "SOLVED_PATH";
-					break;
-				case PathSolveClass::ERROR_INVALID_START_POS:
-					solve_result = "ERROR_INVALID_START_POS";
-					break;
-				case PathSolveClass::ERROR_INVALID_DEST_POS:
-					solve_result = "ERROR_INVALID_DEST_POS";
-					break;
-				case PathSolveClass::ERROR_NO_PATH:
-					solve_result = "ERROR_NO_PATH";
-					break;
-				default:
-					break;
-			}
-
-			Nav_Log_Goto_Result(
-				obj_id,
-				solve_result,
-				Action->Get_Parameters().MovePathfind ? 1 : 0);
-
 			PathMgrClass::Return_Path_Object( PathSolver );
 			PathSolver = NULL;
 		}
@@ -1490,12 +1445,6 @@ Clip_Point (Vector3 *point, const AABoxClass &box)
 					// to beeline -- otherwise, kill the action...
 					//
 					if (PathfindClass::Get_Instance ()->Does_Pathfind_Data_Exist ()) {
-						SmartGameObj *obj = Action->Get_Action_Obj();
-						Nav_Log_Goto_Result(
-							(obj != NULL) ? obj->Get_ID() : -1,
-							"PATH_BAD_DEST",
-							Action->Get_Parameters().MovePathfind ? 1 : 0);
-
 						//
 						//	Kill the action
 						//
@@ -1503,11 +1452,6 @@ Clip_Point (Vector3 *point, const AABoxClass &box)
 						act_result = ACTION_DONE;
 
 					} else {
-						SmartGameObj *obj = Action->Get_Action_Obj();
-						Nav_Log_Goto_Result(
-							(obj != NULL) ? obj->Get_ID() : -1,
-							"BEELINE_NO_NAV_DATA",
-							Action->Get_Parameters().MovePathfind ? 1 : 0);
 						act_result = Beeline ();
 					}
 				}

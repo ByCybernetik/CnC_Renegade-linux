@@ -54,10 +54,6 @@
 #include "meshmatdesc.h"
 #include "texturethumbnail.h"
 
-#if defined(RENEGADE_BOOT_LOG)
-#include "renegade_texture_log.h"
-#endif
-
 #if defined(RENEGADE_VULKAN)
 #include "../ww3d2_vulkan/vk_cpu_surface.h"
 #include "../ww3d2_vulkan/vk_dx8_texture.h"
@@ -335,16 +331,6 @@ TextureClass::TextureClass(SurfaceClass *surface, MipCountType mip_level_count)
 		if (ww3d_vulkan::Apply_Texture_From_Cpu_Surface(
 				this,
 				static_cast<const ww3d_vulkan::VkCpuSurface *>(surface->Peek_Vulkan_Cpu_Surface()))) {
-#if defined(RENEGADE_BOOT_LOG)
-			Tex_Log_Load(
-				"proc_upload",
-				NULL,
-				true,
-				(unsigned)Width,
-				(unsigned)Height,
-				Peek_Vulkan_Texture(),
-				NULL);
-#endif
 			LastAccessed = WW3D::Get_Sync_Time();
 			return;
 		}
@@ -355,16 +341,6 @@ TextureClass::TextureClass(SurfaceClass *surface, MipCountType mip_level_count)
 #endif
 
 	D3DTexture = DX8Wrapper::_Create_DX8_Texture(surface->Peek_D3D_Surface(), mip_level_count);
-#if defined(RENEGADE_BOOT_LOG)
-	Tex_Log_Load(
-		"proc_create",
-		NULL,
-		true,
-		(unsigned)Width,
-		(unsigned)Height,
-		(void *)D3DTexture,
-		NULL);
-#endif
 	LastAccessed=WW3D::Get_Sync_Time();
 }
 
@@ -696,26 +672,6 @@ void TextureClass::Apply(unsigned int stage)
 	}
 	LastAccessed=WW3D::Get_Sync_Time();
 
-#if defined(RENEGADE_BOOT_LOG)
-	{
-		void *tex_ptr = NULL;
-#if defined(RENEGADE_VULKAN)
-		if (DX8Wrapper::Vulkan_Device_Active()) {
-			tex_ptr = Peek_Vulkan_Texture();
-		} else
-#endif
-		{
-			tex_ptr = (void *)D3DTexture;
-		}
-		Tex_Log_Bind(
-			stage,
-			Get_Full_Path().Peek_Buffer(),
-			IsProcedural,
-			tex_ptr,
-			tex_ptr == NULL);
-	}
-#endif
-
 	DX8_RECORD_TEXTURE(this);
 
 #if defined(RENEGADE_VULKAN)
@@ -798,16 +754,6 @@ void TextureClass::Apply_New_Surface(IDirect3DTexture8* d3d_texture,bool initial
 		TextureFormat=D3DFormat_To_WW3DFormat(d3d_desc.Format);
 		Width=d3d_desc.Width;
 		Height=d3d_desc.Height;
-#if defined(RENEGADE_BOOT_LOG)
-		Tex_Log_Load(
-			"file_load",
-			Get_Full_Path().Peek_Buffer(),
-			IsProcedural,
-			(unsigned)Width,
-			(unsigned)Height,
-			(void *)D3DTexture,
-			NULL);
-#endif
 	}
 	surface->Release();
 }

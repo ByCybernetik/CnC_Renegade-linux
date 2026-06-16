@@ -37,7 +37,6 @@
 #include "savegame.h"
 #include "definitionmgr.h"
 #include "debug.h"
-#include "renegade_nav_log.h"
 #include "chunkio.h"
 #include "ffactory.h"
 #include "combatsaveload.h"
@@ -500,7 +499,6 @@ void	SaveGameManager::Save_Level( void )
 void	SaveGameManager::Load_Level( void )
 {
 	Debug_Say(( "Load Level %s\n", MapFilename ));
-	Nav_Log_Level_Load( MapFilename );
 	Load_Save_Load_System( MapFilename, false );	// false = no automatic post load processing (needs to be called explicitly)
 }
 

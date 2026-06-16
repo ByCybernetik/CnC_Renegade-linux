@@ -17,9 +17,6 @@ struct Sdl3MixerAmbientBus
 
 static Sdl3MixerAmbientBus g_ambient_bus;
 
-/* Debug b200b0: set to 1 to silence ambient bus (wind/rain/level beds). */
-static const int g_ambient_bus_muted = 0;
-
 extern "C" {
 
 void sdl3_mixer_ambient_bus_init(int output_rate, int channels)
@@ -43,7 +40,7 @@ bool sdl3_mixer_ambient_bus_ready(void)
 
 void sdl3_mixer_ambient_bus_render(float *mix_l, float *mix_r, int frames, int output_rate)
 {
-	if (!g_ambient_bus.ready || g_ambient_bus_muted) {
+	if (!g_ambient_bus.ready) {
 		return;
 	}
 	sdl3_mix_ambient_voices(mix_l, mix_r, frames, output_rate);

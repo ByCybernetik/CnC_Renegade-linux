@@ -6,9 +6,6 @@
 #include "vk_upload.h"
 #include "stb_texture.h"
 #include "ww3d_vulkan.h"
-#if defined(RENEGADE_BOOT_LOG)
-#include "renegade_texture_log.h"
-#endif
 #include "../ww3d2/assetmgr.h"
 #include "../ww3d2/texture.h"
 #include "../ww3d2/ddsfile.h"
@@ -182,16 +179,6 @@ static bool Try_Load_Texture_From_Path(
 			texture->Set_Dimensions((int)vk_tex->Width(), (int)vk_tex->Height());
 			texture->Mark_Vulkan_Initialized();
 			Dbg_Track_Cursor_Texture(texture, vk_tex);
-#if defined(RENEGADE_BOOT_LOG)
-			Tex_Log_Load(
-				"file_load",
-				path,
-				false,
-				vk_tex->Width(),
-				vk_tex->Height(),
-				vk_tex,
-				"\"src\":\"dds\"");
-#endif
 			return true;
 		}
 		vk_tex->Destroy();
@@ -235,16 +222,6 @@ static bool Try_Load_Texture_From_Path(
 	texture->Set_Dimensions((int)vk_tex->Width(), (int)vk_tex->Height());
 	texture->Mark_Vulkan_Initialized();
 	Dbg_Track_Cursor_Texture(texture, vk_tex);
-#if defined(RENEGADE_BOOT_LOG)
-	Tex_Log_Load(
-		"file_load",
-		path,
-		false,
-		vk_tex->Width(),
-		vk_tex->Height(),
-		vk_tex,
-		loaded.compressed ? "\"src\":\"stb_compressed\"" : "\"src\":\"stb_rgba\"");
-#endif
 	return true;
 }
 
@@ -382,13 +359,6 @@ void Texture_Stage_Bind(TextureClass *texture, unsigned stage)
 		return;
 	}
 	WW3DVulkan::Get().Bind_Texture(stage, vk_tex);
-#if defined(RENEGADE_BOOT_LOG)
-	if (texture != nullptr && !texture->Is_Procedural()) {
-		const char *path = texture->Get_Full_Path().Peek_Buffer();
-		const bool missing = (vk_tex == g_MissingVulkanTexture);
-		Tex_Log_Stage_Bind(stage, path, vk_tex, missing);
-	}
-#endif
 }
 
 void Texture_Stage_Bind_Null(unsigned stage)

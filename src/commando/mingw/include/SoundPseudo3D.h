@@ -1,1 +1,1 @@
-../../../wwaudio/SoundPseudo3D.h
+../../../wwaudio/soundpseudo3d.h

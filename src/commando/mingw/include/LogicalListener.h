@@ -1,1 +1,1 @@
-../../../wwaudio/LogicalListener.h
+../../../wwaudio/logicallistener.h

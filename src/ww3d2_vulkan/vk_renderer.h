@@ -8,8 +8,6 @@
 #include "vk_render_pass.h"
 #include "vk_swapchain.h"
 #include "vk_texture.h"
-#include <chrono>
-#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -135,68 +133,7 @@ public:
 	VkDescriptorSetLayout Descriptor_Set_Layout() const { return pipelines_.Descriptor_Set_Layout(); }
 	uint32_t Current_Frame() const { return current_frame_; }
 
-	struct FrameStats {
-		uint32_t pending_draws = 0;
-		uint32_t flushed_draws = 0;
-		uint32_t immediate_2d_draws = 0;
-		uint32_t pipeline_switches = 0;
-		uint32_t pipeline_lookups = 0;
-		uint32_t pipeline_misses = 0;
-		uint32_t pipeline_creations = 0;
-		uint32_t sync_uploads = 0;
-		uint32_t offscreen_stalls = 0;
-		uint32_t ubo_limit_hits = 0;
-		uint32_t sort_flushes = 0;
-	};
-
-	struct TimerAccumulator {
-		uint64_t sum_us = 0;
-		uint64_t max_us = 0;
-		uint32_t count = 0;
-
-		void Add(uint64_t us)
-		{
-			sum_us += us;
-			if (us > max_us) {
-				max_us = us;
-			}
-			++count;
-		}
-
-		uint64_t Avg() const { return count ? sum_us / count : 0; }
-		uint64_t Max() const { return max_us; }
-
-		void Reset()
-		{
-			sum_us = 0;
-			max_us = 0;
-			count = 0;
-		}
-	};
-
-	void Reset_Stats();
-	void Reset_Timers();
-	void Print_Stats();
-	const FrameStats &Get_Stats() const { return frame_stats_; }
-	void Record_Sync_Upload() { ++frame_stats_.sync_uploads; }
-	void Record_Offscreen_Stall() { ++frame_stats_.offscreen_stalls; }
-
-	void Record_Sync_Upload_Time(uint64_t us) { sync_upload_time_.Add(us); }
-
 private:
-	void Open_Stats_Log();
-	void Close_Stats_Log();
-
-	static uint64_t Get_Time_Us();
-
-	class ScopedTimer {
-	public:
-		ScopedTimer(TimerAccumulator &acc) : acc_(acc), start_(Get_Time_Us()) {}
-		~ScopedTimer() { acc_.Add(Get_Time_Us() - start_); }
-	private:
-		TimerAccumulator &acc_;
-		uint64_t start_;
-	};
 	struct PendingDraw {
 		MeshPipelineKey key;
 		VkBuffer vertex_buffer;
@@ -252,20 +189,6 @@ private:
 
 	/* Draw batching: queued per frame, sorted and flushed at frame end. */
 	std::vector<PendingDraw> pending_draws_;
-
-	FrameStats frame_stats_;
-	uint32_t stats_frame_counter_ = 0;
-	FILE *stats_log_ = nullptr;
-
-	uint64_t frame_start_us_ = 0;
-	TimerAccumulator frame_time_;
-	TimerAccumulator begin_frame_time_;
-	TimerAccumulator begin_frame_wait_time_;
-	TimerAccumulator flush_time_;
-	TimerAccumulator sort_time_;
-	TimerAccumulator end_frame_time_;
-	TimerAccumulator end_frame_submit_wait_time_;
-	TimerAccumulator sync_upload_time_;
 };
 
 } /* namespace ww3d_vulkan */

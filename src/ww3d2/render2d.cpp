@@ -50,9 +50,6 @@
 #include "wwprofile.h"
 #include "wwmemlog.h"
 #include "assetmgr.h"
-#if defined(RENEGADE_BOOT_LOG)
-#include "renegade_texture_log.h"
-#endif
 #if defined(RENEGADE_VULKAN)
 #include "vulkan_render_device.h"
 #endif
@@ -623,18 +620,6 @@ void Render2DClass::Render(void)
 
 	DX8Wrapper::Set_Shader(Shader);
 	if (Texture != NULL) {
-#if defined(RENEGADE_BOOT_LOG)
-		if (!Texture->Is_Procedural()) {
-			const char *path = Texture->Get_Full_Path().Peek_Buffer();
-			if (path != NULL && path[0] != '\0') {
-				Tex_Log_Render2D_File_Draw(
-					path,
-					Vertices.Count(),
-					Indices.Count(),
-					Shader.Get_Texturing() == ShaderClass::TEXTURING_ENABLE);
-			}
-		}
-#endif
 		DX8Wrapper::Set_Texture(0, Texture);
 	} else {
 		DX8Wrapper::Set_Texture(0, NULL);
