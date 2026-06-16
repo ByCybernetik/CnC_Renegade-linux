@@ -50,6 +50,33 @@
 #include "lightsolveprogress.h"
 #include "renegadeterrainpatch.h"
 
+static void Modulate_Solve_By_Material(
+	SimpleVecClass<Vector4> &solve,
+	const SimpleVecClass<Vector4> &ambient_solve,
+	const SimpleVecClass<Vector4> &diffuse_solve,
+	const SimpleVecClass<Vector4> &mesh_ambient,
+	const SimpleVecClass<Vector4> &mesh_diffuse,
+	int vcount)
+{
+	for (int vi = 0; vi < vcount; vi++) {
+		const Vector4 &ma = mesh_ambient[vi];
+		const Vector4 &md = mesh_diffuse[vi];
+		const bool zero_mat =
+			ma.X == 0.0f && ma.Y == 0.0f && ma.Z == 0.0f &&
+			md.X == 0.0f && md.Y == 0.0f && md.Z == 0.0f;
+		if (zero_mat) {
+			solve[vi].X = ambient_solve[vi].X + diffuse_solve[vi].X;
+			solve[vi].Y = ambient_solve[vi].Y + diffuse_solve[vi].Y;
+			solve[vi].Z = ambient_solve[vi].Z + diffuse_solve[vi].Z;
+		} else {
+			solve[vi].X = ambient_solve[vi].X * ma.X + diffuse_solve[vi].X * md.X;
+			solve[vi].Y = ambient_solve[vi].Y * ma.Y + diffuse_solve[vi].Y * md.Y;
+			solve[vi].Z = ambient_solve[vi].Z * ma.Z + diffuse_solve[vi].Z * md.Z;
+		}
+		solve[vi].W = diffuse_solve[vi].W;
+	}
+}
+
 
 /**
 ** VertexSolveClass
@@ -222,15 +249,7 @@ void VertexSolveClass::Light_Mesh(LightSolveContextClass & context,MeshClass * m
 	VectorProcessorClass::Clamp(&(AmbientSolve[0]),&(AmbientSolve[0]), 0.0f, 1.0f,vcount);
 	VectorProcessorClass::Clamp(&(DiffuseSolve[0]),&(DiffuseSolve[0]), 0.0f, 1.0f,vcount);
 
-	/*
-	** Modulate the accumulated light by the material properties
-	*/
-	for (vi=0; vi<vcount; vi++) {
-		Solve[vi].X = AmbientSolve[vi].X * MeshAmbient[vi].X + DiffuseSolve[vi].X * MeshDiffuse[vi].X;
-		Solve[vi].Y = AmbientSolve[vi].Y * MeshAmbient[vi].Y + DiffuseSolve[vi].Y * MeshDiffuse[vi].Y;
-		Solve[vi].Z = AmbientSolve[vi].Z * MeshAmbient[vi].Z + DiffuseSolve[vi].Z * MeshDiffuse[vi].Z;
-		Solve[vi].W = DiffuseSolve[vi].W;
-	}
+	Modulate_Solve_By_Material(Solve, AmbientSolve, DiffuseSolve, MeshAmbient, MeshDiffuse, vcount);
 	VectorProcessorClass::Clamp(&(Solve[0]),&(Solve[0]), 0.0f, 1.0f,vcount);
 
 	mesh->Install_User_Lighting_Array(&(Solve[0]));
@@ -323,15 +342,7 @@ void VertexSolveClass::Light_Terrain(LightSolveContextClass & context,RenegadeTe
 	VectorProcessorClass::Clamp(&(AmbientSolve[0]),&(AmbientSolve[0]), 0.0f, 1.0f,vcount);
 	VectorProcessorClass::Clamp(&(DiffuseSolve[0]),&(DiffuseSolve[0]), 0.0f, 1.0f,vcount);
 
-	/*
-	** Modulate the accumulated light by the material properties
-	*/
-	for (vi=0; vi<vcount; vi++) {
-		Solve[vi].X = AmbientSolve[vi].X * MeshAmbient[vi].X + DiffuseSolve[vi].X * MeshDiffuse[vi].X;
-		Solve[vi].Y = AmbientSolve[vi].Y * MeshAmbient[vi].Y + DiffuseSolve[vi].Y * MeshDiffuse[vi].Y;
-		Solve[vi].Z = AmbientSolve[vi].Z * MeshAmbient[vi].Z + DiffuseSolve[vi].Z * MeshDiffuse[vi].Z;
-		Solve[vi].W = DiffuseSolve[vi].W;
-	}
+	Modulate_Solve_By_Material(Solve, AmbientSolve, DiffuseSolve, MeshAmbient, MeshDiffuse, vcount);
 	VectorProcessorClass::Clamp(&(Solve[0]),&(Solve[0]), 0.0f, 1.0f,vcount);
 
 	/*

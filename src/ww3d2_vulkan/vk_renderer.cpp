@@ -6,29 +6,182 @@
 #include "vk_dx8_texture.h"
 #include "../ww3d2/dx8wrapper.h"
 
+#include <d3d8.h>
+#include <algorithm>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 namespace ww3d_vulkan {
 
 namespace {
 
-static void Apply_Dx8_Depth_Bias(VkCommandBuffer cmd)
+static void Apply_Depth_Bias_For_ZBias(VkCommandBuffer cmd, int zbias)
 {
-	const int zbias = DX8Wrapper::Get_Effective_ZBias();
 	const float constant = zbias > 0 ? (float)zbias * -2.0f : 0.0f;
 	const float slope = zbias > 0 ? -1.0f : 0.0f;
 	vkCmdSetDepthBias(cmd, constant, 0.0f, slope);
 }
+
+static void Apply_Dx8_Depth_Bias(VkCommandBuffer cmd)
+{
+	Apply_Depth_Bias_For_ZBias(cmd, DX8Wrapper::Get_Effective_ZBias());
+}
+
+static int Compare_Pipeline_Key(const MeshPipelineKey &a, const MeshPipelineKey &b)
+{
+	if (a.alpha_blend != b.alpha_blend) {
+		return a.alpha_blend ? 1 : -1;
+	}
+	if (a.src_blend != b.src_blend) {
+		return (int)a.src_blend - (int)b.src_blend;
+	}
+	if (a.dst_blend != b.dst_blend) {
+		return (int)a.dst_blend - (int)b.dst_blend;
+	}
+	if (a.depth_write != b.depth_write) {
+		return a.depth_write ? 1 : -1;
+	}
+	if (a.depth_test != b.depth_test) {
+		return a.depth_test ? 1 : -1;
+	}
+	if (a.depth_compare != b.depth_compare) {
+		return (int)a.depth_compare - (int)b.depth_compare;
+	}
+	if (a.two_sided != b.two_sided) {
+		return a.two_sided ? 1 : -1;
+	}
+	if (a.cull_inverted != b.cull_inverted) {
+		return a.cull_inverted ? 1 : -1;
+	}
+	if (a.alpha_test != b.alpha_test) {
+		return a.alpha_test ? 1 : -1;
+	}
+	if (a.topology != b.topology) {
+		return (int)a.topology - (int)b.topology;
+	}
+	if (a.fvf != b.fvf) {
+		return (int)a.fvf - (int)b.fvf;
+	}
+	if (a.vertex_stride != b.vertex_stride) {
+		return (int)a.vertex_stride - (int)b.vertex_stride;
+	}
+	return 0;
+}
+
+static VkTexture *Resolve_Draw_Texture(VkTexture *texture, VkTexture *fallback)
+{
+	if (texture == nullptr ||
+		texture->View() == VK_NULL_HANDLE ||
+		texture->Sampler() == VK_NULL_HANDLE) {
+		return fallback;
+	}
+	return texture;
+}
 } /* namespace */
 
-static_assert(offsetof(FrameUBO, tex_mat) == 656, "FrameUBO tex_mat std140 alignment");
-static_assert(sizeof(FrameUBO) == 688, "FrameUBO size must match GLSL std140 layout");
+static_assert(offsetof(FrameUBO, tex_mat) == 672, "FrameUBO tex_mat std140 alignment");
+static_assert(sizeof(FrameUBO) == 704, "FrameUBO size must match GLSL std140 layout");
 
 static uint32_t Align_Ubo_Size(uint32_t size, uint32_t alignment)
 {
 	return (size + alignment - 1) & ~(alignment - 1);
+}
+
+uint64_t VkRenderer::Get_Time_Us()
+{
+	return std::chrono::duration_cast<std::chrono::microseconds>(
+		std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+}
+
+void VkRenderer::Open_Stats_Log()
+{
+	if (stats_log_ != nullptr) {
+		return;
+	}
+	stats_log_ = std::fopen("renegade_vulkan_perf.log", "a");
+	if (stats_log_ != nullptr) {
+		std::time_t now = std::time(nullptr);
+		std::tm *tm = std::localtime(&now);
+		char time_buf[64];
+		std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm);
+		std::fprintf(stats_log_, "# Vulkan perf log started at %s\n", time_buf);
+		std::fflush(stats_log_);
+	}
+
+	Reset_Timers();
+}
+
+void VkRenderer::Close_Stats_Log()
+{
+	if (stats_log_ != nullptr) {
+		std::fclose(stats_log_);
+		stats_log_ = nullptr;
+	}
+}
+
+void VkRenderer::Reset_Stats()
+{
+	frame_stats_ = FrameStats();
+	pipelines_.Reset_Stats();
+	pipelines_offscreen_.Reset_Stats();
+}
+
+void VkRenderer::Reset_Timers()
+{
+	frame_time_.Reset();
+	begin_frame_time_.Reset();
+	begin_frame_wait_time_.Reset();
+	flush_time_.Reset();
+	sort_time_.Reset();
+	end_frame_time_.Reset();
+	end_frame_submit_wait_time_.Reset();
+	sync_upload_time_.Reset();
+}
+
+void VkRenderer::Print_Stats()
+{
+	const uint32_t total_lookup = pipelines_.Lookup_Count() + pipelines_offscreen_.Lookup_Count();
+	const uint32_t total_miss = pipelines_.Miss_Count() + pipelines_offscreen_.Miss_Count();
+	const uint32_t total_create = pipelines_.Creation_Count() + pipelines_offscreen_.Creation_Count();
+
+	std::time_t now = std::time(nullptr);
+	std::tm *tm = std::localtime(&now);
+	char time_buf[64];
+	std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm);
+
+	if (stats_log_ != nullptr) {
+		std::fprintf(stats_log_,
+			"%s frame=%u draws=%u pending=%u 2d=%u sort_flushes=%u "
+			"pipe_switches=%u pipe_lookups=%u pipe_misses=%u pipe_creations=%u "
+			"sync_uploads=%u offscreen_stalls=%u ubo_limit_hits=%u "
+			"frame_ms=%.2f/%.2f begin_ms=%.2f/%.2f begin_wait_ms=%.2f/%.2f "
+			"flush_ms=%.2f/%.2f sort_ms=%.2f/%.2f end_ms=%.2f/%.2f "
+			"end_submit_wait_ms=%.2f/%.2f sync_upload_ms=%.2f/%.2f\n",
+			time_buf,
+			stats_frame_counter_,
+			frame_stats_.flushed_draws,
+			frame_stats_.pending_draws,
+			frame_stats_.immediate_2d_draws,
+			frame_stats_.sort_flushes,
+			frame_stats_.pipeline_switches,
+			total_lookup,
+			total_miss,
+			total_create,
+			frame_stats_.sync_uploads,
+			frame_stats_.offscreen_stalls,
+			frame_stats_.ubo_limit_hits,
+			(double)frame_time_.Avg() / 1000.0, (double)frame_time_.Max() / 1000.0,
+			(double)begin_frame_time_.Avg() / 1000.0, (double)begin_frame_time_.Max() / 1000.0,
+			(double)begin_frame_wait_time_.Avg() / 1000.0, (double)begin_frame_wait_time_.Max() / 1000.0,
+			(double)flush_time_.Avg() / 1000.0, (double)flush_time_.Max() / 1000.0,
+			(double)sort_time_.Avg() / 1000.0, (double)sort_time_.Max() / 1000.0,
+			(double)end_frame_time_.Avg() / 1000.0, (double)end_frame_time_.Max() / 1000.0,
+			(double)end_frame_submit_wait_time_.Avg() / 1000.0, (double)end_frame_submit_wait_time_.Max() / 1000.0,
+			(double)sync_upload_time_.Avg() / 1000.0, (double)sync_upload_time_.Max() / 1000.0);
+		std::fflush(stats_log_);
+	}
 }
 
 bool VkRenderer::Init(SDL_Window *window, uint32_t width, uint32_t height, bool vsync)
@@ -111,7 +264,9 @@ bool VkRenderer::Init(SDL_Window *window, uint32_t width, uint32_t height, bool 
 	bound_textures_[0] = &default_texture_;
 	bound_textures_[1] = &default_texture_;
 	textures_dirty_ = true;
-	last_pushed_valid_ = false;
+
+	Open_Stats_Log();
+
 	return true;
 }
 
@@ -146,18 +301,18 @@ void VkRenderer::Bind_Texture(unsigned stage, VkTexture *texture)
 		texture->Sampler() == VK_NULL_HANDLE) {
 		texture = &default_texture_;
 	}
-	if (bound_textures_[stage] != texture) {
-		bound_textures_[stage] = texture;
-		textures_dirty_ = true;
-	}
+	bound_textures_[stage] = texture;
+	textures_dirty_ = true;
 }
 
 void VkRenderer::Flush_Push_Descriptors(VkCommandBuffer cmd, VkPipelineLayout layout, VkDeviceSize ubo_offset)
 {
+	const uint32_t aligned_ubo_size =
+		Align_Ubo_Size(sizeof(FrameUBO), ubo_alignment_);
 	VkDescriptorBufferInfo ubo_info = {};
 	ubo_info.buffer = frame_ubo_ring_[current_frame_].Handle();
 	ubo_info.offset = ubo_offset;
-	ubo_info.range = sizeof(FrameUBO);
+	ubo_info.range = aligned_ubo_size;
 
 	VkWriteDescriptorSet writes[3] = {};
 	writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -200,42 +355,115 @@ void VkRenderer::Flush_Push_Descriptors(VkCommandBuffer cmd, VkPipelineLayout la
 
 void VkRenderer::Flush_Pending_Draws()
 {
-	if (pending_draws_.empty() || pending_pipeline_ == VK_NULL_HANDLE) {
-		pending_draws_.clear();
-		pending_pipeline_ = VK_NULL_HANDLE;
+	if (pending_draws_.empty()) {
 		return;
 	}
 
+	uint64_t flush_start = Get_Time_Us();
+
+	++frame_stats_.sort_flushes;
+	frame_stats_.pending_draws += (uint32_t)pending_draws_.size();
+
+	uint64_t sort_start = Get_Time_Us();
+	std::sort(
+		pending_draws_.begin(),
+		pending_draws_.end(),
+		[](const PendingDraw &a, const PendingDraw &b) {
+			const int key_cmp = Compare_Pipeline_Key(a.key, b.key);
+			if (key_cmp != 0) {
+				return key_cmp < 0;
+			}
+			if (a.vertex_buffer != b.vertex_buffer) {
+				return a.vertex_buffer < b.vertex_buffer;
+			}
+			if (a.index_buffer != b.index_buffer) {
+				return a.index_buffer < b.index_buffer;
+			}
+			if (a.textures[0] != b.textures[0]) {
+				return a.textures[0] < b.textures[0];
+			}
+			if (a.textures[1] != b.textures[1]) {
+				return a.textures[1] < b.textures[1];
+			}
+			return a.depth_bias < b.depth_bias;
+		});
+
+	sort_time_.Add(Get_Time_Us() - sort_start);
+
 	FrameSync &frame = frames_[current_frame_];
 	VkCommandBuffer cmd = frame.command_buffer;
+	VkExtent2D extent = offscreen_target_ != nullptr
+		? offscreen_target_->Render_Extent()
+		: swapchain_.Extent();
+	Apply_Viewport(cmd, extent);
 
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pending_pipeline_);
-
+	VkPipelineCache &pipe_cache =
+		offscreen_target_ != nullptr ? pipelines_offscreen_ : pipelines_;
+	const VkPipelineLayout pipeline_layout = pipe_cache.Layout();
 	const uint32_t aligned_ubo_size = Align_Ubo_Size(sizeof(FrameUBO), ubo_alignment_);
-	for (auto &d : pending_draws_) {
+
+	VkPipeline bound_pipe = VK_NULL_HANDLE;
+	VkBuffer bound_vb = VK_NULL_HANDLE;
+	VkBuffer bound_ib = VK_NULL_HANDLE;
+	int bound_zbias = 0;
+	bool have_zbias = false;
+
+	for (size_t i = 0; i < pending_draws_.size(); ++i) {
+		const PendingDraw &d = pending_draws_[i];
 		if (frame_ubo_draw_count_ >= kUboDrawsPerFrame) {
+			++frame_stats_.ubo_limit_hits;
 			break;
 		}
-		frame_ubo_ = d.ubo;
-		bound_textures_[0] = d.textures[0] ? d.textures[0] : &default_texture_;
-		bound_textures_[1] = d.textures[1] ? d.textures[1] : &default_texture_;
-		textures_dirty_ = true;
 
-		const VkDeviceSize ubo_offset = (VkDeviceSize)frame_ubo_draw_count_ * aligned_ubo_size;
-		frame_ubo_ring_[current_frame_].Upload(&frame_ubo_, sizeof(frame_ubo_), ubo_offset);
+		VkPipeline pipeline = pipe_cache.Get(d.key);
+		if (pipeline == VK_NULL_HANDLE) {
+			continue;
+		}
+
+		if (pipeline != bound_pipe) {
+			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+			bound_pipe = pipeline;
+			bound_pipeline_ = pipeline;
+			++frame_stats_.pipeline_switches;
+		}
+
+		if (!have_zbias || d.depth_bias != bound_zbias) {
+			Apply_Depth_Bias_For_ZBias(cmd, d.depth_bias);
+			bound_zbias = d.depth_bias;
+			have_zbias = true;
+		}
+
+		VkTexture *tex0 = d.textures[0];
+		VkTexture *tex1 = d.textures[1];
+
+		const VkDeviceSize ubo_offset =
+			(VkDeviceSize)frame_ubo_draw_count_ * aligned_ubo_size;
+		frame_ubo_ring_[current_frame_].Upload(&d.ubo, sizeof(d.ubo), ubo_offset);
 		++frame_ubo_draw_count_;
 
-		Flush_Push_Descriptors(cmd, pending_layout_, ubo_offset);
-		Apply_Dx8_Depth_Bias(cmd);
+		frame_ubo_ = d.ubo;
+		bound_textures_[0] = tex0;
+		bound_textures_[1] = tex1;
+		textures_dirty_ = true;
+		Flush_Push_Descriptors(cmd, pipeline_layout, ubo_offset);
 
-		VkDeviceSize offset = 0;
-		vkCmdBindVertexBuffers(cmd, 0, 1, &d.vertex_buffer, &offset);
-		vkCmdBindIndexBuffer(cmd, d.index_buffer, 0, VK_INDEX_TYPE_UINT16);
+		if (d.vertex_buffer != bound_vb) {
+			VkDeviceSize offset = 0;
+			vkCmdBindVertexBuffers(cmd, 0, 1, &d.vertex_buffer, &offset);
+			bound_vb = d.vertex_buffer;
+		}
+		if (d.index_buffer != bound_ib) {
+			vkCmdBindIndexBuffer(cmd, d.index_buffer, 0, VK_INDEX_TYPE_UINT16);
+			bound_ib = d.index_buffer;
+		}
+
 		vkCmdDrawIndexed(cmd, d.index_count, 1, d.first_index, d.vertex_offset, 0);
+		++frame_stats_.flushed_draws;
 	}
 
+	flush_time_.Add(Get_Time_Us() - flush_start);
+
 	pending_draws_.clear();
-	pending_pipeline_ = VK_NULL_HANDLE;
 }
 
 void VkRenderer::Recreate_Swapchain_Resources()
@@ -252,7 +480,7 @@ void VkRenderer::Recreate_Swapchain_Resources()
 		views,
 		render_pass_.Depth_Format(),
 		swapchain_.Extent());
-	custom_viewport_ = false;
+	explicit_viewport_ = false;
 }
 
 void VkRenderer::Set_Render_Target(VkTexture *target)
@@ -272,7 +500,8 @@ void VkRenderer::Set_Render_Target(VkTexture *target)
 
 void VkRenderer::Set_Viewport(uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
-	custom_viewport_ = true;
+	Flush_Pending_Draws();
+	explicit_viewport_ = true;
 	viewport_state_.x = (float)x;
 	viewport_state_.y = (float)y;
 	viewport_state_.width = (float)w;
@@ -293,7 +522,6 @@ void VkRenderer::Shutdown()
 	}
 
 	pending_draws_.clear();
-	pending_pipeline_ = VK_NULL_HANDLE;
 
 	for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
 		frame_ubo_ring_[i].Destroy();
@@ -319,6 +547,8 @@ void VkRenderer::Shutdown()
 	frag_spirv_.clear();
 	VkContext::Get().Shutdown();
 	frame_active_ = false;
+
+	Close_Stats_Log();
 }
 
 void VkRenderer::Resize(uint32_t width, uint32_t height)
@@ -396,7 +626,7 @@ void VkRenderer::Apply_Viewport(VkCommandBuffer cmd, VkExtent2D extent)
 {
 	VkViewport viewport = {};
 	VkRect2D scissor = {};
-	if (custom_viewport_) {
+	if (explicit_viewport_) {
 		viewport.x = viewport_state_.x;
 		viewport.width = viewport_state_.width;
 		viewport.minDepth = viewport_state_.minDepth;
@@ -420,19 +650,27 @@ void VkRenderer::Apply_Viewport(VkCommandBuffer cmd, VkExtent2D extent)
 
 bool VkRenderer::Begin_Frame(float clear_r, float clear_g, float clear_b, float clear_a)
 {
+	frame_start_us_ = Get_Time_Us();
+
 	VkContext &ctx = VkContext::Get();
 	FrameSync &frame = frames_[current_frame_];
 
+	uint64_t wait_start = Get_Time_Us();
 	vkWaitForFences(ctx.Device(), 1, &frame.in_flight, VK_TRUE, UINT64_MAX);
+	begin_frame_wait_time_.Add(Get_Time_Us() - wait_start);
+
 	vkResetFences(ctx.Device(), 1, &frame.in_flight);
 	Reset_Dynamic_Vb_Frame_Slot(current_frame_);
 	Reset_Dynamic_Ib_Frame_Slot(current_frame_);
 	vkResetCommandBuffer(frame.command_buffer, 0);
-	custom_viewport_ = false;
+	explicit_viewport_ = false;
+
+	++stats_frame_counter_;
+	Reset_Stats();
 
 	pending_draws_.clear();
-	pending_pipeline_ = VK_NULL_HANDLE;
-	last_pushed_valid_ = false;
+	pending_draws_.reserve(512);
+	bound_pipeline_ = VK_NULL_HANDLE;
 	frame_ubo_draw_count_ = 0;
 
 	bound_textures_[0] = &default_texture_;
@@ -482,6 +720,8 @@ bool VkRenderer::Begin_Frame(float clear_r, float clear_g, float clear_b, float 
 	vkCmdBeginRenderPass(
 		frame.command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 	Apply_Viewport(frame.command_buffer, extent);
+
+	begin_frame_time_.Add(Get_Time_Us() - frame_start_us_);
 
 	frame_active_ = true;
 	return true;
@@ -540,6 +780,8 @@ void VkRenderer::Clear_During_Frame(
 
 bool VkRenderer::End_Frame(bool present)
 {
+	uint64_t end_start = Get_Time_Us();
+
 	if (!frame_active_) {
 		return false;
 	}
@@ -559,8 +801,11 @@ bool VkRenderer::End_Frame(bool present)
 
 	bool present_ok = true;
 	if (offscreen_target_ != nullptr) {
+		++frame_stats_.offscreen_stalls;
+		uint64_t submit_wait_start = Get_Time_Us();
 		VK_CHECK(vkQueueSubmit(ctx.Graphics_Queue(), 1, &submit_info, frame.in_flight));
 		VK_CHECK(vkWaitForFences(ctx.Device(), 1, &frame.in_flight, VK_TRUE, UINT64_MAX));
+		end_frame_submit_wait_time_.Add(Get_Time_Us() - submit_wait_start);
 	} else if (present) {
 		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		submit_info.waitSemaphoreCount = 1;
@@ -569,20 +814,32 @@ bool VkRenderer::End_Frame(bool present)
 		submit_info.signalSemaphoreCount = 1;
 		submit_info.pSignalSemaphores = &frame.render_finished;
 
+		uint64_t submit_wait_start = Get_Time_Us();
 		VK_CHECK(vkQueueSubmit(ctx.Graphics_Queue(), 1, &submit_info, frame.in_flight));
 
 		if (!swapchain_.Present(current_frame_, frame.render_finished, current_image_)) {
 			Resize(width_, height_);
 			present_ok = false;
 		}
+		end_frame_submit_wait_time_.Add(Get_Time_Us() - submit_wait_start);
 
 		current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
 	} else {
+		uint64_t submit_wait_start = Get_Time_Us();
 		VK_CHECK(vkQueueSubmit(ctx.Graphics_Queue(), 1, &submit_info, frame.in_flight));
 		VK_CHECK(vkWaitForFences(ctx.Device(), 1, &frame.in_flight, VK_TRUE, UINT64_MAX));
+		end_frame_submit_wait_time_.Add(Get_Time_Us() - submit_wait_start);
 	}
 
 	frame_active_ = false;
+
+	uint64_t now = Get_Time_Us();
+	end_frame_time_.Add(now - end_start);
+	frame_time_.Add(now - frame_start_us_);
+
+	if (stats_frame_counter_ % 60 == 0) {
+		Print_Stats();
+	}
 
 	return true;
 }
@@ -641,8 +898,9 @@ void VkRenderer::Draw_Indexed(
 		return;
 	}
 
-	FrameSync &frame = frames_[current_frame_];
-	VkCommandBuffer cmd = frame.command_buffer;
+	if (index_count == 0) {
+		return;
+	}
 
 	VkPipelineCache &pipe_cache =
 		offscreen_target_ != nullptr ? pipelines_offscreen_ : pipelines_;
@@ -652,24 +910,35 @@ void VkRenderer::Draw_Indexed(
 		return;
 	}
 
-	if (frame_ubo_draw_count_ >= kUboDrawsPerFrame) {
+	if (frame_ubo_draw_count_ + pending_draws_.size() >= kUboDrawsPerFrame) {
 		return;
 	}
 
-	const uint32_t aligned_ubo_size = Align_Ubo_Size(sizeof(FrameUBO), ubo_alignment_);
-	const VkDeviceSize ubo_offset = (VkDeviceSize)frame_ubo_draw_count_ * aligned_ubo_size;
-	frame_ubo_ring_[current_frame_].Upload(&frame_ubo_, sizeof(frame_ubo_), ubo_offset);
-	++frame_ubo_draw_count_;
+	/* Screen-space 2D (XYRHW): flush queued work, then draw immediately. */
+	const bool immediate_2d =
+		(key.fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW;
+	if (immediate_2d) {
+		++frame_stats_.immediate_2d_draws;
+		FrameSync &frame = frames_[current_frame_];
+		VkCommandBuffer cmd = frame.command_buffer;
+		const uint32_t aligned_ubo_size = Align_Ubo_Size(sizeof(FrameUBO), ubo_alignment_);
 
-	/* Custom viewport breaks batching — flush and draw immediately. */
-	if (custom_viewport_) {
 		Flush_Pending_Draws();
+
 		VkExtent2D extent = offscreen_target_ != nullptr
 			? offscreen_target_->Render_Extent()
 			: swapchain_.Extent();
 		Apply_Viewport(cmd, extent);
 
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+		if (bound_pipeline_ != pipeline) {
+			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+			bound_pipeline_ = pipeline;
+		}
+
+		const VkDeviceSize ubo_offset = (VkDeviceSize)frame_ubo_draw_count_ * aligned_ubo_size;
+		frame_ubo_ring_[current_frame_].Upload(&frame_ubo_, sizeof(frame_ubo_), ubo_offset);
+		++frame_ubo_draw_count_;
+
 		Flush_Push_Descriptors(cmd, pipe_cache.Layout(), ubo_offset);
 		Apply_Dx8_Depth_Bias(cmd);
 
@@ -680,18 +949,19 @@ void VkRenderer::Draw_Indexed(
 		return;
 	}
 
-	(void)pending_pipeline_;
-	(void)pending_layout_;
-	(void)pending_draws_;
+	PendingDraw draw;
+	draw.key = key;
+	draw.vertex_buffer = vertex_buffer;
+	draw.index_buffer = index_buffer;
+	draw.index_count = index_count;
+	draw.first_index = first_index;
+	draw.vertex_offset = vertex_offset;
+	draw.depth_bias = DX8Wrapper::Get_Effective_ZBias();
+	draw.ubo = frame_ubo_;
+	draw.textures[0] = Resolve_Draw_Texture(bound_textures_[0], &default_texture_);
+	draw.textures[1] = Resolve_Draw_Texture(bound_textures_[1], &default_texture_);
 
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	Flush_Push_Descriptors(cmd, pipe_cache.Layout(), ubo_offset);
-	Apply_Dx8_Depth_Bias(cmd);
-
-	VkDeviceSize offset = 0;
-	vkCmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset);
-	vkCmdBindIndexBuffer(cmd, index_buffer, 0, VK_INDEX_TYPE_UINT16);
-	vkCmdDrawIndexed(cmd, index_count, 1, first_index, vertex_offset, 0);
+	pending_draws_.push_back(draw);
 }
 
 } /* namespace ww3d_vulkan */

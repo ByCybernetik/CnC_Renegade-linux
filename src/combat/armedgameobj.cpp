@@ -342,6 +342,14 @@ void	ArmedGameObj::On_Post_Load( void )
 {
 	PhysicalGameObj::On_Post_Load();
 	Init_Muzzle_Bones();
+
+	/*
+	** Save load: weapon Owner refs may fail to link during chunk Load (pointer remap
+	** ordering). Re-bind every weapon to this object after post-load remap completes.
+	*/
+	if ( WeaponBag != NULL ) {
+		WeaponBag->Rebind_Owner( this );
+	}
 }
 
 
@@ -428,7 +436,11 @@ void	ArmedGameObj::Post_Think( void )
 	}
 
 	if ( Get_Weapon() != NULL ) {			// Update the weapon after the commands and update_human_animation
-		Get_Weapon()->Update();
+		WeaponClass *weapon = Get_Weapon();
+		if ( weapon->Get_Owner() == NULL && WeaponBag != NULL ) {
+			WeaponBag->Rebind_Owner( this );
+		}
+		weapon->Update();
 	}
 
 	// allow any recoil animation to progress

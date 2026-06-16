@@ -1333,7 +1333,8 @@ if (a_dir.Length2() > MAX_AVEL * MAX_AVEL) {
 			** If we are contacting a phys3 object, push it away from us.  If we
 			** can't push it away, then exert a contact force.
 			*/
-			Phys3Class * p3obj = ContactBox->Peek_Contacted_Object(i)->As_Phys3Class();
+			PhysClass * contacted_obj = ContactBox->Peek_Contacted_Object(i);
+			Phys3Class * p3obj = (contacted_obj != NULL) ? contacted_obj->As_Phys3Class() : NULL;
 			bool resolved = false;
 			if (p3obj != NULL) {
 				resolved = Push_Phys3_Object_Away(p3obj,contact);

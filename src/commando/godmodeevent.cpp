@@ -44,6 +44,7 @@
 #include "networkobjectmgr.h"
 #include "playermanager.h"
 #include "gameobjmanager.h"
+#include "gametype.h"
 #include "devoptions.h"
 #include "textdisplay.h"
 #include "apppackettypes.h"
@@ -84,14 +85,28 @@ cGodModeEvent::Act(void)
 {
    WWASSERT(cNetwork::I_Am_Server());
 
-#ifdef WWDEBUG
+#if defined(WWDEBUG) || defined(RENEGADE_DEV_CONSOLE)
 
+	bool authorized = false;
+
+#if defined(WWDEBUG)
 	if (!Password.Is_Empty())
 	{
 		WWDEBUG_SAY(("mike %u\n", CRC_Stringi(Password)));
 	}
 
-	if (cDevOptions::IBelieveInGod.Is_True() || CRC_Stringi(Password) == 4014842490)
+	if (cDevOptions::IBelieveInGod.Is_True() || CRC_Stringi(Password) == 4014842490) {
+		authorized = true;
+	}
+#endif
+
+#if defined(RENEGADE_DEV_CONSOLE)
+	if (IS_SOLOPLAY) {
+		authorized = true;
+	}
+#endif
+
+	if (authorized)
 	{
 		cPlayer * p_player = cPlayerManager::Find_Player(SenderId);
 
@@ -131,7 +146,7 @@ cGodModeEvent::Act(void)
 			Get_Text_Display()->Print_System("God status toggle request ignored due to your atheism.");
 		}
 	}
-#endif // WWDEBUG
+#endif // WWDEBUG || RENEGADE_DEV_CONSOLE
 
 	Set_Delete_Pending();
 }

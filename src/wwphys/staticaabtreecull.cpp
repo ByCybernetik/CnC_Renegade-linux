@@ -130,6 +130,23 @@ void StaticAABTreeCullClass::Update_Culling(CullableClass * obj)
 //	Scene->Reset_Vis();
 }
 
+static void Add_Collected_Objects_To_Lists(
+	PhysAABTreeCullClass *cull,
+	RefPhysListClass &visobjlist,
+	RefPhysListClass &wsmeshlist)
+{
+	StaticPhysClass *obj;
+	for (obj = (StaticPhysClass *)cull->Get_First_Collected_Object();
+	     obj != NULL;
+	     obj = (StaticPhysClass *)cull->Get_Next_Collected_Object(obj)) {
+		if (obj->Is_World_Space_Mesh()) {
+			wsmeshlist.Add(obj);
+		} else {
+			visobjlist.Add(obj);
+		}
+	}
+}
+
 void StaticAABTreeCullClass::Collect_Visible_Objects
 (
 	const FrustumClass &		frustum,
@@ -169,21 +186,15 @@ void StaticAABTreeCullClass::Collect_Visible_Objects
 		*/
 		Reset_Collection();
 		Collect_Objects(frustum);
+		Add_Collected_Objects_To_Lists(this, visobjlist, wsmeshlist);
 
-		/*
-		** Loop over each object, adding it into the list
-		*/
-		StaticPhysClass * obj;
-		for (	obj = (StaticPhysClass *)Get_First_Collected_Object(); 
-				obj != NULL; 
-				obj = (StaticPhysClass *)Get_Next_Collected_Object(obj)) 
-		{
-			if (obj->Is_World_Space_Mesh()) {
-				wsmeshlist.Add(obj);
-			} else {
-				visobjlist.Add(obj);
-			}
+#if defined(RENEGADE_LINUX)
+		if (visobjlist.Count() + wsmeshlist.Count() == 0) {
+			Reset_Collection();
+			Collect_Objects(Get_Bounding_Box());
+			Add_Collected_Objects_To_Lists(this, visobjlist, wsmeshlist);
 		}
+#endif
 	}
 }
 

@@ -4,7 +4,10 @@
 
 #include "mss_stub.h"
 #include "audio_decode.h"
+#include "audio_sdl3_mixer.h"
+#include "sdl3_mix_export.h"
 #include "eax_reverb.h"
+#include "audiblesound.h"
 
 #include <SDL3/SDL.h>
 
@@ -49,6 +52,7 @@ struct SdlVoice
 	volatile F32 pan;
 	F32 gain_l;
 	F32 gain_r;
+	double pcm_mix_frame;
 	unsigned long pcm_cursor;
 	volatile S32 loop_count;
 	S32 loops_remaining;
@@ -69,6 +73,8 @@ struct SdlVoice
 	F32 filter_reverb_level;
 	F32 filter_reverb_decay;
 	F32 filter_reverb_reflect;
+	uint8_t voice_bus;
+	bool voice_bus_explicit;
 	EaxReverb *reverb;
 	SdlVoice *track_next;
 };
@@ -205,10 +211,11 @@ static void voice_pcm_seek_bytes(SdlVoice *v, unsigned long byte_pos)
 	byte_pos -= byte_pos % frame;
 
 	v->pcm_cursor = byte_pos;
+	v->pcm_mix_frame = (double)(byte_pos / frame);
 	v->finished_once = false;
 
 	if (v->stream != NULL) {
-		SDL_ClearAudioStream(v->stream);
+		(void)v->stream;
 	}
 
 	bytes_per_sec = voice_bytes_per_sec(v);
@@ -464,12 +471,11 @@ static void voice_compute_stereo_gains(SdlVoice *v, float *out_l, float *out_r)
 
 static void voice_apply_levels(SdlVoice *v)
 {
-	if (v == NULL || v->stream == NULL) {
+	if (v == NULL) {
 		return;
 	}
 
 	voice_compute_stereo_gains(v, &v->gain_l, &v->gain_r);
-	SDL_SetAudioStreamGain(v->stream, 1.0f);
 	v->last_levels_ms = voice_now_ms();
 }
 
@@ -477,12 +483,12 @@ static void voice_apply_levels_throttled(SdlVoice *v, int force)
 {
 	Uint64 now;
 
-	if (v == NULL || v->stream == NULL) {
+	if (v == NULL) {
 		return;
 	}
 
 	now = voice_now_ms();
-	if (!force && v->last_levels_ms != 0 && (now - v->last_levels_ms) < 33) {
+	if (!force && v->last_levels_ms != 0 && (now - v->last_levels_ms) < 16) {
 		return;
 	}
 	voice_apply_levels(v);
@@ -505,6 +511,24 @@ static DWORD voice_playback_duration_ms(const SdlVoice *v)
 
 static int voice_is_oneshot_sfx(const SdlVoice *v);
 
+#if defined(RENEGADE_LINUX)
+static void voice_trace_reload_mix(const SdlVoice *v, int bus_id);
+#endif
+
+static AudibleSoundClass *voice_owner_from_voice(const SdlVoice *v);
+
+static int voice_is_ambient_bed_voice(const SdlVoice *v)
+{
+	AudibleSoundClass *owner;
+
+	if (v == NULL) {
+		return 0;
+	}
+
+	owner = voice_owner_from_voice(v);
+	return (owner != NULL && AudibleSound_Is_Ambient_Loop_Sound (owner)) ? 1 : 0;
+}
+
 static int voice_stream_is_playing(SdlVoice *v)
 {
 	Uint64 now;
@@ -521,25 +545,18 @@ static int voice_stream_is_playing(SdlVoice *v)
 	** Use the wall-clock play window only for these voices.
 	*/
 	if (voice_is_oneshot_sfx(v)) {
+		/*
+		** PCM can finish before playback_end_ms (logs: grenade_reload finished:1 but playing:1).
+		*/
+		if (v->finished_once) {
+			return 0;
+		}
 		if (v->playback_start_ms != 0 && now >= v->playback_start_ms && now < v->playback_end_ms) {
 			return 1;
 		}
 		if (v->playback_start_ms != 0 && now >= v->playback_end_ms && !v->finished_once) {
-			if (v->stream != NULL) {
-				int queued = SDL_GetAudioStreamQueued(v->stream);
-				if (queued > 0) {
-					unsigned long bytes_per_sec =
-						(unsigned long)v->rate * (unsigned long)v->channels * (unsigned long)(v->bits / 8);
-					Uint64 drain_ms = (bytes_per_sec > 0)
-						? (Uint64)((unsigned long)queued * 1000UL / bytes_per_sec)
-						: 0;
-					if (drain_ms > (Uint64)RENEGADE_AUDIO_PLAYBACK_TAIL_MS) {
-						drain_ms = (Uint64)RENEGADE_AUDIO_PLAYBACK_TAIL_MS;
-					}
-					if (now < v->playback_end_ms + drain_ms) {
-						return 1;
-					}
-				}
+			if (now < v->playback_end_ms + (Uint64)RENEGADE_AUDIO_PLAYBACK_TAIL_MS) {
+				return 1;
 			}
 			v->finished_once = true;
 		}
@@ -547,15 +564,24 @@ static int voice_stream_is_playing(SdlVoice *v)
 	}
 
 	if (v->playback_start_ms != 0 && now >= v->playback_start_ms && now < v->playback_end_ms) {
-		return 1;
-	}
-
-	if (v->stream != NULL && SDL_GetAudioStreamQueued(v->stream) > 0) {
-		return 1;
+		if (v->loop_count != 0 || voice_is_ambient_bed_voice (v)) {
+			return 1;
+		}
 	}
 
 	if (v->loop_count == 0 && v->pcm_submitted && !v->finished_once) {
-		return 1;
+		AudibleSoundClass *owner = voice_owner_from_voice(v);
+
+		if (owner != NULL && AudibleSound_Is_Ambient_Loop_Sound (owner)) {
+			return 1;
+		}
+
+		/*
+		** loop_count 0 on a one-shot / reload voice (stale state) must not spin forever.
+		*/
+		v->finished_once = true;
+		v->pcm_submitted = false;
+		return 0;
 	}
 
 	return 0;
@@ -568,7 +594,12 @@ static void voice_on_pcm_end(SdlVoice *v)
 	}
 
 	if (v->loop_count == 0) {
-		v->pcm_cursor = 0;
+		if (voice_is_ambient_bed_voice (v)) {
+			v->pcm_cursor = 0;
+			v->pcm_mix_frame = 0.0;
+		} else {
+			v->finished_once = true;
+		}
 		return;
 	}
 
@@ -577,82 +608,216 @@ static void voice_on_pcm_end(SdlVoice *v)
 		return;
 	}
 
-	if (v->loops_remaining > 0) {
-		v->loops_remaining--;
 		if (v->loops_remaining > 0) {
-			v->pcm_cursor = 0;
-		} else {
+			v->loops_remaining--;
+			if (v->loops_remaining > 0) {
+				v->pcm_cursor = 0;
+				v->pcm_mix_frame = 0.0;
+			} else {
 			v->finished_once = true;
 		}
 	}
 }
 
-static void SDLCALL voice_stream_get(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
+static void voice_read_stereo_frame(const SdlVoice *v, unsigned long frame_idx, unsigned long frame_bytes, short *out_l, short *out_r)
 {
-	SdlVoice *v = (SdlVoice *)userdata;
-	unsigned char chunk[8192];
-	int want;
-	int out_frames;
-	int i;
-	unsigned long frame_bytes;
+	unsigned long pos;
+
+	if (v == NULL || out_l == NULL || out_r == NULL) {
+		return;
+	}
+
+	pos = frame_idx * frame_bytes;
+	if (pos + frame_bytes > v->pcm_bytes) {
+		pos = 0;
+	}
+
+	if (v->channels == 2) {
+		*out_l = *(const short *)(v->pcm + pos);
+		*out_r = *(const short *)(v->pcm + pos + 2);
+	} else {
+		*out_l = *(const short *)(v->pcm + pos);
+		*out_r = *out_l;
+	}
+}
+
+static void voice_read_stereo_interp(const SdlVoice *v, double frame_pos, unsigned long frame_count, unsigned long frame_bytes, short *out_l, short *out_r)
+{
+	unsigned long i0;
+	unsigned long i1;
+	float frac;
+	short l0;
+	short r0;
+	short l1;
+	short r1;
+
+	if (frame_count == 0) {
+		return;
+	}
+
+	i0 = (unsigned long)fmod(frame_pos, (double)frame_count);
+	i1 = (i0 + 1) % frame_count;
+	frac = (float)(frame_pos - floor(frame_pos));
+
+	voice_read_stereo_frame(v, i0, frame_bytes, &l0, &r0);
+	voice_read_stereo_frame(v, i1, frame_bytes, &l1, &r1);
+	*out_l = (short)((float)l0 + ((float)l1 - (float)l0) * frac);
+	*out_r = (short)((float)r0 + ((float)r1 - (float)r0) * frac);
+}
+
+static void voice_mix_add(SdlVoice *v, float *mix_l, float *mix_r, int frames, int output_rate)
+{
 	float gain_l;
 	float gain_r;
+	double frame_step;
+	double pos;
+	unsigned long frame_bytes;
+	unsigned long frame_count;
+	int i;
 
-	(void)total_amount;
-
-	if (v == NULL || stream == NULL || v->pcm == NULL || v->pcm_bytes == 0 || additional_amount <= 0) {
+	if (v == NULL || mix_l == NULL || mix_r == NULL || frames <= 0 || output_rate <= 0) {
+		return;
+	}
+	if (v->pcm == NULL || v->pcm_bytes == 0 || v->finished_once || !v->pcm_submitted) {
+		return;
+	}
+	if (v->playback_start_ms == 0 && v->loop_count != 0) {
 		return;
 	}
 
-	if (v->finished_once) {
-		return;
-	}
-
-	/*
-	** Recompute L/R gains from current pan/volume each callback — do not take g_lock here.
-	** Locking from the SDL audio thread deadlocks when the main thread holds g_lock and
-	** waits on PutAudioStreamData / stream drain (hang after cinematics).
-	*/
 	voice_compute_stereo_gains(v, &gain_l, &gain_r);
-
-	want = additional_amount;
-	if (want > (int)sizeof(chunk)) {
-		want = (int)sizeof(chunk);
+	frame_bytes = (v->channels == 2) ? 4UL : 2UL;
+	frame_count = v->pcm_bytes / frame_bytes;
+	if (frame_bytes == 0 || frame_count == 0) {
+		return;
 	}
 
-	frame_bytes = (v->channels == 2) ? 4UL : 2UL;
-	out_frames = 0;
+	frame_step = (v->rate > 0) ? ((double)v->rate / (double)output_rate) : 1.0;
+	pos = v->pcm_mix_frame;
 
-	for (i = 0; (i * (int)frame_bytes) + (int)frame_bytes <= want; i++) {
+	if (v->rate == output_rate) {
+		for (i = 0; i < frames; i++) {
+			unsigned long idx;
+			short sample_l;
+			short sample_r;
+			float dry_l;
+			float dry_r;
+
+			idx = (unsigned long)pos;
+			if (v->loop_count != 0 && idx >= frame_count) {
+				v->pcm_mix_frame = pos;
+				v->pcm_cursor = frame_count * frame_bytes;
+				voice_on_pcm_end(v);
+				if (v->finished_once) {
+					break;
+				}
+				pos = 0.0;
+				idx = 0;
+			} else if (v->loop_count == 0) {
+				if (voice_is_ambient_bed_voice (v)) {
+					idx = idx % frame_count;
+				} else if (idx >= frame_count) {
+					v->pcm_mix_frame = pos;
+					v->pcm_cursor = frame_count * frame_bytes;
+					voice_on_pcm_end(v);
+					if (v->finished_once) {
+						break;
+					}
+					idx = frame_count - 1;
+				}
+			}
+
+			voice_read_stereo_frame(v, idx, frame_bytes, &sample_l, &sample_r);
+			dry_l = (float)sample_l * gain_l;
+			dry_r = (float)sample_r * gain_r;
+
+			{
+				float wet_mix = voice_reverb_wet_gain(v);
+
+				if (wet_mix > 0.0001f) {
+					float mono;
+					float rev_l;
+					float rev_r;
+					float rev_mono;
+					float balance;
+					float pan_l;
+					float pan_r;
+
+					mono = ((dry_l + dry_r) * 0.5f) / 32768.0f;
+					if (wet_mix > 1.0f) {
+						wet_mix = 1.0f;
+					}
+
+					voice_reverb_sync_preset(v);
+					if (v->reverb != NULL) {
+						eax_reverb_process(v->reverb, mono, wet_mix, &rev_l, &rev_r);
+						rev_mono = rev_l;
+						balance = miles_pan_to_balance(voice_effective_pan(v));
+						pan_l = 1.0f;
+						pan_r = 1.0f;
+						if (balance < 0.0f) {
+							pan_r = 1.0f + balance;
+						} else if (balance > 0.0f) {
+							pan_l = 1.0f - balance;
+						}
+						dry_l += rev_mono * pan_l * 32767.0f;
+						dry_r += rev_mono * pan_r * 32767.0f;
+					}
+				}
+			}
+
+			mix_l[i] += dry_l;
+			mix_r[i] += dry_r;
+			pos += 1.0;
+		}
+
+		v->pcm_mix_frame = pos;
+		if (v->loop_count == 0 && voice_is_ambient_bed_voice (v) && frame_count > 0) {
+			v->pcm_mix_frame = fmod(pos, (double)frame_count);
+		}
+		v->pcm_cursor = (unsigned long)(v->pcm_mix_frame * (double)frame_bytes);
+		if (	v->loop_count == 0 && voice_is_ambient_bed_voice (v) &&
+				v->pcm_bytes > frame_bytes)
+		{
+			v->pcm_cursor = v->pcm_cursor % v->pcm_bytes;
+		}
+		return;
+	}
+
+	for (i = 0; i < frames; i++) {
 		short sample_l;
 		short sample_r;
-		short *out;
-		unsigned long pos;
+		float dry_l;
+		float dry_r;
 
-		if (v->pcm_cursor >= v->pcm_bytes) {
+		if (v->loop_count != 0 && pos >= (double)frame_count) {
+			v->pcm_mix_frame = pos;
+			v->pcm_cursor = frame_count * frame_bytes;
 			voice_on_pcm_end(v);
-			if (v->finished_once || v->pcm_cursor >= v->pcm_bytes) {
+			if (v->finished_once) {
+				break;
+			}
+			pos = v->pcm_mix_frame;
+		} else if (	v->loop_count == 0 && !voice_is_ambient_bed_voice (v) &&
+					pos >= (double)frame_count)
+		{
+			v->pcm_mix_frame = pos;
+			v->pcm_cursor = frame_count * frame_bytes;
+			voice_on_pcm_end(v);
+			if (v->finished_once) {
 				break;
 			}
 		}
 
-		pos = v->pcm_cursor;
-		if (v->channels == 2) {
-			sample_l = *(const short *)(v->pcm + pos);
-			sample_r = *(const short *)(v->pcm + pos + 2);
-			v->pcm_cursor += 4;
-		} else {
-			sample_l = *(const short *)(v->pcm + pos);
-			sample_r = sample_l;
-			v->pcm_cursor += 2;
-		}
+		sample_l = 0;
+		sample_r = 0;
+		voice_read_stereo_interp(v, pos, frame_count, frame_bytes, &sample_l, &sample_r);
+
+		dry_l = (float)sample_l * gain_l;
+		dry_r = (float)sample_r * gain_r;
 
 		{
-			float dry_l = (float)sample_l * gain_l;
-			float dry_r = (float)sample_r * gain_r;
 			float wet_mix = voice_reverb_wet_gain(v);
-			short out_l;
-			short out_r;
 
 			if (wet_mix > 0.0001f) {
 				float mono;
@@ -663,10 +828,6 @@ static void SDLCALL voice_stream_get(void *userdata, SDL_AudioStream *stream, in
 				float pan_l;
 				float pan_r;
 
-				/*
-				** Reverb send from attenuated mono; add wet on top of full stereo dry
-				** (parallel dry*(1-wet) collapsed the stereo image to mono reverb).
-				*/
 				mono = ((dry_l + dry_r) * 0.5f) / 32768.0f;
 				if (wet_mix > 1.0f) {
 					wet_mix = 1.0f;
@@ -688,54 +849,191 @@ static void SDLCALL voice_stream_get(void *userdata, SDL_AudioStream *stream, in
 					dry_r += rev_mono * pan_r * 32767.0f;
 				}
 			}
-
-			if (dry_l > 32767.0f) {
-				dry_l = 32767.0f;
-			} else if (dry_l < -32768.0f) {
-				dry_l = -32768.0f;
-			}
-			if (dry_r > 32767.0f) {
-				dry_r = 32767.0f;
-			} else if (dry_r < -32768.0f) {
-				dry_r = -32768.0f;
-			}
-			out_l = (short)dry_l;
-			out_r = (short)dry_r;
-			out = (short *)(chunk + (size_t)i * 4);
-			out[0] = out_l;
-			out[1] = out_r;
 		}
-		out_frames++;
+
+		mix_l[i] += dry_l;
+		mix_r[i] += dry_r;
+		pos += frame_step;
 	}
 
-	if (out_frames > 0) {
-		SDL_PutAudioStreamData(stream, chunk, out_frames * 4);
+	v->pcm_mix_frame = pos;
+	if (v->loop_count == 0 && voice_is_ambient_bed_voice (v)) {
+		v->pcm_mix_frame = fmod(pos, (double)frame_count);
+	}
+	v->pcm_cursor = (unsigned long)(v->pcm_mix_frame * (double)frame_bytes);
+	if (v->loop_count == 0 && voice_is_ambient_bed_voice (v) && v->pcm_bytes > frame_bytes) {
+		v->pcm_cursor = v->pcm_cursor % v->pcm_bytes;
 	}
 }
 
-static void voice_teardown_stream(SdlVoice *v);
+static const uint8_t SDL_VOICE_BUS_WEAPON = SDL3_VOICE_BUS_WEAPON;
+static const uint8_t SDL_VOICE_BUS_UI = SDL3_VOICE_BUS_UI;
+static const uint8_t SDL_VOICE_BUS_AMBIENT = SDL3_VOICE_BUS_AMBIENT;
+static const uint8_t SDL_VOICE_BUS_DIALOG = SDL3_VOICE_BUS_DIALOG;
+
+static AudibleSoundClass *voice_owner_from_voice(const SdlVoice *v)
+{
+	if (v == NULL) {
+		return NULL;
+	}
+	return (AudibleSoundClass *)v->user_data[INFO_OBJECT_PTR];
+}
+
+static void voice_set_default_bus(SdlVoice *v)
+{
+	AudibleSoundClass *owner;
+
+	if (v == NULL || v->voice_bus_explicit) {
+		return;
+	}
+
+	owner = voice_owner_from_voice(v);
+	if (owner != NULL) {
+		v->voice_bus = (uint8_t)AudibleSound_Resolve_Voice_Bus (owner);
+		return;
+	}
+
+	/* Default only when owner is not bound yet. */
+	if (!v->voice_bus_explicit) {
+		v->voice_bus = SDL_VOICE_BUS_WEAPON;
+	}
+}
+
+extern "C" void sdl3_mix_weapon_voices(float *mix_l, float *mix_r, int frames, int output_rate)
+{
+	SdlVoice *v;
+
+	for (v = g_voice_track_head; v != NULL; v = v->track_next) {
+		if (v->voice_bus != SDL_VOICE_BUS_WEAPON) {
+			continue;
+		}
+		if (!voice_stream_is_playing(v)) {
+			continue;
+		}
+#if defined(RENEGADE_LINUX)
+		{
+			AudibleSoundClass *owner = voice_owner_from_voice(v);
+
+			/* Stale routing: infinite wnd/amb beds must not mask gunshots on weapon bus. */
+			if (v->loop_count == 0 && owner != NULL) {
+				const char *fname = owner->Get_Filename();
+
+				if (	fname != NULL &&
+						(strncmp(fname, "wnd", 3) == 0 || strncmp(fname, "amb", 3) == 0))
+				{
+					v->voice_bus = SDL_VOICE_BUS_AMBIENT;
+					v->voice_bus_explicit = true;
+					continue;
+				}
+			}
+
+			/* Mission VO misclassified as SFX must not share weapon bus with gunshots/reload. */
+			if (owner != NULL && AudibleSound_Is_Dialog_Sound(owner)) {
+				v->voice_bus = SDL_VOICE_BUS_DIALOG;
+				v->voice_bus_explicit = true;
+				continue;
+			}
+		}
+#endif
+		voice_mix_add(v, mix_l, mix_r, frames, output_rate);
+	}
+}
+
+/* Legacy name used by mixer slot documentation. */
+extern "C" void sdl3_mix_voices(float *mix_l, float *mix_r, int frames, int output_rate)
+{
+	sdl3_mix_weapon_voices(mix_l, mix_r, frames, output_rate);
+}
+
+extern "C" void sdl3_mix_ambient_voices(float *mix_l, float *mix_r, int frames, int output_rate)
+{
+	SdlVoice *v;
+
+	for (v = g_voice_track_head; v != NULL; v = v->track_next) {
+		if (v->voice_bus != SDL_VOICE_BUS_AMBIENT) {
+			continue;
+		}
+		if (!voice_stream_is_playing(v)) {
+			continue;
+		}
+		voice_mix_add(v, mix_l, mix_r, frames, output_rate);
+	}
+}
+
+extern "C" void sdl3_mix_dialog_voices(float *mix_l, float *mix_r, int frames, int output_rate)
+{
+	SdlVoice *v;
+
+	for (v = g_voice_track_head; v != NULL; v = v->track_next) {
+		if (v->voice_bus != SDL_VOICE_BUS_DIALOG) {
+			continue;
+		}
+		if (!voice_stream_is_playing(v)) {
+			continue;
+		}
+		voice_mix_add(v, mix_l, mix_r, frames, output_rate);
+	}
+}
+
+extern "C" void sdl3_mix_ui_voices(float *mix_l, float *mix_r, int frames, int output_rate)
+{
+	SdlVoice *v;
+
+	for (v = g_voice_track_head; v != NULL; v = v->track_next) {
+		if (v->voice_bus != SDL_VOICE_BUS_UI) {
+			continue;
+		}
+		if (!voice_stream_is_playing(v)) {
+			continue;
+		}
+		voice_mix_add(v, mix_l, mix_r, frames, output_rate);
+	}
+}
+
+extern "C" void sdl3_voice_set_bus(HSAMPLE sample, int bus)
+{
+	SdlVoice *v = voice_from_sample(sample);
+
+	if (v == NULL) {
+		return;
+	}
+
+	if (bus < 0) {
+		v->voice_bus_explicit = false;
+		voice_set_default_bus(v);
+		return;
+	}
+
+	if (bus == SDL3_VOICE_BUS_UI) {
+		v->voice_bus = SDL_VOICE_BUS_UI;
+	} else if (bus == SDL3_VOICE_BUS_AMBIENT) {
+		v->voice_bus = SDL_VOICE_BUS_AMBIENT;
+	} else if (bus == SDL3_VOICE_BUS_DIALOG) {
+		v->voice_bus = SDL_VOICE_BUS_DIALOG;
+	} else {
+		v->voice_bus = SDL_VOICE_BUS_WEAPON;
+	}
+	v->voice_bus_explicit = true;
+}
+
+extern "C" void sdl3_voice_set_ui_bus(HSAMPLE sample, int ui_bus)
+{
+	SdlVoice *v = voice_from_sample(sample);
+
+	if (v != NULL) {
+		if (ui_bus < 0) {
+			sdl3_voice_set_bus(sample, -1);
+		} else if (ui_bus != 0) {
+			sdl3_voice_set_bus(sample, SDL3_VOICE_BUS_UI);
+		} else {
+			sdl3_voice_set_bus(sample, SDL3_VOICE_BUS_WEAPON);
+		}
+	}
+}
 
 static bool voice_recreate_stream(SdlVoice *v)
 {
-	if (v == NULL || v->pcm == NULL || v->pcm_bytes == 0 || g_audio_dev == 0) {
-		return false;
-	}
-	if (v->stream != NULL) {
-		return true;
-	}
-
-	v->stream = SDL_CreateAudioStream(&v->src_spec, &g_device_spec);
-	if (v->stream == NULL) {
-		sdl_set_error("SDL_CreateAudioStream", SDL_GetError());
-		return false;
-	}
-	if (!SDL_BindAudioStream(g_audio_dev, v->stream)) {
-		sdl_set_error("SDL_BindAudioStream", SDL_GetError());
-		SDL_DestroyAudioStream(v->stream);
-		v->stream = NULL;
-		return false;
-	}
-	return true;
+	return (v != NULL && v->pcm != NULL && v->pcm_bytes > 0);
 }
 
 static bool voice_resubmit(SdlVoice *v)
@@ -747,9 +1045,9 @@ static bool voice_resubmit(SdlVoice *v)
 		return false;
 	}
 
-	SDL_ClearAudioStream(v->stream);
 	v->finished_once = false;
 	v->pcm_cursor = 0;
+	v->pcm_mix_frame = 0.0;
 	if (v->loop_count == 0) {
 		v->loops_remaining = -1;
 	} else if (v->loop_count > 1) {
@@ -757,12 +1055,6 @@ static bool voice_resubmit(SdlVoice *v)
 	} else {
 		v->loops_remaining = 1;
 	}
-
-	/*
-	** Always pull PCM through voice_stream_get so stereo pan + 3D distance
-	** update dynamically (PutAudioStreamData + scalar gain was mono-only).
-	*/
-	SDL_SetAudioStreamGetCallback(v->stream, voice_stream_get, v);
 
 	voice_apply_levels(v);
 	v->pcm_submitted = true;
@@ -782,12 +1074,6 @@ static bool voice_restart_playback(SdlVoice *v)
 		if (!voice_resubmit(v)) {
 			return false;
 		}
-	} else if (SDL_GetAudioStreamQueued(v->stream) == 0) {
-		if (v->loop_count == 1 || v->kind == SDL_KIND_STREAM) {
-			if (!voice_resubmit(v)) {
-				return false;
-			}
-		}
 	}
 
 	v->playback_start_ms = voice_now_ms();
@@ -798,17 +1084,7 @@ static bool voice_restart_playback(SdlVoice *v)
 
 static void voice_teardown_stream(SdlVoice *v)
 {
-	if (v == NULL || v->stream == NULL) {
-		return;
-	}
-
-	SDL_SetAudioStreamGetCallback(v->stream, NULL, NULL);
-	SDL_ClearAudioStream(v->stream);
-	SDL_UnbindAudioStream(v->stream);
-	SDL_DestroyAudioStream(v->stream);
-	v->stream = NULL;
-	v->playback_start_ms = 0;
-	v->playback_end_ms = 0;
+	(void)v;
 }
 
 static void voice_clear_playback(SdlVoice *v)
@@ -817,6 +1093,7 @@ static void voice_clear_playback(SdlVoice *v)
 		return;
 	}
 
+	sdl_lock();
 	voice_teardown_stream(v);
 	audio_decode_free(v->pcm);
 	v->pcm = NULL;
@@ -824,16 +1101,18 @@ static void voice_clear_playback(SdlVoice *v)
 	v->pcm_submitted = false;
 	v->finished_once = false;
 	v->pcm_cursor = 0;
+	v->pcm_mix_frame = 0.0;
 	v->source_channels = 0;
 	v->stream_path[0] = '\0';
 	v->playback_start_ms = 0;
 	v->playback_end_ms = 0;
 	memset(v->user_data, 0, sizeof(v->user_data));
+	sdl_unlock();
 }
 
 static int voice_is_oneshot_sfx(const SdlVoice *v)
 {
-	return (v != NULL && v->loop_count == 1 && v->pcm_bytes > 0 && v->pcm_bytes <= 262144);
+	return (v != NULL && v->loop_count == 1 && v->pcm_bytes > 0);
 }
 
 static void voice_destroy(SdlVoice *v)
@@ -933,17 +1212,30 @@ static bool voice_upload(SdlVoice *v, const void *file_ptr, S32 file_len)
 		}
 		v->channels = 2;
 	}
+	if (g_device_rate > 0) {
+		int rate = v->rate;
+		if (!audio_pcm_resample_to_rate(&v->pcm, &v->pcm_bytes, &rate, v->channels, g_device_rate)) {
+			audio_decode_free(v->pcm);
+			v->pcm = NULL;
+			sdl_unlock();
+			return false;
+		}
+		v->rate = rate;
+	}
 	fill_src_spec(&v->src_spec, (S32)v->rate, v->channels);
 
 	if (v->kind == SDL_KIND_STREAM && pcm_bytes > 500000) {
-		v->loop_count = 0;
+		if (voice_is_ambient_bed_voice (v)) {
+			v->loop_count = 0;
+		} else {
+			v->loop_count = 1;
+		}
 	}
 
 	if (!voice_resubmit(v)) {
 		sdl_unlock();
 		return false;
 	}
-
 
 	sdl_unlock();
 	return true;
@@ -1006,6 +1298,7 @@ static SdlVoice *voice_allocate(SdlKind kind)
 	v->filter_reverb_level = 0.3f;
 	v->filter_reverb_decay = 0.535f;
 	v->filter_reverb_reflect = 0.01f;
+	voice_set_default_bus(v);
 	v->reverb = NULL;
 	v->track_next = NULL;
 	voice_track_add(v);
@@ -1033,6 +1326,7 @@ void AIL_startup(void)
 			SDL_GetAudioDeviceFormat(g_audio_dev, &g_device_spec, NULL);
 			g_device_rate = (g_device_spec.freq > 0) ? g_device_spec.freq : 44100;
 			eax_set_listener_room(g_listener_room);
+			sdl3_mixer_init(g_audio_dev, &g_device_spec);
 			SDL_ResumeAudioDevice(g_audio_dev);
 			g_started = true;
 			g_driver_data.emulated_ds = FALSE;
@@ -1045,6 +1339,7 @@ void AIL_startup(void)
 void AIL_shutdown(void)
 {
 	sdl_lock();
+	sdl3_mixer_shutdown();
 	if (g_audio_dev != 0) {
 		SDL_CloseAudioDevice(g_audio_dev);
 		g_audio_dev = 0;
@@ -1114,6 +1409,8 @@ void AIL_init_sample(HSAMPLE sample)
 	v->volume = 127.0f;
 	v->pan = 63.0f;
 	v->loop_count = 1;
+	v->voice_bus_explicit = false;
+	voice_set_default_bus(v);
 	v->last_levels_ms = 0;
 	memset(v->user_data, 0, sizeof(v->user_data));
 }
@@ -1135,16 +1432,30 @@ void AIL_start_sample(HSAMPLE sample)
 
 	sdl_lock();
 	if (v != NULL && v->pcm_bytes > 0) {
-		int queued = 0;
-		if (v->stream != NULL) {
-			queued = SDL_GetAudioStreamQueued(v->stream);
+		{
+			AudibleSoundClass *owner = voice_owner_from_voice(v);
+
+			if (	owner != NULL &&
+					owner->Get_Runtime_Priority () >= 75.0f &&
+					owner->Get_Runtime_Priority () < 100.0f &&
+					owner->Get_Type () == AudibleSoundClass::TYPE_SOUND_EFFECT)
+			{
+				sdl3_voice_set_bus (sample, SDL3_VOICE_BUS_WEAPON);
+			}
 		}
-		if (voice_is_oneshot_sfx(v) && (v->finished_once || (v->pcm_submitted && queued == 0))) {
+		voice_set_default_bus(v);
+#if defined(RENEGADE_LINUX)
+		{
+			AudibleSoundClass *owner = voice_owner_from_voice(v);
+
+			if (owner != NULL && AudibleSound_Is_Dialog_Sound(owner)) {
+				sdl3_voice_set_bus(sample, SDL3_VOICE_BUS_DIALOG);
+			}
+		}
+#endif
+		if (voice_is_oneshot_sfx(v) && v->finished_once) {
 			v->pcm_submitted = false;
 			voice_resubmit(v);
-			if (v->stream != NULL) {
-				queued = SDL_GetAudioStreamQueued(v->stream);
-			}
 		}
 		voice_restart_playback(v);
 		voice_apply_levels(v);
@@ -1159,12 +1470,9 @@ void AIL_stop_sample(HSAMPLE sample)
 	sdl_lock();
 	if (v != NULL) {
 		v->finished_once = true;
+		v->pcm_submitted = false;
 		v->playback_start_ms = 0;
 		v->playback_end_ms = 0;
-		if (v->stream != NULL) {
-			SDL_SetAudioStreamGetCallback(v->stream, NULL, NULL);
-			SDL_ClearAudioStream(v->stream);
-		}
 	}
 	sdl_unlock();
 }
@@ -1230,12 +1538,29 @@ F32 AIL_sample_volume(HSAMPLE sample)
 void AIL_set_sample_loop_count(HSAMPLE sample, S32 count)
 {
 	SdlVoice *v = voice_from_sample(sample);
+
 	if (v != NULL) {
+		AudibleSoundClass *owner;
+
+		if (count == 0) {
+			owner = voice_owner_from_voice(v);
+			/*
+			** Allow loop_count 0 before owner is bound (level ambient init).
+			** Clamp only when owner is known and not an infinite-loop definition.
+			*/
+			if (owner != NULL && owner->Get_Loop_Count () != INFINITE_LOOPS) {
+				count = 1;
+			}
+		}
+
 		if (v->loop_count == count) {
 			return;
 		}
 		v->loop_count = count;
-		if (v->stream != NULL && v->pcm != NULL && v->pcm_bytes <= 500000) {
+		if (!v->voice_bus_explicit) {
+			voice_set_default_bus(v);
+		}
+		if (v->pcm != NULL && v->pcm_bytes <= 500000) {
 			voice_resubmit(v);
 		}
 	}
@@ -1270,7 +1595,7 @@ void AIL_set_sample_ms_position(HSAMPLE sample, S32 ms)
 		}
 	} else if (ms > 0) {
 		voice_pcm_seek_ms(v, ms);
-		if (!v->pcm_submitted && v->stream == NULL) {
+		if (!v->pcm_submitted) {
 			voice_resubmit(v);
 		}
 	}
@@ -1314,9 +1639,27 @@ void AIL_sample_ms_position(HSAMPLE sample, S32 *len, S32 *pos)
 void AIL_set_sample_user_data(HSAMPLE sample, U32 index, intptr_t data)
 {
 	SdlVoice *v = voice_from_sample(sample);
-	if (v != NULL && index < 8u) {
-		v->user_data[index] = data;
+
+	if (v == NULL || index >= 8u) {
+		return;
 	}
+
+#if defined(RENEGADE_LINUX)
+	if (index == INFO_OBJECT_PTR && data == 0 && v->user_data[index] != 0) {
+		AudibleSoundClass *prev = (AudibleSoundClass *)v->user_data[index];
+
+		if (prev == NULL || prev->Get_Loop_Count () != INFINITE_LOOPS) {
+			sdl_lock();
+			v->finished_once = true;
+			v->pcm_submitted = false;
+			v->playback_start_ms = 0;
+			v->playback_end_ms = 0;
+			sdl_unlock();
+		}
+	}
+#endif
+
+	v->user_data[index] = data;
 }
 
 intptr_t AIL_sample_user_data(HSAMPLE sample, U32 index)
@@ -1399,6 +1742,7 @@ HSTREAM AIL_open_stream_by_sample(HDIGDRIVER, HSAMPLE sample, char const *filena
 	voice_clear_playback(v);
 	v->kind = SDL_KIND_STREAM;
 	v->loop_count = 1;
+	voice_set_default_bus(v);
 
 	if (filename != NULL && filename[0] != '\0') {
 		loaded = voice_load_stream_file(v, filename) ? 1 : 0;
@@ -1433,14 +1777,7 @@ void AIL_pause_stream(HSTREAM stream, S32 onoff)
 
 void AIL_close_stream(HSTREAM stream)
 {
-	SdlVoice *v = voice_from_stream(stream);
-
-	sdl_lock();
-	if (v != NULL && v->stream != NULL) {
-		SDL_SetAudioStreamGetCallback(v->stream, NULL, NULL);
-		SDL_ClearAudioStream(v->stream);
-	}
-	sdl_unlock();
+	AIL_stop_sample((HSAMPLE)stream);
 }
 
 void AIL_set_stream_pan(HSTREAM stream, F32 pan)
@@ -1577,25 +1914,7 @@ S32 AIL_set_3D_sample_file(H3DSAMPLE sample, void const *file_ptr)
 
 void AIL_start_3D_sample(H3DSAMPLE sample)
 {
-	SdlVoice *v = voice_from_3d(sample);
-
-	sdl_lock();
-	if (v != NULL && v->pcm_bytes > 0) {
-		int queued = 0;
-		if (v->stream != NULL) {
-			queued = SDL_GetAudioStreamQueued(v->stream);
-		}
-		if (voice_is_oneshot_sfx(v) && (v->finished_once || (v->pcm_submitted && queued == 0))) {
-			v->pcm_submitted = false;
-			voice_resubmit(v);
-			if (v->stream != NULL) {
-				queued = SDL_GetAudioStreamQueued(v->stream);
-			}
-		}
-		voice_restart_playback(v);
-		voice_apply_levels(v);
-	}
-	sdl_unlock();
+	AIL_start_sample((HSAMPLE)sample);
 }
 
 void AIL_stop_3D_sample(H3DSAMPLE sample)
@@ -1635,8 +1954,19 @@ void AIL_set_3D_sample_loop_count(H3DSAMPLE sample, S32 count)
 {
 	SdlVoice *v = voice_from_3d(sample);
 	if (v != NULL) {
+		AudibleSoundClass *owner;
+
+		if (count == 0) {
+			owner = voice_owner_from_voice(v);
+			if (owner != NULL && owner->Get_Loop_Count () != INFINITE_LOOPS) {
+				count = 1;
+			}
+		}
+		if (v->loop_count == count) {
+			return;
+		}
 		v->loop_count = count;
-		if (v->stream != NULL && v->pcm != NULL && v->pcm_bytes <= 500000) {
+		if (v->pcm != NULL && v->pcm_bytes <= 500000) {
 			voice_resubmit(v);
 		}
 	}
@@ -1674,9 +2004,27 @@ U32 AIL_3D_sample_length(H3DSAMPLE sample)
 void AIL_set_3D_object_user_data(H3DSAMPLE sample, U32 index, intptr_t data)
 {
 	SdlVoice *v = voice_from_3d(sample);
-	if (v != NULL && index < 8u) {
-		v->user_data[index] = data;
+
+	if (v == NULL || index >= 8u) {
+		return;
 	}
+
+#if defined(RENEGADE_LINUX)
+	if (index == INFO_OBJECT_PTR && data == 0 && v->user_data[index] != 0) {
+		AudibleSoundClass *prev = (AudibleSoundClass *)v->user_data[index];
+
+		if (prev == NULL || prev->Get_Loop_Count () != INFINITE_LOOPS) {
+			sdl_lock();
+			v->finished_once = true;
+			v->pcm_submitted = false;
+			v->playback_start_ms = 0;
+			v->playback_end_ms = 0;
+			sdl_unlock();
+		}
+	}
+#endif
+
+	v->user_data[index] = data;
 }
 
 intptr_t AIL_3D_object_user_data(H3DSAMPLE sample, U32 index)

@@ -47,6 +47,11 @@
 #include "render2Dsentence.h"
 #include "wwmemlog.h"
 #include "consolemode.h"
+#include "input.h"
+#include "console.h"
+#include "stylemgr.h"
+#include "render2dsentence.h"
+#include "widestring.h"
 
 /*
 ** TextDisplayLine
@@ -74,10 +79,10 @@ void	TextDisplayGameModeClass::Init()
 	if (!ConsoleBox.Is_Exclusive()) {
 		// Build Fonts
 		WWASSERT(WW3DAssetManager::Get_Instance() != NULL);
-		Font = WW3DAssetManager::Get_Instance()->Get_Font3DInstance( "FONT8x8.TGA" );
+		Font = WW3DAssetManager::Get_Instance()->Get_Font3DInstance( "FONT6x8.TGA" );
    	WWASSERT(Font != NULL);
 		SET_REF_OWNER( Font );
-		MonoFont = WW3DAssetManager::Get_Instance()->Get_Font3DInstance( "FONT8x8.TGA" );
+		MonoFont = WW3DAssetManager::Get_Instance()->Get_Font3DInstance( "FONT6x8.TGA" );
    	WWASSERT(MonoFont != NULL);
 		SET_REF_OWNER( MonoFont );
 		MonoFont->Set_Mono_Spaced();
@@ -95,6 +100,17 @@ void	TextDisplayGameModeClass::Init()
 
 		Display = new Render2DTextClass(Font);
 		Display->Set_Coordinate_Range( Render2DClass::Get_Screen_Resolution() );
+
+		ConsoleInputDisplay = new Render2DTextClass(Font);
+		ConsoleInputDisplay->Set_Coordinate_Range( Render2DClass::Get_Screen_Resolution() );
+
+		ConsoleScrollSentence = new Render2DSentenceClass;
+		ConsoleInputSentence = new Render2DSentenceClass;
+		if ( StyleMgrClass::Peek_Font( StyleMgrClass::FONT_INGAME_TXT ) == NULL ) {
+			StyleMgrClass::Initialize();
+		}
+		StyleMgrClass::Assign_Font( ConsoleScrollSentence, StyleMgrClass::FONT_INGAME_TXT );
+		StyleMgrClass::Assign_Font( ConsoleInputSentence, StyleMgrClass::FONT_INGAME_TXT );
 
 		VerboseDisplay = new Render2DTextClass(Font);
 		VerboseDisplay->Set_Coordinate_Range( Render2DClass::Get_Screen_Resolution() );
@@ -123,6 +139,15 @@ void 	TextDisplayGameModeClass::Shutdown()
 
 		delete VerboseDisplay;
 		VerboseDisplay=NULL;
+
+		delete ConsoleInputDisplay;
+		ConsoleInputDisplay=NULL;
+
+		delete ConsoleScrollSentence;
+		ConsoleScrollSentence=NULL;
+
+		delete ConsoleInputSentence;
+		ConsoleInputSentence=NULL;
 
 		delete Display;
 		Display=NULL;
@@ -226,9 +251,7 @@ void 	TextDisplayGameModeClass::Render()
 	}
 	VerboseDisplay->Render();
 
-	// Then statistics
-
-	StatisticsDisplayManager::Render( StatisticsDisplay );
+	// Statistics are rendered after DialogMgr (see Render_Statistics).
 
 	// And then the rest of the text...
 
@@ -266,6 +289,10 @@ void 	TextDisplayGameModeClass::Render()
 	float delta=y-DisplayY;
 	DisplayY=y;
 
+	if (Input::Is_Console_Enabled()) {
+		return;
+	}
+
 	if (!changed) {
 		if (delta!=0.0f) Display->Move(Vector2(0.0f,delta));
 		Display->Render();
@@ -284,8 +311,10 @@ void 	TextDisplayGameModeClass::Render()
 		RendererColors.Add(linenode->Data()->Color);
 	}
 
-	Display->Draw_Text( InputText );
-	Display->Draw_Text( HelpText );
+	if (!Input::Is_Console_Enabled()) {
+		Display->Draw_Text( InputText );
+		Display->Draw_Text( HelpText );
+	}
 
 	if ( DisplayVisWarning && StatisticsDisplayManager::Is_Current_Display( "fps" ) ) {
 		Vector2 pos = (Render2DClass::Get_Screen_Resolution().Upper_Left() + Render2DClass::Get_Screen_Resolution().Lower_Left()) * 0.5f;
@@ -294,6 +323,89 @@ void 	TextDisplayGameModeClass::Render()
 	}
 
 	Display->Render();
+}
+
+void TextDisplayGameModeClass::Render_Console_Input()
+{
+	if ( !Input::Is_Console_Enabled() ) {
+		return;
+	}
+	if ( InputText.Is_Empty() && HelpText.Is_Empty() ) {
+		return;
+	}
+	if ( ConsoleInputSentence == NULL ) {
+		return;
+	}
+
+	const RectClass &screen = Render2DClass::Get_Screen_Resolution();
+	FontCharsClass *font = StyleMgrClass::Peek_Font( StyleMgrClass::FONT_INGAME_TXT );
+	const float line_h = font != NULL ? (float)font->Get_Char_Height() : 12.0f;
+
+	WideStringClass wide;
+	wide.Convert_From( InputText );
+	if ( !HelpText.Is_Empty() ) {
+		wide += L"\n";
+		WideStringClass help_wide;
+		help_wide.Convert_From( HelpText );
+		wide += help_wide;
+	}
+
+	ConsoleInputSentence->Reset();
+	ConsoleInputSentence->Build_Sentence( wide );
+
+	Vector2 pos = screen.Lower_Left();
+	pos.X += 4.0f;
+	pos.Y -= line_h * 2.0f;
+	ConsoleInputSentence->Set_Location( pos );
+	ConsoleInputSentence->Draw_Sentence( 0xFFFFFFFF );
+	ConsoleInputSentence->Render();
+}
+
+void TextDisplayGameModeClass::Render_Console_Scroll()
+{
+	if ( !Input::Is_Console_Enabled() ) {
+		return;
+	}
+	if ( ConsoleScrollSentence == NULL ) {
+		return;
+	}
+
+	const RectClass &screen = Render2DClass::Get_Screen_Resolution();
+	float scroll_top = screen.Top + 4.0f;
+	if ( Get_Console() != NULL && Get_Console()->Is_Input_Active() ) {
+		FontCharsClass *font = StyleMgrClass::Peek_Font( StyleMgrClass::FONT_INGAME_TXT );
+		const float line_h = font != NULL ? (float)font->Get_Char_Height() : 12.0f;
+		const float pad = 6.0f;
+		const int line_count = Get_Console()->Has_Help_Line() ? 2 : 1;
+		scroll_top += line_h * (float)line_count + pad * 2.0f + 4.0f;
+	}
+
+	if ( ScrollLines.Get_Count() == 0 && !DisplayVisWarning ) {
+		return;
+	}
+
+	ConsoleScrollSentence->Reset();
+	float y = scroll_top + DisplayY;
+	SLNode<TextDisplayLine> *linenode;
+	for ( linenode = ScrollLines.Head(); linenode; linenode = linenode->Next() ) {
+		ConsoleScrollSentence->Build_Sentence( linenode->Data()->Text );
+		ConsoleScrollSentence->Set_Location( Vector2( screen.Left + 4.0f, y ) );
+		ConsoleScrollSentence->Draw_Sentence( linenode->Data()->Color );
+		FontCharsClass *line_font = StyleMgrClass::Peek_Font( StyleMgrClass::FONT_INGAME_TXT );
+		if ( line_font != NULL ) {
+			y += (float)line_font->Get_Char_Height();
+		}
+	}
+
+	if ( DisplayVisWarning && StatisticsDisplayManager::Is_Current_Display( "fps" ) ) {
+		WideStringClass warning( L"Vis Sector Not Found!" );
+		ConsoleScrollSentence->Build_Sentence( warning );
+		Vector2 pos = (screen.Upper_Left() + screen.Lower_Left()) * 0.5f;
+		ConsoleScrollSentence->Set_Location( pos );
+		ConsoleScrollSentence->Draw_Sentence( 0xFF0000FF );
+	}
+
+	ConsoleScrollSentence->Render();
 }
 
 void 	TextDisplayGameModeClass::Flush( void )
@@ -326,6 +438,7 @@ void	TextDisplayGameModeClass::Print( const char * string, const Vector4 & color
 	wide_string.Convert_From( string );
 	TextDisplayLine * line = new TextDisplayLine( wide_string, col );
    ScrollLines.Add_Tail( line );
+	TextChanged = true;
 }
 
 void	TextDisplayGameModeClass::Print( const WideStringClass & string, const Vector4 & color )
@@ -336,6 +449,7 @@ void	TextDisplayGameModeClass::Print( const WideStringClass & string, const Vect
 	unsigned long col=(unsigned(color[0]*255.0f)<<24)|(unsigned(color[1]*255.0f)<<16)|(unsigned(color[2]*255.0f)<<8)|(unsigned(color[3]*255.0f));
 	TextDisplayLine * line = new TextDisplayLine( string, col );
    ScrollLines.Add_Tail( line );
+	TextChanged = true;
 }
 
 void	TextDisplayGameModeClass::Print( const char * string, const Vector3 & color )
@@ -349,6 +463,7 @@ void	TextDisplayGameModeClass::Print( const char * string, const Vector3 & color
 	wide_string.Convert_From( string );
 	TextDisplayLine * line = new TextDisplayLine( wide_string, col );
    ScrollLines.Add_Tail( line );
+	TextChanged = true;
 }
 
 
@@ -361,6 +476,7 @@ void	TextDisplayGameModeClass::Print( const WideStringClass & string, const Vect
 	unsigned long col=(unsigned(color[0]*255.0f)<<16)|(unsigned(color[1]*255.0f)<<8)|(unsigned(color[2]*255.0f))|0xFF000000;
 	TextDisplayLine * line = new TextDisplayLine( string, col );
    ScrollLines.Add_Tail( line );
+	TextChanged = true;
 }
 
 void	TextDisplayGameModeClass::Print_System( const char * format, ... )
@@ -448,6 +564,22 @@ void	StatisticsDisplayManager::Set_Display( const char * title )
 bool StatisticsDisplayManager::Is_Current_Display( const char* title) // Returns true if "title" is currently active
 {
 	return !stricmp( _StatsTitle, title );
+}
+
+bool StatisticsDisplayManager::Is_Display_Active( void )
+{
+	return _StatsTitle.Get_Length() > 0 && stricmp(_StatsTitle, "off") != 0;
+}
+
+Vector2 StatisticsDisplayManager::Default_Stat_Location( float y_offset )
+{
+	const RectClass &screen = Render2DClass::Get_Screen_Resolution();
+	return Vector2(screen.Left + 5.0f, screen.Top + y_offset);
+}
+
+const char *StatisticsDisplayManager::Peek_Stat_Text( void )
+{
+	return _StatsText.Peek_Buffer();
 }
 
 void	StatisticsDisplayManager::Set_Stat( const char * title, const char * text, unsigned long color, const Vector2& location )

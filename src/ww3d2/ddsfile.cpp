@@ -22,6 +22,7 @@
 #include "formconv.h"
 #include "dx8wrapper.h"
 #include "bitmaphandler.h"
+#include <cstdio>
 #include <string.h>
 
 #if defined(RENEGADE_LINUX)
@@ -45,12 +46,21 @@ DDSFileClass::DDSFileClass(const char* name,unsigned reduction_factor)
 	Format(WW3D_FORMAT_UNKNOWN),
 	DateTime(0)
 {
-	strncpy(Name,name,sizeof(Name));
-	// The name could be given in .tga or .dds format, so ensure we're opening .dds...
-	int len=strlen(Name);
-	Name[len-3]='d';
-	Name[len-2]='d';
-	Name[len-1]='s';
+	{
+		const char *dot = strchr(name, '.');
+		if (dot != nullptr) {
+			strncpy(Name, name, sizeof(Name));
+			Name[sizeof(Name) - 1] = '\0';
+			int len = (int)strlen(Name);
+			if (len >= 4) {
+				Name[len - 3] = 'd';
+				Name[len - 2] = 'd';
+				Name[len - 1] = 's';
+			}
+		} else {
+			snprintf(Name, sizeof(Name), "%s.dds", name);
+		}
+	}
 
 	file_auto_ptr file(_TheFileFactory,Name);	
 	if (!file->Is_Available()) {

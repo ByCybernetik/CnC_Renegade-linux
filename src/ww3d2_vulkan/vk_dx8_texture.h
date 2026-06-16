@@ -15,9 +15,14 @@ void Shutdown_Missing_Vulkan_Texture();
 bool Ensure_Texture_Loaded(TextureClass *texture);
 void Texture_Stage_Bind(TextureClass *texture, unsigned stage);
 void Texture_Stage_Bind_Null(unsigned stage);
+bool Last_Stage0_Texture_Is_Pickup(void);
 bool Apply_Loaded_Texture(TextureClass *texture, bool initialize);
 void Apply_Missing_Texture(TextureClass *texture);
 void Warmup_All_File_Textures();
+/* Returns true when all file textures are warmed up. */
+bool Warmup_File_Textures_Batch(unsigned batch_size);
+void Reset_File_Texture_Warmup();
+void Rescan_File_Texture_Warmup();
 
 class VkTexture;
 VkTexture *Peek_Missing_Vulkan_Texture();

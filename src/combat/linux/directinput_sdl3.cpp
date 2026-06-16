@@ -61,6 +61,11 @@ void DirectInput::Set_Menu_Mouse_Mode(bool menu_mode)
  */
 static int vk_to_dik(int vk)
 {
+	/* VK_F1..VK_F12 (0x70..0x7B) overlap lowercase ASCII ('p'..'z'). */
+	if (vk >= 0x70 && vk <= 0x7B) {
+		return DIK_F1 + (vk - 0x70);
+	}
+
 	if (vk >= 'a' && vk <= 'z') {
 		vk = vk - 'a' + 'A';
 	}
@@ -102,10 +107,6 @@ static int vk_to_dik(int vk)
 	}
 	if (vk == '0') {
 		return DIK_0;
-	}
-
-	if (vk >= 0x70 && vk <= 0x7B) {
-		return DIK_F1 + (vk - 0x70);
 	}
 
 	switch (vk) {
@@ -192,20 +193,13 @@ void DirectInput::Notify_Win32_Key(UINT message, WPARAM wParam, LPARAM)
 	}
 
 	const bool down = (message == WM_KEYDOWN || message == WM_SYSKEYDOWN);
-	const bool was = g_prev_key[dik];
-
-	if (down && !was) {
-		DIKeyboardButtons[dik] = DI_BUTTON_HIT | DI_BUTTON_HELD;
+	if (down) {
 		LastKeyPressed = dik;
-	} else if (down) {
-		DIKeyboardButtons[dik] = DI_BUTTON_HELD;
-	} else if (was) {
-		DIKeyboardButtons[dik] = DI_BUTTON_RELEASED;
-	} else {
-		DIKeyboardButtons[dik] = 0;
 	}
 
-	g_prev_key[dik] = down;
+	// Edge detection (DI_BUTTON_HIT) is handled in ReadKeyboard() using
+	// g_prev_key from the previous frame. Updating g_prev_key here breaks
+	// one-shot actions such as F1 help and F8 console.
 }
 
 void DirectInput::Acquire(void)
@@ -245,7 +239,7 @@ void DirectInput::ReadKeyboard(void)
 		if (dik < 0) {
 			continue;
 		}
-		if (Platform_Get_Async_Key(vk)) {
+		if (Platform_Get_Async_Key(vk) || Platform_Consume_Key_Hit(vk)) {
 			dik_down[dik] = true;
 		}
 	}

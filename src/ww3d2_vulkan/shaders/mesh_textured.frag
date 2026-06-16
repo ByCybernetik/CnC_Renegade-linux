@@ -16,6 +16,7 @@ layout(set = 0, binding = 2) uniform sampler2D detail_tex;
 layout(location = 0) out vec4 out_color;
 
 const uint FLAG_TEXTURING = 4u;
+const uint FLAG_COLOR1_UNLIT_MODULATE = 8u;
 const uint FLAG_FOG = 16u;
 
 vec2 Apply_Bump_Offset(vec2 uv, vec4 bump_texel)
@@ -33,7 +34,11 @@ vec4 Apply_Stage0(vec4 base_color, vec4 texel, vec2 uv)
 		return vec4(texel.rgb, texel.a * base_color.a);
 	}
 	if (mode < 1.5) {
-		return texel * base_color;
+		vec3 rgb = base_color.rgb;
+		if ((uint(ubo.flags) & FLAG_COLOR1_UNLIT_MODULATE) != 0u && dot(rgb, rgb) < 1e-8) {
+			rgb = vec3(1.0);
+		}
+		return vec4(texel.rgb * rgb, texel.a * base_color.a);
 	}
 	if (mode < 2.5) {
 		return vec4(texel.rgb + base_color.rgb, texel.a * base_color.a);

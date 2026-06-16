@@ -67,6 +67,7 @@
 
 class	Font3DInstanceClass;
 class	Render2DTextClass;
+class	Render2DSentenceClass;
 
 /*
 **
@@ -106,6 +107,8 @@ public:
 	virtual	void 	Shutdown(); 	// called when the mode is deactivated
 	virtual	void 	Think();			// called each time through the main loop
 	virtual	void 	Render();		// called each time through the main loop
+	void		Render_Console_Input();	// draw console prompt above HUD
+	void		Render_Console_Scroll();	// command output after UI overlays
 
 	static	TextDisplayGameModeClass * Get_Instance() { return Instance; }
 
@@ -150,6 +153,9 @@ private:
 	Font3DInstanceClass	*	Font;
 	Font3DInstanceClass	*	MonoFont;
 	Render2DTextClass	*		Display;
+	Render2DTextClass	*		ConsoleInputDisplay;
+	Render2DSentenceClass	*	ConsoleScrollSentence;
+	Render2DSentenceClass	*	ConsoleInputSentence;
 	Render2DTextClass	*		VerboseDisplay;
 	Render2DTextClass	*		StatisticsDisplay;
 	DynamicVectorClass<WideStringClass> RendererLines;
@@ -186,6 +192,9 @@ public:
 	static	void	Render( Render2DTextClass * renderer );
 	static	void	Set_Display( const char * title );
 	static	bool	Is_Current_Display( const char* title); // Returns true if "title" is currently active
+	static	bool	Is_Display_Active( void );
+	static	Vector2 Default_Stat_Location( float y_offset = 40.0f );
+	static	const char *Peek_Stat_Text( void );
 	static	void	Set_Stat( const char * title, const char * text, unsigned long color = 0xffffffff, const Vector2& location = Vector2( 0, -240 ) );
 };
 

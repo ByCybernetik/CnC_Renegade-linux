@@ -49,8 +49,16 @@
 	#include "bittype.h"
 #endif
 
+#ifndef	__WWSTRING_H
+	#include "wwstring.h"
+#endif
+
 
 class WWProfileIterator;
+class Render2DTextClass;
+class Render2DSentenceClass;
+class Render2DClass;
+class Font3DInstanceClass;
 
 
 
@@ -78,6 +86,13 @@ public:
 
 	void		Profile_Command( const char * command );
 
+	bool		Is_Input_Active( void ) const { return InputActive; }
+	bool		Has_Help_Line( void ) const;
+	void		Render_Overlay( void );
+	void		Render_Profile_Overlay( void );
+	void		Set_Profile_Overlay_Text( const char *text );
+	void		Set_Overlay_Help_Text( const char *text );
+
 	static	ConsoleGameModeClass * Get_Instance() { return Instance; }
 
 	static void Load_Registry_Keys(void);
@@ -88,6 +103,8 @@ private:
 	void		Clear_Suggestion(void);
 	void		Accept_Suggestion(char * cmd);
 	void		Update_Suggestion(char * cmd,bool go_to_next);
+	void		Ensure_Overlay_Renderers(void);
+	void		Ensure_Profile_Overlay_Renderers(void);
 	
 	enum { 
 		MAX_INPUT_LINE_LENGTH		= 100,
@@ -121,6 +138,14 @@ private:
 	bool	PerformanceSamplingActive;
    DWORD ConsoleInputType;
    int   PromptLength;
+   int   OpenInputLatch;
+   Render2DTextClass * OverlayTextRenderer;
+   Render2DSentenceClass * OverlaySentence;
+   Render2DClass * OverlayBackground;
+   Render2DTextClass * ProfileTextRenderer;
+   Render2DClass * ProfileOverlayBackground;
+   Font3DInstanceClass * OverlayFont;
+   StringClass ProfileOverlayText;
    static const float LeftMargin;
 
 	static ConsoleGameModeClass * Instance;

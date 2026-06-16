@@ -39,12 +39,11 @@
 #include "debug.h"
 #include "wwmath.h"
 #include "ww3d.h"
-#include "../platform/renegade_init_log.h"
 #if defined(RENEGADE_LINUX)
 #include "../platform/sdl3_host.h"
 #endif
 #include "wwphys.h"
-#include "WWAudio.H"
+#include "wwaudio.h"
 #include "audio_decode.h"
 #include "wwsaveload.h"
 #include "input.h"
@@ -717,7 +716,6 @@ void Game_Init_Failed_Cleanup(void)
 bool Game_Init(void)
 {
 	WWMEMLOG(MEM_GAMEINIT);
-	Game_Init_Step("enter");
 
 	// Set registry key to 1 for the duration of the init. This way we know if the program crashed while the init.
 	RegistryClass registry( APPLICATION_SUB_KEY_NAME_DEBUG );
@@ -734,7 +732,6 @@ bool Game_Init(void)
 	//	Ensure our directory structure exists
 	//
 	Construct_Directory_Structure ();
-	Game_Init_Step("dir_structure_done");
 
 	//
 	//	Initialize our debugging framework
@@ -814,7 +811,6 @@ bool Game_Init(void)
 	if (file_find != INVALID_HANDLE_VALUE) {
 		::FindClose (file_find);
 	}
-	Game_Init_Step("mix_scan_done");
 
 	_TheFileFactory = &_RenegadeFileFactory;
 
@@ -845,14 +841,17 @@ bool Game_Init(void)
 	//
 	// Create an instance of the sound library
 	//
-	Game_Init_Step("before_waudio_new");
+#if defined(RENEGADE_DISABLE_AUDIO)
+	new WWAudioClass(true);
+	Debug_Say(("WWAudio disabled (RENEGADE_DISABLE_AUDIO)\n"));
+#else
 	new WWAudioClass(ConsoleBox.Is_Exclusive());
+#endif
 	WWAudioClass::Get_Instance()->Initialize( APPLICATION_SUB_KEY_NAME_SOUND );
 	WWAudioClass::Get_Instance()->Set_File_Factory( &AudioFileFactory );
 	audio_set_file_factory( &AudioFileFactory );
 	// Install text callback
 	WWAudioClass::Get_Instance()->Register_Text_Callback(AudioTextCallback,0);
-	Game_Init_Step("waudio_done");
 
 	//
 	//	Load the multiplayer settings
@@ -880,7 +879,6 @@ bool Game_Init(void)
 	PathMgrClass::Initialize ();
 
 	// Initialize WW3D
-	Game_Init_Step("before_ww3d_init");
 	switch ( WW3D::Init(MainWindow, NULL, ConsoleBox.Is_Exclusive() ? true : false)) {
 	case WW3D_ERROR_OK:	// Success!
 		break;
@@ -891,9 +889,8 @@ bool Game_Init(void)
 			"DirectX 8.0 or later is required to play C&C:Renegade.",
 			"Renegade Graphics Initialization Error.",
 			MB_OK);
-		GAME_INIT_FAIL("ww3d_init");
+		return false;
 	}
-	Game_Init_Step("ww3d_init_ok");
 
 	if (ConsoleBox.Is_Exclusive()) {
 		WW3D::Enable_Decals(false);
@@ -901,19 +898,16 @@ bool Game_Init(void)
 		scene->Set_Max_Simultaneous_Shadows(0);
 		DazzleRenderObjClass::Enable_Dazzle_Rendering(false);
 	} else {
-		Game_Init_Step("before_registry_load_render");
-		if ( WW3D::Registry_Load_Render_Device( APPLICATION_SUB_KEY_NAME_RENDER, true ) != WW3D_ERROR_OK ) {
+			if ( WW3D::Registry_Load_Render_Device( APPLICATION_SUB_KEY_NAME_RENDER, true ) != WW3D_ERROR_OK ) {
 			WWDEBUG_SAY(("WW3D::Registry_Load_Render_Device Failed!\r\n"));
-			GAME_INIT_FAIL("registry_load_render_device");
+			return false;
 		}
-		Game_Init_Step("registry_load_render_ok");
-
+	
 		if ( WW3D::Registry_Save_Render_Device( APPLICATION_SUB_KEY_NAME_RENDER ) != WW3D_ERROR_OK ) {
 			WWDEBUG_SAY(("WW3D::Registry_Save_Render_Device Failed!\r\n"));
-			GAME_INIT_FAIL("registry_save_render_device");
+			return false;
 		}
-		Game_Init_Step("registry_save_render_ok");
-		WW3D::Enable_Static_Sort_Lists (true);
+			WW3D::Enable_Static_Sort_Lists (true);
 	}
 	if (AutoRestart.Get_Restart_Flag() || ServerSettingsClass::Is_Command_Line_Mode() || ConsoleBox.Is_Exclusive()) {
 		if (!ConsoleBox.Is_Exclusive()) {
@@ -923,14 +917,12 @@ bool Game_Init(void)
 	} else {
 		::ShowWindow( MainWindow, SW_SHOW );	// show the (initially hidden) window
 	}
-	Game_Init_Step("show_window");
 
 	// Clear screen
 	for (int frame=0;frame<3;++frame) {
 		WW3D::Begin_Render(true,true,Vector3(0.0f,0.0f,0.0f));
 		WW3D::End_Render();
 	}
-	Game_Init_Step("after_clear_frames");
 
 	ParticleEmitterClass::Set_Default_Remove_On_Complete(false);	// (gth) 09/17/2000 - by default emitters shouldn't self-destruct
 
@@ -946,7 +938,6 @@ bool Game_Init(void)
 
 	WWPhys::Init();
 	WWSaveLoad::Init();
-	Game_Init_Step("before_strings");
 
 	//
 	//	Load the strings table
@@ -962,7 +953,6 @@ bool Game_Init(void)
 		file->Close ();								// Close the file
 		_TheFileFactory->Return_File (file);
 	}
-	Game_Init_Step("after_strings");
 	//TranslateDBClass::Set_Current_Language (TranslateDBClass::LANGID_CHINESE);
 
 	//
@@ -971,10 +961,8 @@ bool Game_Init(void)
 	bool dinput_avail = (ConsoleBox.Is_Exclusive()) ? false : true;
 
 	Input::Init(dinput_avail);
-	Game_Init_Step("after_input_init");
 	Input::Load_Registry( APPLICATION_SUB_KEY_NAME_CONTROLS );
 	InputConfigMgrClass::Initialize();
-	Game_Init_Step("after_input_config");
 
 	//
 	//	Initialize the skin selection framework
@@ -982,7 +970,6 @@ bool Game_Init(void)
 	SkinPackageMgrClass::Initialize ();
 	ModPackageMgrClass::Initialize ();
 	ModPackageMgrClass::Build_List ();
-	Game_Init_Step("after_mod_packages");
 
 	//
 	//	Load the conversation database
@@ -997,7 +984,6 @@ bool Game_Init(void)
 		file->Close ();								// Close the file
 		_TheFileFactory->Return_File (file);
 	}
-	Game_Init_Step("after_conv_db");
 
 	//
 	//	Check to make sure the code version matches the strings
@@ -1020,13 +1006,10 @@ bool Game_Init(void)
 	//
 	//
 	CombatManager::Scene_Init();
-	Game_Init_Step("after_scene_init");
 	if (!ConsoleBox.Is_Exclusive()) {
 		SystemSettings::Init();
 	}
-	Game_Init_Step("after_system_settings");
    RenegadeDialogMgrClass::Initialize();
-	Game_Init_Step("dialog_mgr_done");
 
 	cNetwork::Onetime_Init();
 
@@ -1040,7 +1023,6 @@ bool Game_Init(void)
    cNetUtil::Wsa_Init();
 
 	CombatManager::Init(ConsoleBox.Is_Exclusive() ? false : true);
-	Game_Init_Step("combat_init_done");
 
 	CampaignManager::Init();
 
@@ -1122,7 +1104,7 @@ bool Game_Init(void)
 		if (!ServerSettingsClass::Parse(false)) {
 			AutoRestart.Set_Restart_Flag(false);
 			Game_Shutdown();
-			GAME_INIT_FAIL("server_settings_parse");
+			return false;
 		}
 	}
 
@@ -1136,14 +1118,12 @@ bool Game_Init(void)
 			RenegadeDialogMgrClass::Goto_Location (RenegadeDialogMgrClass::LOC_SPLASH_IN);
 		}
 	} else {
-		Game_Init_Step("before_startup_movies");
-		MovieGameModeClass * mode = (MovieGameModeClass *)GameModeManager::Find ("Movie");
+			MovieGameModeClass * mode = (MovieGameModeClass *)GameModeManager::Find ("Movie");
 		if ( mode ) {
 			mode->Activate();
 			mode->Startup_Movies( );
 		}
-		Game_Init_Step("after_startup_movies");
-	}
+		}
 
 #endif
 
@@ -1156,7 +1136,6 @@ bool Game_Init(void)
 	//
 	GameSpyQnR.TrackUsage();
 
-	Game_Init_Step("game_init_done");
 	return true;
 }
 

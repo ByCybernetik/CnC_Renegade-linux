@@ -55,10 +55,21 @@ static void Validate_Texture_Size(uint32_t &width, uint32_t &height)
 static void Set_Extension(char *path, size_t cap, char e0, char e1, char e2)
 {
 	const size_t len = strlen(path);
-	if (len >= 4 && cap > len) {
-		path[len - 3] = e0;
-		path[len - 2] = e1;
-		path[len - 1] = e2;
+	const char *dot = strrchr(path, '.');
+	if (dot != nullptr && dot != path) {
+		if (len >= 4 && cap > len) {
+			path[len - 3] = e0;
+			path[len - 2] = e1;
+			path[len - 1] = e2;
+		}
+		return;
+	}
+	if (len + 4 < cap) {
+		path[len] = '.';
+		path[len + 1] = e0;
+		path[len + 2] = e1;
+		path[len + 3] = e2;
+		path[len + 4] = '\0';
 	}
 }
 
@@ -407,6 +418,9 @@ bool Stb_Load_Texture(
 		}
 	}
 
+	if (Load_Dds_From_Bytes(file_bytes, reduction, out)) {
+		return true;
+	}
 	return Load_Image_From_Bytes(file_bytes, reduction, allow_compression, flip_vertical, out);
 }
 

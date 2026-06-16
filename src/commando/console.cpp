@@ -42,18 +42,26 @@
 #include "debug.h"
 #include "timemgr.h"
 #include "input.h"
+#include "directinput.h"
 #include "miscutil.h"
 #include "cnetwork.h"
 #include "teammanager.h"
 #include "scene.h"
 #include "ww3d.h"
 #include <stdio.h>
+#if defined(RENEGADE_LINUX)
+#include "../platform/sdl3_host.h"
+#endif
 #include "wwaudio.h"
-#include "audiblesound.H"
+#include "audiblesound.h"
 //#include "gamesettings.h"
 #include "gamedata.h"
 #include "overlay.h"
 #include "combat.h"
+#include "render2d.h"
+#include "render2dsentence.h"
+#include "stylemgr.h"
+#include "widestring.h"
 #include "camera.h"
 #include "ccamera.h"
 #include "gameobjmanager.h"
@@ -124,6 +132,14 @@ void 	ConsoleGameModeClass::Init()
 
 	ConsoleGameModeClass::Instance = this;
 	InputActive = false;
+	OpenInputLatch = 0;
+	OverlayTextRenderer = NULL;
+	OverlaySentence = NULL;
+	OverlayBackground = NULL;
+	ProfileTextRenderer = NULL;
+	ProfileOverlayBackground = NULL;
+	OverlayFont = NULL;
+	ProfileOverlayText = "";
 	InputLine[0] = 0;
 	Clear_Suggestion();
 
@@ -148,6 +164,31 @@ void 	ConsoleGameModeClass::Init()
 void 	ConsoleGameModeClass::Shutdown()
 {
 	Save_Registry_Keys();
+
+	if (OverlayTextRenderer != NULL) {
+		delete OverlayTextRenderer;
+		OverlayTextRenderer = NULL;
+	}
+	if (OverlaySentence != NULL) {
+		delete OverlaySentence;
+		OverlaySentence = NULL;
+	}
+	if (OverlayBackground != NULL) {
+		delete OverlayBackground;
+		OverlayBackground = NULL;
+	}
+	if (ProfileTextRenderer != NULL) {
+		delete ProfileTextRenderer;
+		ProfileTextRenderer = NULL;
+	}
+	if (ProfileOverlayBackground != NULL) {
+		delete ProfileOverlayBackground;
+		ProfileOverlayBackground = NULL;
+	}
+	if (OverlayFont != NULL) {
+		OverlayFont->Release_Ref();
+		OverlayFont = NULL;
+	}
 
 	WWASSERT( ConsoleGameModeClass::Instance == this );
 
@@ -188,6 +229,163 @@ void ConsoleGameModeClass::Save_Registry_Keys(void)
 	delete registry;
 }
 
+void ConsoleGameModeClass::Ensure_Overlay_Renderers(void)
+{
+	if (OverlayBackground == NULL) {
+		OverlayBackground = new Render2DClass;
+	}
+	if (OverlaySentence == NULL) {
+		OverlaySentence = new Render2DSentenceClass;
+		if (StyleMgrClass::Peek_Font(StyleMgrClass::FONT_INGAME_TXT) == NULL) {
+			StyleMgrClass::Initialize();
+		}
+		StyleMgrClass::Assign_Font(OverlaySentence, StyleMgrClass::FONT_INGAME_TXT);
+	}
+	if (OverlayFont == NULL && WW3DAssetManager::Get_Instance() != NULL) {
+		OverlayFont = WW3DAssetManager::Get_Instance()->Get_Font3DInstance("FONT6x8.TGA");
+		if (OverlayFont != NULL) {
+			SET_REF_OWNER(OverlayFont);
+		}
+	}
+	if (OverlayTextRenderer == NULL && OverlayFont != NULL) {
+		OverlayTextRenderer = new Render2DTextClass(OverlayFont);
+		OverlayTextRenderer->Set_Coordinate_Range(Render2DClass::Get_Screen_Resolution());
+	}
+}
+
+void ConsoleGameModeClass::Set_Overlay_Help_Text(const char *text)
+{
+	if (text == nullptr) {
+		HelpLine[0] = 0;
+		return;
+	}
+	strncpy(HelpLine, text, MAX_INPUT_LINE_LENGTH - 1);
+	HelpLine[MAX_INPUT_LINE_LENGTH - 1] = 0;
+}
+
+bool ConsoleGameModeClass::Has_Help_Line(void) const
+{
+	return HelpLine[0] != 0;
+}
+
+void ConsoleGameModeClass::Render_Overlay(void)
+{
+	if (!InputActive) {
+		return;
+	}
+
+	Ensure_Overlay_Renderers();
+	if (OverlaySentence == NULL || OverlayBackground == NULL) {
+		return;
+	}
+
+	char mess[MAX_INPUT_LINE_LENGTH + 2];
+	strcpy(mess, InputLine);
+	if ((int)(TimeManager::Get_Seconds() * 4) & 1) {
+		strcat(mess, "|");
+	}
+
+	if (HelpLine[0] != 0) {
+		strcat(mess, "\n");
+		strncat(mess, HelpLine, MAX_INPUT_LINE_LENGTH - 1);
+		mess[MAX_INPUT_LINE_LENGTH + 1] = 0;
+	}
+
+	FontCharsClass *font = StyleMgrClass::Peek_Font(StyleMgrClass::FONT_INGAME_TXT);
+	const float line_h = font != NULL ? (float)font->Get_Char_Height() : 12.0f;
+	const RectClass &screen = Render2DClass::Get_Screen_Resolution();
+	const float pad = 6.0f;
+	const int line_count = HelpLine[0] != 0 ? 2 : 1;
+	const float bar_h = line_h * (float)line_count + pad * 2.0f;
+
+	OverlayBackground->Reset();
+	OverlayBackground->Set_Coordinate_Range(screen);
+	OverlayBackground->Enable_Texturing(false);
+	OverlayBackground->Add_Quad(
+		RectClass(screen.Left, screen.Top, screen.Right, screen.Top + bar_h),
+		0xD0000000);
+	OverlayBackground->Render();
+
+	WideStringClass wide;
+	wide.Convert_From(mess);
+	OverlaySentence->Reset();
+	OverlaySentence->Build_Sentence(wide);
+	OverlaySentence->Set_Location(Vector2(screen.Left + pad, screen.Top + pad));
+	OverlaySentence->Draw_Sentence(0xFFFFFFFF);
+	OverlaySentence->Render();
+}
+
+void ConsoleGameModeClass::Ensure_Profile_Overlay_Renderers(void)
+{
+	if (ProfileOverlayBackground == NULL) {
+		ProfileOverlayBackground = new Render2DClass;
+	}
+	Ensure_Overlay_Renderers();
+	if (ProfileTextRenderer == NULL && OverlayFont != NULL) {
+		ProfileTextRenderer = new Render2DTextClass(OverlayFont);
+		ProfileTextRenderer->Set_Coordinate_Range(Render2DClass::Get_Screen_Resolution());
+	}
+}
+
+void ConsoleGameModeClass::Set_Profile_Overlay_Text(const char *text)
+{
+	if (text == nullptr) {
+		ProfileOverlayText = "";
+		return;
+	}
+	ProfileOverlayText = text;
+}
+
+void ConsoleGameModeClass::Render_Profile_Overlay(void)
+{
+	if (!StatisticsDisplayManager::Is_Current_Display("profile")) {
+		return;
+	}
+
+	const char *text = ProfileOverlayText.Peek_Buffer();
+	if (text == NULL || text[0] == 0) {
+		text = StatisticsDisplayManager::Peek_Stat_Text();
+	}
+	if (text == NULL || text[0] == 0) {
+		text = "PROFILE DATA\n(collecting...)\n";
+	}
+
+	Ensure_Profile_Overlay_Renderers();
+	if (ProfileTextRenderer == NULL || ProfileOverlayBackground == NULL || OverlayFont == NULL) {
+		return;
+	}
+
+	const RectClass &screen = Render2DClass::Get_Screen_Resolution();
+	const float line_h = OverlayFont->Char_Height();
+	const float pad = 6.0f;
+
+	int line_count = 1;
+	for (int i = 0; text[i] != 0; ++i) {
+		if (text[i] == '\n') {
+			++line_count;
+		}
+	}
+	if (line_count < 8) {
+		line_count = 8;
+	}
+
+	const float bar_w = 420.0f;
+	const float bar_h = line_h * (float)line_count + pad * 2.0f;
+
+	ProfileOverlayBackground->Reset();
+	ProfileOverlayBackground->Set_Coordinate_Range(screen);
+	ProfileOverlayBackground->Enable_Texturing(false);
+	ProfileOverlayBackground->Add_Quad(
+		RectClass(screen.Left, screen.Top, screen.Left + bar_w, screen.Top + bar_h),
+		0xD0000000);
+	ProfileOverlayBackground->Render();
+
+	ProfileTextRenderer->Reset();
+	ProfileTextRenderer->Set_Coordinate_Range(screen);
+	ProfileTextRenderer->Set_Location(Vector2(screen.Left + pad, screen.Top + pad));
+	ProfileTextRenderer->Draw_Text(text, 0xFFFFFFFF);
+	ProfileTextRenderer->Render();
+}
 
 
 #define	BACKSPACE_KEY		8
@@ -220,11 +418,17 @@ void 	ConsoleGameModeClass::Think()
 
 #pragma message("TODO: relocate and provide UI for player communication.")
 
-
+		if (Input::Peek_State(INPUT_FUNCTION_BEGIN_CONSOLE)) {
+			OpenInputLatch = 4;
+		} else if (OpenInputLatch > 0) {
+			--OpenInputLatch;
+		}
 
 // HACK: Disable console in ATI demo
 //#ifndef ATI_DEMO_HACK
-		if (Input::Get_State(INPUT_FUNCTION_BEGIN_CONSOLE)) {
+		// Peek_State: BeginConsole must work in menu mode (Input::Update still
+		// tracks it) and must not be blocked by ConsoleMode on the open edge.
+		if (Input::Peek_State(INPUT_FUNCTION_BEGIN_CONSOLE) || OpenInputLatch > 0) {
          enable_console = true;
          ConsoleInputType = INPUT_FUNCTION_BEGIN_CONSOLE;
          strcpy(InputLine, "Command >");
@@ -233,8 +437,14 @@ void 	ConsoleGameModeClass::Think()
 
       if (enable_console) {
 		   InputActive = true;
+		   OpenInputLatch = 0;
          PromptLength = strlen(InputLine);
 		   Input::Console_Enable();
+#if defined(RENEGADE_LINUX)
+			Platform_Set_Text_Input_Enabled(true);
+			Platform_Set_System_Cursor_Visible(true);
+			DirectInput::Set_Menu_Mouse_Mode(true);
+#endif
 			Clear_Suggestion();
       }
 	}
@@ -263,10 +473,16 @@ WWPROFILE( "Input Active" );
 					}
 					//Parse_Input( InputLine );
 					Parse_Input( InputLine + PromptLength );
+					// Fall through: close console after submitting (original VC6 behavior).
 
 				case ESC_KEY:
 					InputActive = false;
 					Input::Console_Disable();
+#if defined(RENEGADE_LINUX)
+					Platform_Set_Text_Input_Enabled(false);
+					Platform_Set_System_Cursor_Visible(false);
+					DirectInput::Set_Menu_Mouse_Mode(false);
+#endif
 					break;
 
 				case BACKSPACE_KEY:
@@ -1291,6 +1507,9 @@ void	ConsoleGameModeClass::Update_Profile( void )
 {
 	WWPROFILE( "Update Profile" );
 
+	static float profile_timer = 0;
+	static bool profile_first_update = true;
+
 #ifdef ATI_DEMO_HACK
 // HACK
 	if (Input::Get_State(INPUT_FUNCTION_PROFILE_ENTER_CHILD0)) WW3D::Set_NPatches_Level(0);
@@ -1318,12 +1537,18 @@ void	ConsoleGameModeClass::Update_Profile( void )
 	}
 #endif
 
-	if (!StatisticsDisplayManager::Is_Current_Display("profile")) return;
+	if (!StatisticsDisplayManager::Is_Current_Display("profile")) {
+		profile_first_update = true;
+		return;
+	}
 
 	if (profile_log_active) {
 		Process_Profile_Log();
-		Vector2 pos = (Render2DClass::Get_Screen_Resolution().Upper_Left() + Render2DClass::Get_Screen_Resolution().Lower_Left()) * 0.5f;
-		StatisticsDisplayManager::Set_Stat( "profile", "LOG IN PROGRESS", 0xffffffff, pos );
+		StatisticsDisplayManager::Set_Stat(
+			"profile",
+			"LOG IN PROGRESS",
+			0xffffffff,
+			StatisticsDisplayManager::Default_Stat_Location());
 		return;
 	}
 
@@ -1356,13 +1581,16 @@ void	ConsoleGameModeClass::Update_Profile( void )
 		if (Input::Get_State(INPUT_FUNCTION_PROFILE_RESET)) { Profile_Command("reset"); }
 #endif
 
-		// Only update every 1/4 second
-		static float timer = 0;
-		timer += TimeManager::Get_Frame_Seconds();
-		if ( timer < 0.25f ) {
-			return;
+		// Only update every 1/4 second (immediate first update after enabling).
+		if (profile_first_update) {
+			profile_first_update = false;
+		} else {
+			profile_timer += TimeManager::Get_Frame_Seconds();
+			if ( profile_timer < 0.25f ) {
+				return;
+			}
+			profile_timer = 0;
 		}
-		timer = 0;
 
 		profile_string = "";
 		working_string = "";
@@ -1471,8 +1699,12 @@ void	ConsoleGameModeClass::Update_Profile( void )
 		if (ConsoleBox.Is_Exclusive()) {
 			ConsoleBox.Update_Profile(profile_string);
 		} else {
-			Vector2 pos = (Render2DClass::Get_Screen_Resolution().Upper_Left() + Render2DClass::Get_Screen_Resolution().Lower_Left()) * 0.5f;
-			StatisticsDisplayManager::Set_Stat( "profile", profile_string, 0xffffffff, pos );
+			ProfileOverlayText = profile_string;
+			StatisticsDisplayManager::Set_Stat(
+				"profile",
+				profile_string,
+				0xffffffff,
+				StatisticsDisplayManager::Default_Stat_Location());
 		}
 	}
 }

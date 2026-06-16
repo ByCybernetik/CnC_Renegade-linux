@@ -92,6 +92,8 @@
 
 bool g_is_loading = false;
 
+static const char *MENU_MUSIC_FILENAME = "menu.mp3";
+
 
 ////////////////////////////////////////////////////////////////////
 //
@@ -99,8 +101,10 @@ bool g_is_loading = false;
 //
 ////////////////////////////////////////////////////////////////////
 MenuGameModeClass2::MenuGameModeClass2 (void)	:
-	MenuMusicSuppressed (false),
-	MenuMusic (NULL)
+	MenuMusicSuppressed (false)
+#if !defined(RENEGADE_LINUX)
+	, MenuMusic (NULL)
+#endif
 {
 	return ;
 }
@@ -114,18 +118,15 @@ MenuGameModeClass2::MenuGameModeClass2 (void)	:
 void
 MenuGameModeClass2::Init (void)
 {
-	const char *MENU_MUSIC_FILENAME = "menu.mp3";
-
-	//
-	//	Create the background music
-	//				
+#if !defined(RENEGADE_LINUX)
 	MenuMusic = WWAudioClass::Get_Instance ()->Create_Sound_Effect (MENU_MUSIC_FILENAME);
 	if (MenuMusic != NULL) {
 		MenuMusic->Set_Type (AudibleSoundClass::TYPE_MUSIC);
 		MenuMusic->Set_Priority (1.0F);
 		MenuMusic->Set_Loop_Count (0);
-		MenuMusic->Set_Volume (1.0F);		
+		MenuMusic->Set_Volume (1.0F);
 	}
+#endif
 	
 	if (MenuDialogClass::Get_BackDrop () && MenuDialogClass::Get_BackDrop ()->Peek_Model () == NULL) {
 		MenuDialogClass::Get_BackDrop ()->Set_Model ("IF_BACK01");
@@ -144,10 +145,16 @@ MenuGameModeClass2::Init (void)
 void 
 MenuGameModeClass2::Shutdown (void)
 {
+#if defined(RENEGADE_LINUX)
+	if (WWAudioClass::Get_Instance () != NULL) {
+		WWAudioClass::Get_Instance ()->Stop_Menu_Music ();
+	}
+#else
 	if (MenuMusic != NULL) {
 		MenuMusic->Stop ();
 		REF_PTR_RELEASE (MenuMusic);
 	}
+#endif
 
 	return ;
 }
@@ -163,9 +170,15 @@ MenuGameModeClass2::Set_Menu_Music_Suppressed (bool suppressed)
 {
 	MenuMusicSuppressed = suppressed;
 
+#if defined(RENEGADE_LINUX)
+	if (suppressed && WWAudioClass::Get_Instance () != NULL) {
+		WWAudioClass::Get_Instance ()->Stop_Menu_Music ();
+	}
+#else
 	if (MenuMusic != NULL && suppressed) {
 		MenuMusic->Stop ();
 	}
+#endif
 
 	return ;
 }
@@ -179,6 +192,25 @@ MenuGameModeClass2::Set_Menu_Music_Suppressed (bool suppressed)
 void 
 MenuGameModeClass2::Think (void)
 {
+	WWAudioClass *audio = WWAudioClass::Get_Instance ();
+
+#if defined(RENEGADE_LINUX)
+	if (audio != NULL) {
+		if (MenuMusicSuppressed) {
+			audio->Stop_Menu_Music ();
+		} else if (Is_Active ()) {
+			if (IS_SOLOPLAY || GameInitMgrClass::Is_Game_In_Progress () == false) {
+				if (!audio->Is_Menu_Music_Active ()) {
+					audio->Play_Menu_Music (MENU_MUSIC_FILENAME);
+				}
+			} else if (audio->Is_Menu_Music_Active ()) {
+				audio->Stop_Menu_Music ();
+			}
+		} else if (audio->Is_Menu_Music_Active ()) {
+			audio->Stop_Menu_Music ();
+		}
+	}
+#else
 	if (MenuMusic != NULL) {
 
 		if (MenuMusicSuppressed) {
@@ -202,6 +234,7 @@ MenuGameModeClass2::Think (void)
 			}
 		}
 	}
+#endif
 
 	if (Is_Active () && DialogMgrClass::Get_Dialog_Count () == 0) {
 		Deactivate ();
@@ -238,6 +271,11 @@ MenuGameModeClass2::Activate (void)
 	//	Pause game sounds and activate menu sounds
 	//
 	if (IS_SOLOPLAY && WWAudioClass::Get_Instance () != NULL) {
+#if defined(RENEGADE_LINUX)
+		if (GameInitMgrClass::Is_Game_In_Progress ()) {
+			WWAudioClass::Get_Instance ()->Pause_Game_Music_Bus ();
+		}
+#endif
 		WWAudioClass::Get_Instance ()->Set_Active_Sound_Page (WWAudioClass::PAGE_SECONDARY);
 	}
 
@@ -258,6 +296,13 @@ void
 MenuGameModeClass2::Deactivate (void)
 {
 	WWMEMLOG(MEM_GAMEDATA);
+
+#if defined(RENEGADE_LINUX)
+	if (WWAudioClass::Get_Instance () != NULL) {
+		WWAudioClass::Get_Instance ()->Stop_Menu_Music ();
+	}
+#endif
+
 	//
 	//	Resume game sounds as necessary
 	//

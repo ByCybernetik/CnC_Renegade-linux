@@ -35,7 +35,7 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "sound3dhandle.h"
-#include "AudibleSound.h"
+#include "audiblesound.h"
 #include "wwprofile.h"
 
 

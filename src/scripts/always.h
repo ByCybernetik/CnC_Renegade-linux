@@ -154,6 +154,12 @@ template <class T> T max(T a,T b)
 	#define	NULL		0
 #endif
 
+#if __cplusplus < 201103L
+#ifndef nullptr
+#define nullptr NULL
+#endif
+#endif
+
 /**********************************************************************
 **	This macro serves as a general way to determine the number of elements
 **	within an array.

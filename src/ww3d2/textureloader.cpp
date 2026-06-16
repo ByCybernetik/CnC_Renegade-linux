@@ -813,7 +813,19 @@ void TextureLoader::Update(void (*network_callback)(void))
 	unsigned long time = timeGetTime();
 
 	// while we have tasks on the foreground queue
-	while (TextureLoadTaskClass *task = _ForegroundQueue.Pop_Front()) {
+	unsigned foreground_budget = 0xffffffffu;
+#if defined(RENEGADE_VULKAN)
+	if (DX8Wrapper::Vulkan_Device_Active()) {
+		/* Sync Vulkan uploads stall the GPU; spread foreground loads across frames. */
+		foreground_budget = 4;
+	}
+#endif
+	unsigned foreground_processed = 0;
+	while (foreground_processed < foreground_budget) {
+		TextureLoadTaskClass *task = _ForegroundQueue.Pop_Front();
+		if (task == nullptr) {
+			break;
+		}
 		UPDATE_NETWORK;
 		// dispatch to proper task handler
 		switch (task->Get_Type()) {
@@ -825,6 +837,7 @@ void TextureLoader::Update(void (*network_callback)(void))
 				Process_Foreground_Load(task);
 				break;
 		}
+		++foreground_processed;
 	}
 
 	TextureClass::Invalidate_Old_Unused_Textures(0);
@@ -840,6 +853,31 @@ void TextureLoader::Continue_Texture_Load()
 {
 	WWASSERT_PRINT(Is_DX8_Thread(),"TextureLoader::Continue_Texture_Load must be called from the main thread!");
 	TextureLoadSuspended=false;
+}
+
+
+void TextureLoader::Abort_Pending_Load(TextureClass *tc)
+{
+	if (tc == nullptr || !Is_DX8_Thread()) {
+		return;
+	}
+
+	FastCriticalSectionClass::LockClass foreground_lock(_ForegroundCriticalSection);
+	FastCriticalSectionClass::LockClass background_lock(_BackgroundCriticalSection);
+
+	if (tc->ThumbnailLoadTask != nullptr) {
+		TextureLoadTaskClass *task = tc->ThumbnailLoadTask;
+		_ForegroundQueue.Remove(task);
+		_BackgroundQueue.Remove(task);
+		task->Destroy();
+	}
+
+	if (tc->TextureLoadTask != nullptr) {
+		TextureLoadTaskClass *task = tc->TextureLoadTask;
+		_ForegroundQueue.Remove(task);
+		_BackgroundQueue.Remove(task);
+		task->Destroy();
+	}
 }
 
 void TextureLoader::Process_Foreground_Thumbnail(TextureLoadTaskClass *task)

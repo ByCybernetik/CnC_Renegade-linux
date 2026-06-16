@@ -1,1 +1,1 @@
-../../../combat/gameobjobserver.h
+../../../scripts/gameobjobserver.h

@@ -182,6 +182,7 @@ public:
 protected:
 
 	void								Free(void);
+	void								Update_Cached_Poly_Count(void) const;
 
 	virtual void					Add_Dependencies_To_List (DynamicVectorClass<StringClass> &file_list, bool textures_only = false);
 	virtual void					Update_Cached_Bounding_Volumes(void) const;
@@ -203,6 +204,9 @@ protected:
 	bool								IsDisabledByDebugger;
 
 	unsigned int *					UserLighting;			// optional array of user lighting values
+
+	// Cached poly count for LOD cost calculation (avoids recomputing every frame)
+	mutable int						CachedPolyCount;
 
 	// DX8 Mesh rendering system data
 	DX8PolygonRendererList		PolygonRendererList;

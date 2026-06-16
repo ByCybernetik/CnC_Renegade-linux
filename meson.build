@@ -22,15 +22,18 @@ if get_option('boot_log')
     language : 'cpp',
   )
 endif
-if get_option('init_log')
-  add_global_arguments('-DRENEGADE_INIT_LOG', language : ['c', 'cpp'])
-endif
 if get_option('nav_log')
   add_global_arguments('-DRENEGADE_NAV_LOG', language : ['c', 'cpp'])
   add_global_arguments(
     '-I' + meson.project_source_root() / 'src/platform',
     language : 'cpp',
   )
+endif
+if _is_linux and get_option('wwprofile')
+  add_global_arguments('-DRENEGADE_WWPROFILE', language : ['cpp'])
+endif
+if get_option('disable_audio')
+  add_global_arguments('-DRENEGADE_DISABLE_AUDIO', language : ['cpp'])
 endif
 
 if _is_linux
@@ -39,6 +42,7 @@ if _is_linux
     '-DRENEGADE_LINUX',
     '-D_UNIX',
     '-DNDEBUG',
+    '-DRENEGADE_DEV_CONSOLE',
     '-fpermissive',
     '-fshort-wchar',
   ]
@@ -92,6 +96,11 @@ else
     '-DSTDC_HEADERS',
   ]
   renegade_platform_cpp_args = []
+
+  add_global_arguments(
+    '-I' + meson.project_source_root() / 'src/platform',
+    language : 'cpp',
+  )
 
   subdir('deps/dxsdk8')
   add_global_arguments(dxsdk8_compile_args, language : 'cpp')

@@ -12,6 +12,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern "C" {
+#include <libavutil/channel_layout.h>
+#include <libavutil/opt.h>
+#include <libswresample/swresample.h>
+}
+
 static FileFactoryClass *g_audio_file_factory = NULL;
 static audio_file_open_fn g_file_open = NULL;
 static audio_file_close_fn g_file_close = NULL;
@@ -673,6 +679,89 @@ int audio_decode_to_pcm(
 void audio_decode_free(unsigned char *pcm)
 {
 	free(pcm);
+}
+
+int audio_pcm_resample_to_rate(
+	unsigned char **pcm,
+	unsigned long *pcm_bytes,
+	int *rate_hz,
+	int channels,
+	int target_rate_hz)
+{
+	SwrContext *swr;
+	AVChannelLayout in_layout;
+	AVChannelLayout out_layout;
+	int in_samples;
+	int out_cap;
+	int out_samples;
+	unsigned char *out_buf;
+	const uint8_t *in_planes[1];
+	uint8_t *out_planes[1];
+	int converted;
+
+	if (pcm == NULL || pcm_bytes == NULL || rate_hz == NULL || *pcm == NULL) {
+		return 0;
+	}
+	if (target_rate_hz <= 0 || channels <= 0) {
+		return 0;
+	}
+	if (*rate_hz == target_rate_hz) {
+		return 1;
+	}
+
+	if (channels >= 2) {
+		av_channel_layout_default(&in_layout, 2);
+		av_channel_layout_default(&out_layout, 2);
+		channels = 2;
+	} else {
+		av_channel_layout_default(&in_layout, 1);
+		av_channel_layout_default(&out_layout, 1);
+		channels = 1;
+	}
+
+	in_samples = (int)(*pcm_bytes / (unsigned long)(channels * 2));
+	if (in_samples <= 0) {
+		return 0;
+	}
+
+	swr = swr_alloc();
+	if (swr == NULL) {
+		return 0;
+	}
+	av_opt_set_chlayout(swr, "in_chlayout", &in_layout, 0);
+	av_opt_set_chlayout(swr, "out_chlayout", &out_layout, 0);
+	av_opt_set_int(swr, "in_sample_rate", *rate_hz, 0);
+	av_opt_set_int(swr, "out_sample_rate", target_rate_hz, 0);
+	av_opt_set_sample_fmt(swr, "in_sample_fmt", AV_SAMPLE_FMT_S16, 0);
+	av_opt_set_sample_fmt(swr, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
+	if (swr_init(swr) < 0) {
+		swr_free(&swr);
+		return 0;
+	}
+
+	out_cap = (int)av_rescale_rnd(in_samples, target_rate_hz, *rate_hz, AV_ROUND_UP) + 8;
+	out_buf = (unsigned char *)malloc((size_t)out_cap * (size_t)channels * 2u);
+	if (out_buf == NULL) {
+		swr_free(&swr);
+		return 0;
+	}
+
+	in_planes[0] = *pcm;
+	out_planes[0] = out_buf;
+	converted = swr_convert(swr, out_planes, out_cap, in_planes, in_samples);
+	swr_free(&swr);
+
+	if (converted <= 0) {
+		free(out_buf);
+		return 0;
+	}
+
+	out_samples = converted;
+	audio_decode_free(*pcm);
+	*pcm = out_buf;
+	*pcm_bytes = (unsigned long)out_samples * (unsigned long)channels * 2u;
+	*rate_hz = target_rate_hz;
+	return 1;
 }
 
 int audio_load_file(const char *filename, unsigned char **out_data, unsigned long *out_len)

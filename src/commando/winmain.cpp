@@ -61,7 +61,7 @@
 #include "input.h"
 #include "useroptions.h"
 
-#include "WWAudio.H"
+#include "wwaudio.h"
 #include "FFactory.H"
 
 #include "debug.h"

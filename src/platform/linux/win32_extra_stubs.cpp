@@ -1843,6 +1843,12 @@ void *GetProcAddress(HMODULE mod, LPCSTR name)
 		return NULL;
 	}
 
+	// GetModuleHandleA() returns this sentinel on Linux — not a real dl handle.
+	if (mod == (HMODULE)(intptr_t)1) {
+		SetLastError(ERROR_PROC_NOT_FOUND);
+		return NULL;
+	}
+
 	void *sym = dlsym(mod, name);
 	if (sym == NULL) {
 		SetLastError(ERROR_PROC_NOT_FOUND);

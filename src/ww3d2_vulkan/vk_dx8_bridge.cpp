@@ -4,6 +4,7 @@
 
 #include "vk_gpu_buffer.h"
 #include "vk_dx8_state.h"
+#include "vk_dx8_texture.h"
 #include "vk_native_render_state.h"
 #include "ww3d_vulkan.h"
 #include "../ww3d2/dx8wrapper.h"
@@ -15,7 +16,7 @@
 #include "../ww3d2/texture.h"
 #include "../wwmath/matrix4.h"
 #include <cstdint>
-#include <cstdio>
+#include <cstring>
 #include <d3d8.h>
 #include <new>
 
@@ -206,6 +207,25 @@ static unsigned Fvf_Vertex_Stride(unsigned fvf)
 		(fvf & D3DFVF_TEXCOUNT_MASK) >> D3DFVF_TEXCOUNT_SHIFT;
 	size += tex_count * 8;
 	return size;
+}
+
+static unsigned Fvf_Diffuse_Offset(unsigned fvf)
+{
+	unsigned offset = 0;
+	const unsigned pos = fvf & D3DFVF_POSITION_MASK;
+	if (pos == D3DFVF_XYZRHW) {
+		offset += 16;
+	} else if (pos >= D3DFVF_XYZ && pos <= D3DFVF_XYZB5) {
+		offset += 12;
+		if (pos >= D3DFVF_XYZB1 && pos <= D3DFVF_XYZB5) {
+			const unsigned blend_count = ((pos - D3DFVF_XYZB1) / 2) + 1;
+			offset += blend_count * sizeof(float);
+		}
+	}
+	if (fvf & D3DFVF_NORMAL) {
+		offset += 12;
+	}
+	return offset;
 }
 
 static bool Is_Supported_Fvf(unsigned fvf)

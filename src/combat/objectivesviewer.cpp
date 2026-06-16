@@ -41,7 +41,7 @@
 #include "font3d.h"
 #include "objectives.h"
 #include "translatedb.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "globalsettings.h"
 #include "scene.h"
 #include "evasettings.h"

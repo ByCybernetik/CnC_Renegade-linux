@@ -223,6 +223,8 @@ protected:
 
 	void								Free(void);
 	virtual void					Update_Sub_Object_Transforms(void);
+	void								Update_All_Sub_Object_Transforms(void);
+	void								Update_Sub_Object_Transforms_For_Lod(int lod);
 	virtual void					Update_Obj_Space_Bounding_Volumes(void);
 	void								add_lod_model(int lod,RenderObjClass * robj,int boneindex);
 
@@ -263,6 +265,7 @@ protected:
 
 	float *							Cost;					// Cost array (recalculated every frame) 
 	float *							Value;				// Value array (recalculated every frame)
+	int *								LodPolyCount;		// Cached per-LOD polycount (avoids recursive recount every frame)
 
 	// Additional Models, these models have been linked to one of the bones in this
 	// model.  They are all always rendered.  They can be HLODs themselves in order
@@ -279,6 +282,10 @@ protected:
 
 	// Current LOD Bias (affects recalculation of the Value array)
 	float								LODBias;
+
+	// Cached transform validity flags (optimize Update_Sub_Object_Transforms to only update CurLod)
+	bool								CurLodTransformsValid;
+	bool								AllLodTransformsValid;
 };
 
 

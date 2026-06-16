@@ -154,7 +154,9 @@ void main()
 		if ((flags & FLAG_DIFFUSE_FROM_VERTEX) != 0u) {
 			v_color = vec4(vertex_color.rgb * lighting, vertex_color.a);
 		} else {
-			v_color = vec4(ubo.material_diffuse.rgb * lighting, ubo.material_diffuse.a * vertex_color.a);
+			v_color = vec4(
+				ubo.material_diffuse.rgb * lighting,
+				ubo.material_diffuse.a * vertex_color.a);
 		}
 	} else {
 		v_color = vertex_color;

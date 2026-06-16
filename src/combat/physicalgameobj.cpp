@@ -57,6 +57,7 @@
 #include "matinfo.h"
 #include "gameobjmanager.h"
 #include "pscene.h"
+#include "gametype.h"
 #include "wwprofile.h"
 #include "rbody.h"
 #include "bitpackids.h"
@@ -797,8 +798,13 @@ void PhysicalGameObj::Post_Think( void )
 		Vector3 max;
 		COMBAT_SCENE->Get_Level_Extents(min, max);
 		if ( pos.Z < min.Z - 20.0f ) {
+			SmartGameObj * smart = As_SmartGameObj();
+			const bool is_mission_player =
+				IS_MISSION && smart != NULL && smart->Is_Human_Controlled();
 			Debug_Say(( "Object %d is going to hell at (%1.1f, %1.1f, %1.1f).  Die!\n", Get_ID(), pos.X, pos.Y, pos.Z ));
-			Set_Delete_Pending();
+			if ( !is_mission_player ) {
+				Set_Delete_Pending();
+			}
 		}
 	}
 #endif

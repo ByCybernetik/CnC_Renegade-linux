@@ -15,6 +15,7 @@
 #include "../wwlib/hashtemplate.h"
 #include "../ww3d2/ww3dformat.h"
 #include "../ww3d2/bitmaphandler.h"
+#include "../wwlib/osdep.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -104,6 +105,149 @@ static const char *Texture_Load_Path(const TextureClass *texture)
 	return nullptr;
 }
 
+/*
+ * waves2.w3d (M01 beach water) references extensionless logical names that are not
+ * stored as separate files in always.dat — map them to the retail water textures.
+ */
+static const char *Lookup_Texture_Alias(const char *path)
+{
+	if (path == nullptr || path[0] == '\0') {
+		return nullptr;
+	}
+	if (stricmp(path, "a_water") == 0) {
+		return "water_texture.tga";
+	}
+	if (stricmp(path, "a_water-foam") == 0 || stricmp(path, "a_water-FOAM") == 0) {
+		return "water_foam.tga";
+	}
+	if (stricmp(path, "a_alpha-foam") == 0 || stricmp(path, "a_alpha-FOAM") == 0) {
+		return "water_foam.tga";
+	}
+	if (stricmp(path, "water_reflect.tga") == 0) {
+		return "water_reflect.dds";
+	}
+	return nullptr;
+}
+
+static bool Is_Water_Debug_Name(const char *path)
+{
+	if (path == nullptr || path[0] == '\0') {
+		return false;
+	}
+	return stricmp(path, "a_water") == 0 ||
+		stricmp(path, "a_water-foam") == 0 ||
+		stricmp(path, "a_water-FOAM") == 0 ||
+		stricmp(path, "a_alpha-foam") == 0 ||
+		stricmp(path, "a_alpha-FOAM") == 0 ||
+		stricmp(path, "water_texture.tga") == 0 ||
+		stricmp(path, "water_foam.tga") == 0 ||
+		stricmp(path, "water_reflect.tga") == 0 ||
+		stricmp(path, "bump_water.tga") == 0;
+}
+
+static void Log_Water_Texture_Failure(const char *path, const char *alias)
+{
+	if (!Is_Water_Debug_Name(path) && !Is_Water_Debug_Name(alias)) {
+		return;
+	}
+	if (alias != nullptr && alias[0] != '\0') {
+		fprintf(
+			stderr,
+			"WW3DVulkan: water texture load failed (path='%s', alias='%s')\n",
+			path != nullptr ? path : "",
+			alias);
+	} else {
+		fprintf(
+			stderr,
+			"WW3DVulkan: water texture load failed (path='%s')\n",
+			path != nullptr ? path : "");
+	}
+}
+
+static bool Try_Load_Texture_From_Path(
+	TextureClass *texture,
+	const char *path,
+	VkTexture *vk_tex,
+	const VkSamplerAddressMode address_u,
+	const VkSamplerAddressMode address_v)
+{
+	if (path == nullptr || path[0] == '\0' || texture == nullptr || vk_tex == nullptr) {
+		return false;
+	}
+
+	DDSFileClass dds(path, texture->Get_Reduction());
+	if (dds.Is_Available() && dds.Load()) {
+		if (vk_tex->Create_From_DDS(dds, address_u, address_v)) {
+			texture->Set_Vulkan_Texture(vk_tex);
+			texture->Set_Dimensions((int)vk_tex->Width(), (int)vk_tex->Height());
+			texture->Mark_Vulkan_Initialized();
+			Dbg_Track_Cursor_Texture(texture, vk_tex);
+#if defined(RENEGADE_BOOT_LOG)
+			Tex_Log_Load(
+				"file_load",
+				path,
+				false,
+				vk_tex->Width(),
+				vk_tex->Height(),
+				vk_tex,
+				"\"src\":\"dds\"");
+#endif
+			return true;
+		}
+		vk_tex->Destroy();
+	}
+
+	StbLoadedTexture loaded;
+	if (!Stb_Load_Texture(
+			path,
+			texture->Get_Reduction(),
+			texture->Is_Compression_Allowed(),
+			true,
+			true,
+			&loaded)) {
+		return false;
+	}
+
+	bool ok = false;
+	if (loaded.compressed) {
+		ok = vk_tex->Create_From_Compressed(
+			loaded.format,
+			loaded.width,
+			loaded.height,
+			loaded.mip_levels,
+			loaded.pixels.data(),
+			loaded.pixels.size(),
+			address_u,
+			address_v);
+	} else {
+		ok = vk_tex->Create_From_Rgba8(
+			loaded.pixels.data(),
+			loaded.width,
+			loaded.height,
+			address_u,
+			address_v);
+	}
+	if (!ok) {
+		return false;
+	}
+
+	texture->Set_Vulkan_Texture(vk_tex);
+	texture->Set_Dimensions((int)vk_tex->Width(), (int)vk_tex->Height());
+	texture->Mark_Vulkan_Initialized();
+	Dbg_Track_Cursor_Texture(texture, vk_tex);
+#if defined(RENEGADE_BOOT_LOG)
+	Tex_Log_Load(
+		"file_load",
+		path,
+		false,
+		vk_tex->Width(),
+		vk_tex->Height(),
+		vk_tex,
+		loaded.compressed ? "\"src\":\"stb_compressed\"" : "\"src\":\"stb_rgba\"");
+#endif
+	return true;
+}
+
 static bool Is_Missing_Placeholder_VkTexture(const VkTexture *vk_tex)
 {
 	return vk_tex != nullptr && vk_tex->Width() == 1u && vk_tex->Height() == 1u &&
@@ -152,83 +296,50 @@ bool Ensure_Texture_Loaded(TextureClass *texture)
 	const VkSamplerAddressMode address_u = Addr_Mode(texture->Get_U_Addr_Mode());
 	const VkSamplerAddressMode address_v = Addr_Mode(texture->Get_V_Addr_Mode());
 
+	const char *alias = Lookup_Texture_Alias(path);
+
 	VkTexture *vk_tex = new (std::nothrow) VkTexture();
 	if (vk_tex == nullptr) {
+		Log_Water_Texture_Failure(path, alias);
 		return false;
 	}
 
-	DDSFileClass dds(path, texture->Get_Reduction());
-	if (dds.Is_Available() && dds.Load()) {
-		if (vk_tex->Create_From_DDS(dds, address_u, address_v)) {
-			texture->Set_Vulkan_Texture(vk_tex);
-			texture->Set_Dimensions((int)vk_tex->Width(), (int)vk_tex->Height());
-			texture->Mark_Vulkan_Initialized();
-			Dbg_Track_Cursor_Texture(texture, vk_tex);
-#if defined(RENEGADE_BOOT_LOG)
-			Tex_Log_Load(
-				"file_load",
-				path,
-				false,
-				vk_tex->Width(),
-				vk_tex->Height(),
-				vk_tex,
-				"\"src\":\"dds\"");
-#endif
-			return true;
-		}
+	if (alias != nullptr &&
+		Try_Load_Texture_From_Path(texture, alias, vk_tex, address_u, address_v))
+	{
+		return true;
 	}
+	delete vk_tex;
 
-	StbLoadedTexture loaded;
-	if (!Stb_Load_Texture(
-			path,
-			texture->Get_Reduction(),
-			texture->Is_Compression_Allowed(),
-			true,
-			true,
-			&loaded)) {
-		delete vk_tex;
+	vk_tex = new (std::nothrow) VkTexture();
+	if (vk_tex == nullptr) {
+		Log_Water_Texture_Failure(path, alias);
 		return false;
 	}
 
-	bool ok = false;
-	if (loaded.compressed) {
-		ok = vk_tex->Create_From_Compressed(
-			loaded.format,
-			loaded.width,
-			loaded.height,
-			loaded.mip_levels,
-			loaded.pixels.data(),
-			loaded.pixels.size(),
-			address_u,
-			address_v);
-	} else {
-		ok = vk_tex->Create_From_Rgba8(
-			loaded.pixels.data(),
-			loaded.width,
-			loaded.height,
-			address_u,
-			address_v);
+	if (Try_Load_Texture_From_Path(texture, path, vk_tex, address_u, address_v)) {
+		return true;
 	}
-	if (!ok) {
-		delete vk_tex;
+	delete vk_tex;
+
+	Log_Water_Texture_Failure(path, alias);
+	return false;
+}
+
+static bool g_last_stage0_pickup_texture = false;
+
+static bool Is_Pickup_Texture_Name(const char *name)
+{
+	if (name == nullptr) {
 		return false;
 	}
+	return (((name[0] == 'p' || name[0] == 'P') && name[1] == '_') ||
+		((name[0] == 'w' || name[0] == 'W') && name[1] == '_'));
+}
 
-	texture->Set_Vulkan_Texture(vk_tex);
-	texture->Set_Dimensions((int)vk_tex->Width(), (int)vk_tex->Height());
-	texture->Mark_Vulkan_Initialized();
-	Dbg_Track_Cursor_Texture(texture, vk_tex);
-#if defined(RENEGADE_BOOT_LOG)
-	Tex_Log_Load(
-		"file_load",
-		path,
-		false,
-		vk_tex->Width(),
-		vk_tex->Height(),
-		vk_tex,
-		loaded.compressed ? "\"src\":\"stb_compressed\"" : "\"src\":\"stb_rgba\"");
-#endif
-	return true;
+bool Last_Stage0_Texture_Is_Pickup(void)
+{
+	return g_last_stage0_pickup_texture;
 }
 
 void Texture_Stage_Bind(TextureClass *texture, unsigned stage)
@@ -236,14 +347,31 @@ void Texture_Stage_Bind(TextureClass *texture, unsigned stage)
 	if (stage >= 2 || !WW3DVulkan::Get().Is_Active()) {
 		return;
 	}
+	if (stage == 0) {
+		g_last_stage0_pickup_texture = false;
+		if (texture != nullptr && !texture->Is_Procedural()) {
+			g_last_stage0_pickup_texture =
+				Is_Pickup_Texture_Name(texture->Get_Texture_Name());
+		}
+	}
+
+	if (texture == nullptr) {
+		WW3DVulkan::Get().Bind_Texture(stage, nullptr);
+		return;
+	}
 
 	VkTexture *vk_tex = nullptr;
-	if (texture != nullptr) {
-		vk_tex = static_cast<VkTexture *>(texture->Peek_Vulkan_Texture());
-		if (!texture->Is_Procedural() && Is_Missing_Placeholder_VkTexture(vk_tex)) {
-			Clear_Missing_Placeholder_VkTexture(texture);
-			vk_tex = nullptr;
-		}
+	if (!texture->Is_Procedural() &&
+		(texture->Peek_Vulkan_Texture() == nullptr ||
+			Is_Missing_Placeholder_VkTexture(
+				static_cast<VkTexture *>(texture->Peek_Vulkan_Texture()))))
+	{
+		Ensure_Texture_Loaded(texture);
+	}
+	vk_tex = static_cast<VkTexture *>(texture->Peek_Vulkan_Texture());
+	if (!texture->Is_Procedural() && Is_Missing_Placeholder_VkTexture(vk_tex)) {
+		Clear_Missing_Placeholder_VkTexture(texture);
+		vk_tex = nullptr;
 	}
 	const bool used_missing_fallback =
 		(vk_tex == nullptr || vk_tex->View() == VK_NULL_HANDLE);
@@ -284,23 +412,41 @@ bool Apply_Loaded_Texture(TextureClass *texture, bool initialize)
 
 void Apply_Missing_Texture(TextureClass *texture)
 {
-	/*
-	 * Mark initialized so TextureClass::Apply() does not call Init() on every draw.
-	 * Leave Vulkan_Texture null — Texture_Stage_Bind uses the global magenta fallback.
-	 */
 	if (texture == nullptr || !WW3DVulkan::Get().Is_Active()) {
 		return;
 	}
-	texture->Mark_Vulkan_Initialized();
+	/*
+	 * Do not mark initialized — Texture_Stage_Bind / a later Init() can retry
+	 * after alias resolution (e.g. a_water -> water_texture.tga).
+	 */
 }
 
 void Warmup_All_File_Textures()
 {
-	if (!WW3DVulkan::Get().Is_Active()) {
-		return;
+	while (!Warmup_File_Textures_Batch(0)) {
 	}
+}
+
+namespace {
+
+struct TextureWarmupState {
+	std::vector<TextureClass *> pending;
+	size_t index = 0;
+	bool active = false;
+	bool rescan_pending = true;
+};
+
+TextureWarmupState g_tex_warmup;
+
+static void Rebuild_Texture_Warmup_List()
+{
+	g_tex_warmup.pending.clear();
+	g_tex_warmup.index = 0;
+
 	WW3DAssetManager *mgr = WW3DAssetManager::Get_Instance();
 	if (mgr == nullptr) {
+		g_tex_warmup.active = false;
+		g_tex_warmup.rescan_pending = false;
 		return;
 	}
 
@@ -313,10 +459,62 @@ void Warmup_All_File_Textures()
 		if (tex->Peek_Vulkan_Texture() != nullptr) {
 			continue;
 		}
+		g_tex_warmup.pending.push_back(tex);
+	}
+
+	g_tex_warmup.active = !g_tex_warmup.pending.empty();
+	g_tex_warmup.rescan_pending = false;
+}
+
+} /* namespace */
+
+void Reset_File_Texture_Warmup()
+{
+	g_tex_warmup.pending.clear();
+	g_tex_warmup.index = 0;
+	g_tex_warmup.active = false;
+	g_tex_warmup.rescan_pending = true;
+}
+
+void Rescan_File_Texture_Warmup()
+{
+	if (g_tex_warmup.active) {
+		return;
+	}
+	g_tex_warmup.rescan_pending = true;
+}
+
+bool Warmup_File_Textures_Batch(unsigned batch_size)
+{
+	if (!WW3DVulkan::Get().Is_Active()) {
+		return true;
+	}
+
+	if (g_tex_warmup.rescan_pending || !g_tex_warmup.active) {
+		Rebuild_Texture_Warmup_List();
+	}
+	if (!g_tex_warmup.active) {
+		return true;
+	}
+
+	unsigned loaded = 0;
+	while (g_tex_warmup.index < g_tex_warmup.pending.size()) {
+		TextureClass *tex = g_tex_warmup.pending[g_tex_warmup.index++];
 		if (!Apply_Loaded_Texture(tex, true)) {
 			Apply_Missing_Texture(tex);
 		}
+		if (batch_size > 0) {
+			loaded++;
+			if (loaded >= batch_size) {
+				return false;
+			}
+		}
 	}
+
+	g_tex_warmup.pending.clear();
+	g_tex_warmup.index = 0;
+	g_tex_warmup.active = false;
+	return true;
 }
 
 bool Upload_Procedural_Texture_Rgb565(

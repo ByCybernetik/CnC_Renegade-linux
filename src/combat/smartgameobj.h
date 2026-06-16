@@ -62,7 +62,7 @@
 #endif
 
 #ifndef __AUDIO_EVENTS_H
-	#include "AudioEvents.h"
+	#include "audioevents.h"
 #endif
 
 /*

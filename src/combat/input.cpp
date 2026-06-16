@@ -1525,6 +1525,7 @@ Input::Load_Configuration (const char *filename)
 	//	Reset the mouse sensitivity to ensure its clamped properly
 	//
 	Input::Set_Mouse_Sensitivity (MouseSensitivity);
+
 	return ;
 }
 

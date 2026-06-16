@@ -520,6 +520,12 @@ static void Apply_Render_State(RenderStateStruct& render_state)
 	Matrix4 view_mtx = render_state.view.Transpose();
 	DX8Wrapper::Set_Transform(D3DTS_WORLD, world_mtx);
 	DX8Wrapper::Set_Transform(D3DTS_VIEW, view_mtx);
+
+#if defined(RENEGADE_VULKAN)
+	if (DX8Wrapper::Vulkan_Device_Active()) {
+		DX8Wrapper::Apply_Render_State_Changes();
+	}
+#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -626,7 +632,13 @@ void SortingRendererClass::Flush_Sorting_Pool()
 	DX8Wrapper::Set_Index_Buffer(dyn_ib_access,0); // Override with this buffer (do something to prevent need for this!)
 	DX8Wrapper::Set_Vertex_Buffer(dyn_vb_access); // Override with this buffer (do something to prevent need for this!)
 
+#if !defined(RENEGADE_VULKAN)
 	DX8Wrapper::Apply_Render_State_Changes();
+#else
+	if (!DX8Wrapper::Vulkan_Device_Active()) {
+		DX8Wrapper::Apply_Render_State_Changes();
+	}
+#endif
 
 	bool enable_triangle_draw=DX8Wrapper::_Is_Triangle_Draw_Enabled();
 	DX8Wrapper::_Enable_Triangle_Draw(_Is_Triangle_Draw_Enabled());

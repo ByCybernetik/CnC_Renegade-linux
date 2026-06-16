@@ -221,6 +221,18 @@ void PhysicsSceneClass::Compute_Vis_Sample_Point(const CameraClass & camera,Vect
 	}
 }
 
+#if defined(RENEGADE_LINUX)
+void PhysicsSceneClass::Compute_Vis_Sector_Sample_Point(const CameraClass & camera,Vector3 * set_point)
+{
+	WWASSERT(set_point != NULL);
+	if (!VisSamplePointLocked) {
+		*set_point = camera.Get_Position();
+	} else {
+		*set_point = LockedVisSamplePoint;
+	}
+}
+#endif
+
 VisTableClass * PhysicsSceneClass::Get_Vis_Table(int vis_sector_id)
 {
 	return VisTableManager.Get_Vis_Table(vis_sector_id);
@@ -248,12 +260,28 @@ VisTableClass * PhysicsSceneClass::Get_Vis_Table_For_Rendering(const CameraClass
 	int vis_id = -1;
 	VisTableClass * pvs = NULL;
 	Vector3 vis_sample_point;
+#if defined(RENEGADE_LINUX)
+	/*
+	 * PVS sector from camera position (not look-ahead). Look-ahead moves with
+	 * view direction and can hop vis sectors when the player rotates in place,
+	 * culling all static geometry while dynamic objects still render.
+	 */
+	Compute_Vis_Sector_Sample_Point(camera,&vis_sample_point);
+	vis_id = StaticCullingSystem->Get_Vis_Sector_ID(vis_sample_point);
+	if (vis_id == -1) {
+		/* Doorways / ledges: try the original near-clip look-ahead sample. */
+		Compute_Vis_Sample_Point(camera,&vis_sample_point);
+		vis_id = StaticCullingSystem->Get_Vis_Sector_ID(vis_sample_point);
+	}
+#else
 	Compute_Vis_Sample_Point(camera,&vis_sample_point);
+#endif
 
 	if ((!VisResetNeeded) && VisEnabled) {
-		
-		vis_id = StaticCullingSystem->Get_Vis_Sector_ID(vis_sample_point);
 
+#if !defined(RENEGADE_LINUX)
+		vis_id = StaticCullingSystem->Get_Vis_Sector_ID(vis_sample_point);
+#endif
 		if (vis_id == -1) {
 			VisSectorMissing = true;
 			if (VisSectorFallbackEnabled) {

@@ -45,7 +45,7 @@
 #include "miscutil.h"
 #include "cnetwork.h"
 #include "textdisplay.h"
-#include "WWAudio.H"
+#include "wwaudio.h"
 #include "gamedata.h"
 #include "wwdebug.h"
 #include "chunkio.h"

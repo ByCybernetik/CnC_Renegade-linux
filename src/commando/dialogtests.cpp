@@ -82,7 +82,7 @@
 #include "string_ids.h"
 #include "dlgcharacteroptions.h"
 #include "dlgmultiplayoptions.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "dlgmplanhostoptions.h"
 #include "shellapi.h"
 #include "wol_namespace.h"

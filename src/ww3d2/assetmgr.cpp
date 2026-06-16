@@ -100,8 +100,51 @@
 #include "agg_def.h"
 #include "texfcach.h"
 #include "wwstring.h"
+#include "osdep.h"
 #include <ctype.h>
 #include <stdio.h>
+
+#if defined(RENEGADE_VULKAN)
+#include "dx8wrapper.h"
+#endif
+
+/*
+ * waves2.w3d (M01 beach) uses logical names with no matching archive entry.
+ * Map them to retail textures in always.dat.
+ */
+static const char *Resolve_Texture_Load_Path(const char *name)
+{
+	if (name == nullptr || name[0] == '\0') {
+		return nullptr;
+	}
+	if (stricmp(name, "a_water") == 0) {
+		return "water_texture.tga";
+	}
+	if (stricmp(name, "a_water-foam") == 0 || stricmp(name, "a_water-FOAM") == 0) {
+		return "water_foam.tga";
+	}
+	if (stricmp(name, "a_alpha-foam") == 0 || stricmp(name, "a_alpha-FOAM") == 0) {
+		return "water_foam.tga";
+	}
+	if (stricmp(name, "water_reflect.tga") == 0) {
+		return "water_reflect.dds";
+	}
+	return nullptr;
+}
+
+#if defined(RENEGADE_VULKAN)
+static void Apply_Texture_Alias_Path(TextureClass *tex, const char *name)
+{
+	const char *alias = Resolve_Texture_Load_Path(name);
+	if (tex == nullptr || alias == nullptr) {
+		return;
+	}
+	const char *cur = tex->Get_Full_Path().Peek_Buffer();
+	if (cur == nullptr || cur[0] == '\0' || stricmp(cur, name) == 0) {
+		tex->Set_Full_Path(alias);
+	}
+}
+#endif
 
 static bool assetmgr_try_load_w3d_file( const char * filename )
 {
@@ -1241,13 +1284,23 @@ TextureClass * WW3DAssetManager::Get_Texture(
 		WWASSERT_PRINT(tex->Get_Texture_Format()==texture_format,("Texture %s has already been loaded with different format",filename));
 	}
 
+	const char *alias_path = Resolve_Texture_Load_Path(lower_case_name);
+
 	/*
 	** Didn't have it so we have to create a new texture
 	*/
 	if (!tex) {
-		tex = NEW_REF(TextureClass,(lower_case_name, NULL, mip_level_count, texture_format, allow_compression));
+		tex = NEW_REF(
+			TextureClass,
+			(lower_case_name, alias_path, mip_level_count, texture_format, allow_compression));
 		TextureHash.Insert(tex->Get_Texture_Name(),tex);
 	}
+
+#if defined(RENEGADE_VULKAN)
+	if (tex != nullptr) {
+		Apply_Texture_Alias_Path(tex, lower_case_name);
+	}
+#endif
 
 	tex->Add_Ref();
 	return tex;

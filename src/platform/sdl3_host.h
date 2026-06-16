@@ -24,6 +24,7 @@ void Platform_Shutdown(void);
 
 void Platform_Set_Async_Key(int vkey, bool down);
 bool Platform_Get_Async_Key(int vkey);
+bool Platform_Consume_Key_Hit(int vkey);
 
 void Platform_Accumulate_Mouse_Wheel(float delta_y);
 long Platform_Consume_Mouse_Wheel(void);

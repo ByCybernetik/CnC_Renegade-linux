@@ -1,1 +1,1 @@
-../../../combat/scriptcommands.h
+../../../scripts/scriptcommands.h

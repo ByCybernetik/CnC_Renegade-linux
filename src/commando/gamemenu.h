@@ -66,7 +66,9 @@ public:
 
 private:
 	bool							MenuMusicSuppressed;
+#if !defined(RENEGADE_LINUX)
 	class AudibleSoundClass *	MenuMusic;
+#endif
 };
 
 

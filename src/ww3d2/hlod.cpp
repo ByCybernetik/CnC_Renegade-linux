@@ -938,10 +938,13 @@ HLodClass::HLodClass(void) :
 	BoundingBoxIndex(-1),
 	Cost(NULL),
 	Value(NULL),
+	LodPolyCount(NULL),
 	AdditionalModels(),
 	SnapPoints(NULL),
 	ProxyArray(NULL),
-	LODBias(1.0f)
+	LODBias(1.0f),
+	CurLodTransformsValid(false),
+	AllLodTransformsValid(false)
 {
 }
 
@@ -966,10 +969,13 @@ HLodClass::HLodClass(const HLodClass & src) :
 	BoundingBoxIndex(-1),
 	Cost(NULL),
 	Value(NULL),
+	LodPolyCount(NULL),
 	AdditionalModels(),
 	SnapPoints(NULL),
 	ProxyArray(NULL),
-	LODBias(1.0f)
+	LODBias(1.0f),
+	CurLodTransformsValid(false),
+	AllLodTransformsValid(false)
 {
 	*this = src;
 }
@@ -998,10 +1004,13 @@ HLodClass::HLodClass(const char * name,RenderObjClass ** lods,int count) :
 	BoundingBoxIndex(-1),
 	Cost(NULL),
 	Value(NULL),
+	LodPolyCount(NULL),
 	AdditionalModels(),
 	SnapPoints(NULL),
 	ProxyArray(NULL),
-	LODBias(1.0f)
+	LODBias(1.0f),
+	CurLodTransformsValid(false),
+	AllLodTransformsValid(false)
 {
 	// enforce parameters
 	WWASSERT(name != NULL);
@@ -1100,10 +1109,13 @@ HLodClass::HLodClass(const HLodDefClass & def) :
 	BoundingBoxIndex(-1),
 	Cost(NULL),
 	Value(NULL),
+	LodPolyCount(NULL),
 	AdditionalModels(),
 	SnapPoints(NULL),
 	ProxyArray(NULL),
-	LODBias(1.0f)
+	LODBias(1.0f),
+	CurLodTransformsValid(false),
+	AllLodTransformsValid(false)
 {
 	// Set the name
 	Set_Name(def.Get_Name());
@@ -1188,10 +1200,13 @@ HLodClass::HLodClass(const HModelDefClass & def) :
 	BoundingBoxIndex(-1),
 	Cost(NULL),
 	Value(NULL),
+	LodPolyCount(NULL),
 	AdditionalModels(),
 	SnapPoints(NULL),
 	ProxyArray(NULL),
-	LODBias(1.0f)
+	LODBias(1.0f),
+	CurLodTransformsValid(false),
+	AllLodTransformsValid(false)
 {
 	// Set the name
 	Set_Name(def.Get_Name());
@@ -1306,6 +1321,8 @@ HLodClass & HLodClass::operator = (const HLodClass & that)
 		}
 
 		LODBias = that.LODBias;
+		CurLodTransformsValid = false;
+		AllLodTransformsValid = false;
 	}
 
 	Recalculate_Static_LOD_Factors();
@@ -1389,6 +1406,10 @@ void HLodClass::Free(void)
 	if (Value != NULL) {
 		delete[] Value;
 		Value = NULL;
+	}
+	if (LodPolyCount != NULL) {
+		delete[] LodPolyCount;
+		LodPolyCount = NULL;
 	}
 
 	for (model = 0; model < AdditionalModels.Count(); model++) {
@@ -1514,18 +1535,20 @@ void HLodClass::Get_Obj_Space_Bounding_Sphere(SphereClass & sphere) const
 const SphereClass &HLodClass::Get_Bounding_Sphere(void) const
 {
 	if (BoundingBoxIndex >= 0) {
-		//
-		//	Get the bounding sphere in local coordinates
-		//
-		SphereClass sphere;
-		Get_Obj_Space_Bounding_Sphere (sphere);
-		
-		//
-		//	Transform the sphere into world coords and return the sphere
-		//
-		CachedBoundingSphere.Center = Get_Transform () * sphere.Center;
-		CachedBoundingSphere.Radius = sphere.Radius;
-		Validate_Cached_Bounding_Volumes ();
+		if (!(Bits & BOUNDING_VOLUMES_VALID)) {
+			//
+			//	Get the bounding sphere in local coordinates
+			//
+			SphereClass sphere;
+			Get_Obj_Space_Bounding_Sphere (sphere);
+
+			//
+			//	Transform the sphere into world coords and return the sphere
+			//
+			CachedBoundingSphere.Center = Get_Transform () * sphere.Center;
+			CachedBoundingSphere.Radius = sphere.Radius;
+			Validate_Cached_Bounding_Volumes ();
+		}
 	} else {
 		return Animatable3DObjClass::Get_Bounding_Sphere ();
 	}
@@ -1549,21 +1572,22 @@ const SphereClass &HLodClass::Get_Bounding_Sphere(void) const
 const AABoxClass &HLodClass::Get_Bounding_Box(void) const
 {
 	if (BoundingBoxIndex >= 0) {
+		if (!(Bits & BOUNDING_VOLUMES_VALID)) {
+			//
+			//	Get the bounding box in local coordinates
+			//
+			AABoxClass box;
+			Get_Obj_Space_Bounding_Box (box);
 
-		//
-		//	Get the bounding box in local coordinates
-		//
-		AABoxClass box;
-		Get_Obj_Space_Bounding_Box (box);
-		
-		//
-		//	Transform the bounding box to world coordinates
-		//
-		Get_Transform().Transform_Center_Extent_AABox(	box.Center,
-																		box.Extent,
-																		&CachedBoundingBox.Center,
-																		&CachedBoundingBox.Extent	);
-		Validate_Cached_Bounding_Volumes ();
+			//
+			//	Transform the bounding box to world coordinates
+			//
+			Get_Transform().Transform_Center_Extent_AABox(	box.Center,
+																			box.Extent,
+																			&CachedBoundingBox.Center,
+																			&CachedBoundingBox.Extent	);
+			Validate_Cached_Bounding_Volumes ();
+		}
 	} else {
 		return Animatable3DObjClass::Get_Bounding_Box ();
 	}
@@ -2121,17 +2145,15 @@ bool HLodClass::Get_Proxy (int index, ProxyClass &proxy) const
  *=============================================================================================*/
 int HLodClass::Get_Num_Polys(void) const
 {
+	// Use the cached per-LOD polycount computed in Recalculate_Static_LOD_Factors.
+	// This avoids recursively traversing the sub-object hierarchy every frame.
 	int polycount = 0;
-	int i;
-	int model_count = Lod[CurLod].Count();
-	for (i = 0; i < model_count; i++) {
-		if (Lod[CurLod][i].Model->Is_Not_Hidden_At_All()) {
-			polycount += Lod[CurLod][i].Model->Get_Num_Polys();
-		}
+	if (LodPolyCount != NULL && CurLod >= 0 && CurLod < LodCount) {
+		polycount = LodPolyCount[CurLod];
 	}
 
 	int additional_count = AdditionalModels.Count();
-	for (i = 0; i < additional_count; i++) {
+	for (int i = 0; i < additional_count; i++) {
 		if (AdditionalModels[i].Model->Is_Not_Hidden_At_All()) {
 			polycount += AdditionalModels[i].Model->Get_Num_Polys();
 		}
@@ -2206,6 +2228,15 @@ void HLodClass::Special_Render(SpecialRenderInfoClass & rinfo)
 		lod_index = LodCount-1;
 	}
 
+	// Ensure the LOD we are about to render has up-to-date transforms.
+	// For the current LOD this was already done by Animatable3DObjClass::Special_Render.
+	// For the top LOD used by shadows we must update it on demand.
+	if (lod_index != CurLod) {
+		if (!AllLodTransformsValid) {
+			Update_All_Sub_Object_Transforms();
+		}
+	}
+
 	for (i = 0; i < Lod[lod_index].Count(); i++) {
 		Lod[lod_index][i].Model->Special_Render(rinfo);
 	}
@@ -2232,6 +2263,8 @@ void HLodClass::Set_Transform(const Matrix3D &m)
 {
 	Animatable3DObjClass::Set_Transform(m); 
 	Set_Sub_Object_Transforms_Dirty(true);
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 }
 
 
@@ -2251,6 +2284,8 @@ void HLodClass::Set_Position(const Vector3 &v)
 {
 	Animatable3DObjClass::Set_Position(v); 
 	Set_Sub_Object_Transforms_Dirty(true);
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 }
 
 
@@ -2608,6 +2643,8 @@ void HLodClass::Set_Animation(void)
 {
 	Animatable3DObjClass::Set_Animation(); 
 	Set_Sub_Object_Transforms_Dirty(true);
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 }
 
 
@@ -2627,6 +2664,8 @@ void HLodClass::Set_Animation(HAnimClass * motion,float frame,int mode)
 {
 	Animatable3DObjClass::Set_Animation(motion,frame,mode);
 	Set_Sub_Object_Transforms_Dirty(true);
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 }
 
 
@@ -2653,6 +2692,8 @@ void HLodClass::Set_Animation
 {
 	Animatable3DObjClass::Set_Animation(motion0,frame0,motion1,frame1,percentage);
 	Set_Sub_Object_Transforms_Dirty(true);
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 }
 
 
@@ -2672,6 +2713,8 @@ void HLodClass::Set_Animation(HAnimComboClass * anim_combo)
 {
 	Animatable3DObjClass::Set_Animation(anim_combo);
 	Set_Sub_Object_Transforms_Dirty(true);
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 }
 
 
@@ -2689,9 +2732,16 @@ void HLodClass::Set_Animation(HAnimComboClass * anim_combo)
  *=============================================================================================*/
 bool HLodClass::Cast_Ray(RayCollisionTestClass & raytest)
 {
-	if (Are_Sub_Object_Transforms_Dirty ()) {
-		Update_Sub_Object_Transforms ();
+#if defined(RENEGADE_COLLISION_FIX)
+	// Collision fallback may probe any LOD, so ensure all are up to date.
+	if (Are_Sub_Object_Transforms_Dirty() || !AllLodTransformsValid) {
+		Update_All_Sub_Object_Transforms();
 	}
+#else
+	if (Are_Sub_Object_Transforms_Dirty()) {
+		Update_Sub_Object_Transforms();
+	}
+#endif
 
 	bool res = false;
 	int i;
@@ -2738,9 +2788,16 @@ bool HLodClass::Cast_Ray(RayCollisionTestClass & raytest)
  *=============================================================================================*/
 bool HLodClass::Cast_AABox(AABoxCollisionTestClass & boxtest)
 {
-	if (Are_Sub_Object_Transforms_Dirty ()) {
-		Update_Sub_Object_Transforms ();
+#if defined(RENEGADE_COLLISION_FIX)
+	// Collision fallback may probe any LOD, so ensure all are up to date.
+	if (Are_Sub_Object_Transforms_Dirty() || !AllLodTransformsValid) {
+		Update_All_Sub_Object_Transforms();
 	}
+#else
+	if (Are_Sub_Object_Transforms_Dirty()) {
+		Update_Sub_Object_Transforms();
+	}
+#endif
 
 	bool res = false;
 	int i;
@@ -2788,7 +2845,9 @@ bool HLodClass::Cast_AABox(AABoxCollisionTestClass & boxtest)
 bool HLodClass::Cast_OBBox(OBBoxCollisionTestClass & boxtest)
 {
 #if defined(RENEGADE_COLLISION_FIX)
-	Update_Sub_Object_Transforms ();
+	if (Are_Sub_Object_Transforms_Dirty() || !AllLodTransformsValid) {
+		Update_All_Sub_Object_Transforms();
+	}
 
 	bool res = false;
 	int lod;
@@ -2847,9 +2906,16 @@ bool HLodClass::Cast_OBBox(OBBoxCollisionTestClass & boxtest)
  *=============================================================================================*/
 bool HLodClass::Intersect_AABox(AABoxIntersectionTestClass & boxtest)
 {
-	if (Are_Sub_Object_Transforms_Dirty ()) {
-		Update_Sub_Object_Transforms ();
+#if defined(RENEGADE_COLLISION_FIX)
+	// Collision fallback may probe any LOD, so ensure all are up to date.
+	if (Are_Sub_Object_Transforms_Dirty() || !AllLodTransformsValid) {
+		Update_All_Sub_Object_Transforms();
 	}
+#else
+	if (Are_Sub_Object_Transforms_Dirty()) {
+		Update_Sub_Object_Transforms();
+	}
+#endif
 
 	bool res = false;
 	int i;
@@ -2897,7 +2963,9 @@ bool HLodClass::Intersect_AABox(AABoxIntersectionTestClass & boxtest)
 bool HLodClass::Intersect_OBBox(OBBoxIntersectionTestClass & boxtest)
 {
 #if defined(RENEGADE_COLLISION_FIX)
-	Update_Sub_Object_Transforms ();
+	if (Are_Sub_Object_Transforms_Dirty() || !AllLodTransformsValid) {
+		Update_All_Sub_Object_Transforms();
+	}
 
 	bool res = false;
 	int lod;
@@ -3026,6 +3094,12 @@ void HLodClass::Recalculate_Static_LOD_Factors(void)
 	** Metric is 1 - 0.5 / #polygons^2.
 	*/
 
+	if (LodPolyCount != NULL) {
+		delete[] LodPolyCount;
+	}
+	LodPolyCount = new int[LodCount];
+	WWASSERT(LodPolyCount);
+
 	for (int i = 0; i < LodCount; i++) {
 
 		// Currently there are no pixel-related costs taken into account
@@ -3039,6 +3113,10 @@ void HLodClass::Recalculate_Static_LOD_Factors(void)
 				polycount += Lod[i][j].Model->Get_Num_Polys();
 			}
 		}
+
+		// Cache the polycount for this LOD level to avoid recounting every frame.
+		LodPolyCount[i] = polycount;
+
 		// If polycount is zero set Cost to a small nonzero amount to avoid divisions by zero.
 		Lod[i].NonPixelCost = (polycount != 0)? polycount : 0.000001f;
 
@@ -3073,6 +3151,8 @@ void HLodClass::Increment_LOD(void)
 	}
 
 	CurLod++;
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 
 	if (Is_In_Scene()) {
 		int model_count = Lod[CurLod].Count();
@@ -3107,6 +3187,8 @@ void HLodClass::Decrement_LOD(void)
 	}
 
 	CurLod--;
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 
 	if (Is_In_Scene()) {
 		int model_count = Lod[CurLod].Count();
@@ -3199,6 +3281,8 @@ void HLodClass::Set_LOD_Level(int lod)
 	}
 
 	CurLod = lod;
+	CurLodTransformsValid = false;
+	AllLodTransformsValid = false;
 	Invalidate_Cached_Bounding_Volumes ();
 
 	if (Is_In_Scene()) {
@@ -3455,32 +3539,86 @@ void HLodClass::Update_Sub_Object_Transforms(void)
 
 	/*
 	** Put the computed transforms into our sub objects.
+	** Optimization: only update the currently selected LOD plus additional models.
+	** Other LODs are updated on-demand by Update_All_Sub_Object_Transforms (collisions, shadows).
 	*/
-	int lod,model;
-	
-	for (lod = 0; lod < LodCount; lod++) {
-		for (model = 0; model < Lod[lod].Count(); model++) {
-
-			RenderObjClass * robj = Lod[lod][model].Model;
-			int bone = Lod[lod][model].BoneIndex;
-
-			robj->Set_Transform(HTree->Get_Transform(bone)); 
-			robj->Set_Animation_Hidden(!HTree->Get_Visibility(bone));
-			robj->Update_Sub_Object_Transforms();
-		}
+	if (!CurLodTransformsValid) {
+		Update_Sub_Object_Transforms_For_Lod(CurLod);
 	}
 
-	for (model = 0; model < AdditionalModels.Count(); model++) {
+	Set_Sub_Object_Transforms_Dirty(false);
+	CurLodTransformsValid = true;
+	AllLodTransformsValid = false;
+}
 
-		RenderObjClass * robj = AdditionalModels[model].Model;
-		int bone = AdditionalModels[model].BoneIndex;
 
-		robj->Set_Transform(HTree->Get_Transform(bone)); 
+/***********************************************************************************************
+ * HLodClass::Update_Sub_Object_Transforms_For_Lod -- update transforms for a specific LOD      *
+ *                                                                                             *
+ * INPUT:                                                                                      *
+ *                                                                                             *
+ * OUTPUT:                                                                                     *
+ *                                                                                             *
+ * WARNINGS:                                                                                   *
+ *                                                                                             *
+ * HISTORY:                                                                                    *
+ *=============================================================================================*/
+void HLodClass::Update_Sub_Object_Transforms_For_Lod(int lod)
+{
+	if (lod < 0 || lod >= LodCount) {
+		lod = CurLod;
+	}
+
+	for (int model = 0; model < Lod[lod].Count(); model++) {
+		RenderObjClass * robj = Lod[lod][model].Model;
+		int bone = Lod[lod][model].BoneIndex;
+
+		robj->Set_Transform(HTree->Get_Transform(bone));
 		robj->Set_Animation_Hidden(!HTree->Get_Visibility(bone));
 		robj->Update_Sub_Object_Transforms();
 	}
 
+	for (int model = 0; model < AdditionalModels.Count(); model++) {
+		RenderObjClass * robj = AdditionalModels[model].Model;
+		int bone = AdditionalModels[model].BoneIndex;
+
+		robj->Set_Transform(HTree->Get_Transform(bone));
+		robj->Set_Animation_Hidden(!HTree->Get_Visibility(bone));
+		robj->Update_Sub_Object_Transforms();
+	}
+}
+
+
+/***********************************************************************************************
+ * HLodClass::Update_All_Sub_Object_Transforms -- update transforms for ALL LODs                *
+ *                                                                                             *
+ * INPUT:                                                                                      *
+ *                                                                                             *
+ * OUTPUT:                                                                                     *
+ *                                                                                             *
+ * WARNINGS:                                                                                   *
+ *   Used by collision detection and shadow rendering which may need to access any LOD.        *
+ *                                                                                             *
+ * HISTORY:                                                                                    *
+ *=============================================================================================*/
+void HLodClass::Update_All_Sub_Object_Transforms(void)
+{
+	/*
+	** Update the animation transforms, recurse up to the
+	** top of the tree...
+	*/
+	Animatable3DObjClass::Update_Sub_Object_Transforms();
+
+	/*
+	** Put the computed transforms into ALL sub objects.
+	*/
+	for (int lod = 0; lod < LodCount; lod++) {
+		Update_Sub_Object_Transforms_For_Lod(lod);
+	}
+
 	Set_Sub_Object_Transforms_Dirty(false);
+	CurLodTransformsValid = true;
+	AllLodTransformsValid = true;
 }
 
 

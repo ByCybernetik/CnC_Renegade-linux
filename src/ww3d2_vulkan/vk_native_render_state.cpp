@@ -74,8 +74,17 @@ static void Extract_Tex_Mat(const Matrix4 &tex_mat, float out[4])
 {
 	out[0] = tex_mat[0][0];
 	out[1] = tex_mat[1][1];
-	out[2] = tex_mat[0][2];
-	out[3] = tex_mat[1][2];
+	/*
+	 * TextureMatrices[] stores Transpose(mapper_matrix). LinearOffset mappers put
+	 * UV translation in [0][2]/[1][2] before transpose -> [2][0]/[2][1] after.
+	 */
+	out[2] = tex_mat[2][0];
+	out[3] = tex_mat[2][1];
+}
+
+static bool Is_Valid_Ttf(unsigned ttf)
+{
+	return ttf <= D3DTTFF_COUNT4;
 }
 
 static void Apply_Stage_To_Draw_State(
@@ -84,7 +93,7 @@ static void Apply_Stage_To_Draw_State(
 	const StageNative &native)
 {
 	state->tex_uv_index[stage] = (float)native.uv_index;
-	if (native.ttf == D3DTTFF_DISABLE) {
+	if (!Is_Valid_Ttf(native.ttf) || native.ttf == D3DTTFF_DISABLE) {
 		state->tex_tci[stage] = 0.0f;
 		state->tex_mat[stage][0] = 1.0f;
 		state->tex_mat[stage][1] = 1.0f;
@@ -188,6 +197,14 @@ void Native_Render_State_Sync_Stage_Matrix(
 
 	g_stage[stage].ttf = texture_transform_flags;
 	Extract_Tex_Mat(tex_mat, g_stage[stage].tex_mat);
+	/*
+	 * Set_Transform(TEXTUREn) calls Record_Texture_Matrix before TTF is configured.
+	 * TextureStageStates[] may still hold the debug sentinel 0x12345678 — never
+	 * let that poison g_stage.ttf or every draw inherits water UV scroll/scale.
+	 */
+	if (!Is_Valid_Ttf(texture_transform_flags)) {
+		g_stage[stage].ttf = D3DTTFF_DISABLE;
+	}
 }
 
 void Native_Render_State_On_Shader(const ShaderClass &shader)

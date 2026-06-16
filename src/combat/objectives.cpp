@@ -45,7 +45,7 @@
 #include "globalsettings.h"
 #include "physicalgameobj.h"
 #include "diaglog.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "hud.h"
 #include "string_ids.h"
 

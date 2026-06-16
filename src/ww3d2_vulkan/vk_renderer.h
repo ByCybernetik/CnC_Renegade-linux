@@ -8,6 +8,8 @@
 #include "vk_render_pass.h"
 #include "vk_swapchain.h"
 #include "vk_texture.h"
+#include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -18,6 +20,7 @@ struct FrameUBO {
 		FLAG_LIGHTING = 1u << 0,
 		FLAG_DIFFUSE_FROM_VERTEX = 1u << 1,
 		FLAG_TEXTURING = 1u << 2,
+		FLAG_COLOR1_UNLIT_MODULATE = 1u << 3,
 		FLAG_FOG = 1u << 4,
 	};
 
@@ -54,13 +57,14 @@ struct FrameUBO {
 	float tex_stage1_alpha_mode;
 	float material_shininess;
 	float specular_enable;
+	float _pad_after_specular[3];
 	/* std140: each float in an array occupies a 16-byte slot */
 	struct { float v; float _pad[3]; } bump_mat[4];
 	float bump_l_scale;
 	float bump_l_offset;
+	float _pad_before_tex_tci[2];
 	struct { float v; float _pad[3]; } tex_tci[2];
 	struct { float v; float _pad[3]; } tex_uv_index[2];
-	float _pad_before_tex_mat;
 	float tex_mat[2][4];
 };
 
@@ -131,13 +135,76 @@ public:
 	VkDescriptorSetLayout Descriptor_Set_Layout() const { return pipelines_.Descriptor_Set_Layout(); }
 	uint32_t Current_Frame() const { return current_frame_; }
 
+	struct FrameStats {
+		uint32_t pending_draws = 0;
+		uint32_t flushed_draws = 0;
+		uint32_t immediate_2d_draws = 0;
+		uint32_t pipeline_switches = 0;
+		uint32_t pipeline_lookups = 0;
+		uint32_t pipeline_misses = 0;
+		uint32_t pipeline_creations = 0;
+		uint32_t sync_uploads = 0;
+		uint32_t offscreen_stalls = 0;
+		uint32_t ubo_limit_hits = 0;
+		uint32_t sort_flushes = 0;
+	};
+
+	struct TimerAccumulator {
+		uint64_t sum_us = 0;
+		uint64_t max_us = 0;
+		uint32_t count = 0;
+
+		void Add(uint64_t us)
+		{
+			sum_us += us;
+			if (us > max_us) {
+				max_us = us;
+			}
+			++count;
+		}
+
+		uint64_t Avg() const { return count ? sum_us / count : 0; }
+		uint64_t Max() const { return max_us; }
+
+		void Reset()
+		{
+			sum_us = 0;
+			max_us = 0;
+			count = 0;
+		}
+	};
+
+	void Reset_Stats();
+	void Reset_Timers();
+	void Print_Stats();
+	const FrameStats &Get_Stats() const { return frame_stats_; }
+	void Record_Sync_Upload() { ++frame_stats_.sync_uploads; }
+	void Record_Offscreen_Stall() { ++frame_stats_.offscreen_stalls; }
+
+	void Record_Sync_Upload_Time(uint64_t us) { sync_upload_time_.Add(us); }
+
 private:
+	void Open_Stats_Log();
+	void Close_Stats_Log();
+
+	static uint64_t Get_Time_Us();
+
+	class ScopedTimer {
+	public:
+		ScopedTimer(TimerAccumulator &acc) : acc_(acc), start_(Get_Time_Us()) {}
+		~ScopedTimer() { acc_.Add(Get_Time_Us() - start_); }
+	private:
+		TimerAccumulator &acc_;
+		uint64_t start_;
+	};
 	struct PendingDraw {
+		MeshPipelineKey key;
 		VkBuffer vertex_buffer;
 		VkBuffer index_buffer;
 		uint32_t index_count;
 		uint32_t first_index;
 		uint32_t vertex_offset;
+		int depth_bias;
 		FrameUBO ubo;
 		VkTexture *textures[2];
 	};
@@ -177,20 +244,28 @@ private:
 	VkTexture *bound_textures_[2] = {};
 	bool textures_dirty_ = false;
 	VkTexture *offscreen_target_ = nullptr;
-	bool custom_viewport_ = false;
+	bool explicit_viewport_ = false;
 	VkViewport viewport_state_ = {};
 	VkRect2D scissor_state_ = {};
+	VkPipeline bound_pipeline_ = VK_NULL_HANDLE;
 	PFN_vkCmdPushDescriptorSetKHR push_descriptor_set_ = nullptr;
 
-	/* Draw batching state */
+	/* Draw batching: queued per frame, sorted and flushed at frame end. */
 	std::vector<PendingDraw> pending_draws_;
-	VkPipeline pending_pipeline_ = VK_NULL_HANDLE;
-	VkPipelineLayout pending_layout_ = VK_NULL_HANDLE;
 
-	/* Descriptor push deduplication */
-	FrameUBO last_pushed_ubo_ = {};
-	VkTexture *last_pushed_textures_[2] = {};
-	bool last_pushed_valid_ = false;
+	FrameStats frame_stats_;
+	uint32_t stats_frame_counter_ = 0;
+	FILE *stats_log_ = nullptr;
+
+	uint64_t frame_start_us_ = 0;
+	TimerAccumulator frame_time_;
+	TimerAccumulator begin_frame_time_;
+	TimerAccumulator begin_frame_wait_time_;
+	TimerAccumulator flush_time_;
+	TimerAccumulator sort_time_;
+	TimerAccumulator end_frame_time_;
+	TimerAccumulator end_frame_submit_wait_time_;
+	TimerAccumulator sync_upload_time_;
 };
 
 } /* namespace ww3d_vulkan */

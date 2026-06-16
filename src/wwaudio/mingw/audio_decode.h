@@ -26,6 +26,17 @@ int audio_decode_to_pcm(
 
 void audio_decode_free(unsigned char *pcm);
 
+/*
+** Resample 16-bit PCM in-place to target_rate_hz (stereo interleaved).
+** Updates *pcm, *pcm_bytes, *rate_hz on success.
+*/
+int audio_pcm_resample_to_rate(
+	unsigned char **pcm,
+	unsigned long *pcm_bytes,
+	int *rate_hz,
+	int channels,
+	int target_rate_hz);
+
 /* Miles file callbacks from WWAudio::Initialize (MIX / archive paths). */
 typedef unsigned int AIL_FILE_HANDLE;
 typedef int (*audio_file_open_fn)(const char *filename, AIL_FILE_HANDLE *file_handle);

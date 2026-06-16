@@ -47,7 +47,7 @@
 #include "assets.h"
 #include "timemgr.h"
 #include "soldier.h"
-#include "SoundScene.h"
+#include "soundscene.h"
 #include "weapons.h"
 #include "vehicle.h"
 #include "bones.h"
@@ -519,6 +519,7 @@ void	CombatManager::Post_Load_Level( void )
 	//	Generate the unit coordination zones
 	//
 	UnitCoordinationZoneMgr::Build_Zones ();
+
 	return ;
 }
 
@@ -769,6 +770,11 @@ void CombatManager::Render()
 		{
 			WWPROFILE( "Camera Shakes" );
 			COMBAT_SCENE->Apply_Camera_Shakes (*MainCamera);
+		}
+
+		{
+			WWPROFILE( "Pre_Render_Processing" );
+			COMBAT_SCENE->Pre_Render_Processing (*MainCamera);
 		}
 
 		DazzleRenderObjClass::Install_Dazzle_Visibility_Handler(&_TheCombatDazzleHandler);

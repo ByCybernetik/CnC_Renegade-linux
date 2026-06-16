@@ -110,6 +110,8 @@ public:
 	void				Store_Inventory( InventoryClass * );
 	void				Restore_Inventory( InventoryClass * );
 
+	void				Rebind_Owner( ArmedGameObj *owner );
+
 private:
 	ArmedGameObj						*	Owner;
 	DynamicVectorClass<WeaponClass*>	WeaponList;

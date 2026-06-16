@@ -2,6 +2,7 @@
 #include "vk_check.h"
 #include "vk_context.h"
 #include "vk_shader.h"
+#include "vk_dx8_texture.h"
 
 #include "../ww3d2/dx8fvf.h"
 
@@ -367,14 +368,29 @@ void VkPipelineCache::Destroy()
 
 VkPipeline VkPipelineCache::Get(const MeshPipelineKey &key)
 {
+	++lookup_count_;
+
+	if (last_lookup_valid_ && last_lookup_key_ == key) {
+		return last_lookup_pipeline_;
+	}
+
 	for (size_t i = 0; i < pipelines_.size(); ++i) {
 		if (pipelines_[i].key == key) {
+			last_lookup_key_ = key;
+			last_lookup_pipeline_ = pipelines_[i].pipeline;
+			last_lookup_valid_ = true;
 			return pipelines_[i].pipeline;
 		}
 	}
+
+	++miss_count_;
 	if (!Create_Pipeline(key)) {
 		return VK_NULL_HANDLE;
 	}
+	++creation_count_;
+	last_lookup_key_ = key;
+	last_lookup_pipeline_ = pipelines_.back().pipeline;
+	last_lookup_valid_ = true;
 	return pipelines_.back().pipeline;
 }
 

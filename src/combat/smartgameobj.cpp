@@ -62,10 +62,10 @@
 #include "parameter.h"
 #include "crandom.h"
 #include "playertype.h"
-#include "WWAudio.h"
-#include "LogicalListener.h"
+#include "wwaudio.h"
+#include "logicallistener.h"
 #include "combatsound.h"
-#include "LogicalSound.h"
+#include "logicalsound.h"
 #include "wwprofile.h"
 #include "playerdata.h"
 #include "persistfactory.h"
@@ -698,9 +698,21 @@ void SmartGameObj::Apply_Control( void )
 			if ( Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_USE ) ) {
 				Get_Weapon()->Next_C4_Detonation_Mode();
 			}
+#if defined(RENEGADE_LINUX)
+			{
+				static bool s_last_reload_key = false;
+				const bool reload_key = Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_RELOAD );
+
+				if ( reload_key && !s_last_reload_key ) {
+					Get_Weapon()->Force_Reload();
+				}
+				s_last_reload_key = reload_key;
+			}
+#else
 			if ( Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_RELOAD ) ) {
 				Get_Weapon()->Force_Reload();
 			}
+#endif
 
 			// If we fire a weapon, we de-cloak for a certain amount of time
 			if (	Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_FIRE_PRIMARY ) ||

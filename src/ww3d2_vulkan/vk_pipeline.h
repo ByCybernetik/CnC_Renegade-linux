@@ -49,6 +49,11 @@ public:
 	VkPipelineLayout Layout() const { return pipeline_layout_; }
 	VkDescriptorSetLayout Descriptor_Set_Layout() const { return descriptor_set_layout_; }
 
+	uint32_t Lookup_Count() const { return lookup_count_; }
+	uint32_t Miss_Count() const { return miss_count_; }
+	uint32_t Creation_Count() const { return creation_count_; }
+	void Reset_Stats() { lookup_count_ = 0; miss_count_ = 0; creation_count_ = 0; }
+
 private:
 	bool Create_Pipeline(const MeshPipelineKey &key);
 
@@ -64,6 +69,13 @@ private:
 		VkPipeline pipeline = VK_NULL_HANDLE;
 	};
 	std::vector<PipelineEntry> pipelines_;
+	MeshPipelineKey last_lookup_key_ = {};
+	VkPipeline last_lookup_pipeline_ = VK_NULL_HANDLE;
+	bool last_lookup_valid_ = false;
+
+	uint32_t lookup_count_ = 0;
+	uint32_t miss_count_ = 0;
+	uint32_t creation_count_ = 0;
 };
 
 } /* namespace ww3d_vulkan */

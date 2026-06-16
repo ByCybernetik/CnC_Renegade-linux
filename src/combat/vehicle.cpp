@@ -51,8 +51,8 @@
 #include "wwpacket.h"
 #include "gameobjmanager.h"
 #include <stdio.h>
-#include "WWAudio.h"
-#include "Sound3D.h"
+#include "wwaudio.h"
+#include "sound3d.h"
 #include "vehiclephys.h"
 #include "motorcycle.h"
 #include "trackedvehicle.h"

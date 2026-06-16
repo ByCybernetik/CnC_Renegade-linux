@@ -65,6 +65,9 @@
 #include "cnetwork.h"
 #include "dx8rendererdebugger.h"
 #include "consolemode.h"
+#include "input.h"
+#include "console.h"
+#include "textdisplay.h"
 
 
 /*
@@ -235,17 +238,6 @@ void	GameModeManager::Render( void )
 
 		bool do_pscene = (COMBAT_SCENE != NULL) && !cNetwork::I_Am_Only_Server();
 		if (!GameInFocus) do_pscene=false;	// Don't render the game scene if the applicationisn't active
-		if (do_pscene) {
-
-			//
-			//	Don't pre-process the combat scene (does VIS and stuff) if
-			// the game isn't active.  (This gives us a menu performance boost).
-			//
-			if (Find( "Combat" )->Is_Active()) {
-				COMBAT_SCENE->Pre_Render_Processing(*COMBAT_CAMERA);
-			}
-		}
-
 		{
 			WWPROFILE( "Begin_Render" );
 
@@ -287,6 +279,17 @@ void	GameModeManager::Render( void )
 			cDiagnostics::Render();
 		}
 
+		if (Get_Console() != NULL && Get_Console()->Is_Input_Active()) {
+			WWPROFILE( "Console Overlay" );
+			Get_Console()->Render_Overlay();
+		}
+
+		if (Input::Is_Console_Enabled() && Get_Text_Display() != NULL) {
+			WWPROFILE( "Console Scroll" );
+			Get_Text_Display()->Render_Console_Scroll();
+			Get_Text_Display()->Render_Console_Input();
+		}
+
 		/*
 		{
 			WWPROFILE( "cHelpText" );
@@ -298,6 +301,11 @@ void	GameModeManager::Render( void )
 		if (GameInFocus && BINKMovie::Is_Playing()) {
 			WWPROFILE( "BINK" );
 			BINKMovie::Render();
+		}
+
+		if (Get_Console() != NULL) {
+			WWPROFILE( "Profile Overlay" );
+			Get_Console()->Render_Profile_Overlay();
 		}
 
 		{

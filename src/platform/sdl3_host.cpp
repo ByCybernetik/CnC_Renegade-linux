@@ -23,6 +23,7 @@ static Platform_Window_Resize_Handler g_resize_handler = NULL;
 
 /* 256-byte keyboard state indexed by Win32 VK (subset used by WWKeyboard). */
 static unsigned char g_key_down[256];
+static unsigned char g_key_hit_pending[256];
 static long g_wheel_accum = 0;
 static int g_text_input_refs = 0;
 
@@ -158,8 +159,23 @@ void Platform_Set_Window_Message_Handler(Platform_Window_Message_Handler handler
 void Platform_Set_Async_Key(int vkey, bool down)
 {
 	if (vkey >= 0 && vkey < 256) {
+		if (down && g_key_down[vkey] == 0) {
+			g_key_hit_pending[vkey] = 1;
+		}
 		g_key_down[vkey] = down ? 1 : 0;
 	}
+}
+
+bool Platform_Consume_Key_Hit(int vkey)
+{
+	if (vkey < 0 || vkey >= 256) {
+		return false;
+	}
+	if (g_key_hit_pending[vkey] == 0) {
+		return false;
+	}
+	g_key_hit_pending[vkey] = 0;
+	return true;
 }
 
 bool Platform_Get_Async_Key(int vkey)
@@ -180,6 +196,17 @@ long Platform_Consume_Mouse_Wheel(void)
 	const long wheel = g_wheel_accum;
 	g_wheel_accum = 0;
 	return wheel;
+}
+
+static int sdl_scancode_to_vk(SDL_Scancode sc);
+
+static int sdl_key_to_vk(SDL_Keycode key)
+{
+	const SDL_Scancode sc = SDL_GetScancodeFromKey(key, NULL);
+	if (sc != SDL_SCANCODE_UNKNOWN) {
+		return sdl_scancode_to_vk(sc);
+	}
+	return 0;
 }
 
 static int sdl_scancode_to_vk(SDL_Scancode sc)
@@ -309,9 +336,12 @@ void Platform_Pump_Events(void)
 
 		case SDL_EVENT_KEY_DOWN:
 		case SDL_EVENT_KEY_UP: {
-			const int vk = sdl_scancode_to_vk(ev.key.scancode);
+			const bool down = (ev.type == SDL_EVENT_KEY_DOWN);
+			int vk = sdl_scancode_to_vk(ev.key.scancode);
+			if (vk == 0) {
+				vk = sdl_key_to_vk(ev.key.key);
+			}
 			if (vk) {
-				const bool down = (ev.type == SDL_EVENT_KEY_DOWN);
 				Platform_Set_Async_Key(vk, down);
 				if (Win32_Key_Notify_Callback_Ptr) {
 					const UINT wm = down ? WM_KEYDOWN : WM_KEYUP;

@@ -111,7 +111,7 @@
 #include "vulkan_render_device.h"
 #endif
 #if defined(RENEGADE_LINUX)
-#include <mmsystem.h>
+#include "systimer.h"
 #include "ww3d2_gdi_stubs.h"
 #endif
 #include "targa.h"

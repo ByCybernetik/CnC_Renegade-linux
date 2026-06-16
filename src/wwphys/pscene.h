@@ -748,6 +748,10 @@ public:
 	bool							Is_Vis_Sample_Point_Locked(void);
 
 	void							Compute_Vis_Sample_Point(const CameraClass & camera,Vector3 * set_point);
+	/* Player position — stable when rotating camera (used for gameplay PVS). */
+#if defined(RENEGADE_LINUX)
+	void							Compute_Vis_Sector_Sample_Point(const CameraClass & camera,Vector3 * set_point);
+#endif
 	VisTableClass *			Get_Vis_Table(int vis_sector_id);
 	VisTableClass *			Get_Vis_Table(const Vector3 & point);
 	VisTableClass *			Get_Vis_Table(const CameraClass & camera);

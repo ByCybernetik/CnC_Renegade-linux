@@ -75,7 +75,7 @@
 #include <WWOnline/WOLConnect.h>
 #include <WWOnline/WOLServer.h>
 #include <WWOnline/PingProfile.h>
-#include <WWAudio/WWAudio.h>
+#include "wwaudio.h"
 #include <WWLib/RealCRC.h>
 #include "String_IDs.h"
 #include <WWTranslateDB/TranslateDB.h>

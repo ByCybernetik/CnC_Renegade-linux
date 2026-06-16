@@ -546,33 +546,66 @@ Render2DSentenceClass::Build_Textures (void)
 			continue;
 		}
 
-		//
-		//	Create the new texture from the CPU/D3D surface (Vulkan uploads via VkCpuSurface)
-		//
-		TextureClass *new_texture = new TextureClass (curr_surface, TextureClass::MIP_LEVELS_1);
+#if defined(RENEGADE_VULKAN)
+		if (DX8Wrapper::Vulkan_Device_Active()) {
+			//
+			//	Vulkan: upload CPU atlas via VkCpuSurface (BitmapHandler converts formats).
+			//
+			TextureClass *new_texture = new TextureClass (curr_surface, TextureClass::MIP_LEVELS_1);
 
 #if defined(RENEGADE_BOOT_LOG)
-		{
-			SurfaceClass::SurfaceDescription desc;
-			curr_surface->Get_Description(desc);
-			void *tex_ptr = NULL;
-#if defined(RENEGADE_VULKAN)
-			if (DX8Wrapper::Vulkan_Device_Active()) {
-				tex_ptr = new_texture->Peek_Vulkan_Texture();
-			} else
-#endif
 			{
-				tex_ptr = (void *)new_texture->Peek_DX8_Texture();
+				SurfaceClass::SurfaceDescription desc;
+				curr_surface->Get_Description(desc);
+				void *tex_ptr = new_texture->Peek_Vulkan_Texture();
+				Tex_Log_Load(
+					"font_atlas",
+					NULL,
+					true,
+					desc.Width,
+					desc.Height,
+					tex_ptr,
+					"\"source\":\"Build_Textures\"");
 			}
-			Tex_Log_Load(
-				"font_atlas",
-				NULL,
-				true,
-				desc.Width,
-				desc.Height,
-				tex_ptr,
-				"\"source\":\"Build_Textures\"");
+#endif
+
+			renderer->Set_Texture (new_texture);
+			REF_PTR_RELEASE (new_texture);
+			continue;
 		}
+#endif
+
+		//
+		//	D3D8 / MinGW: copy A4R4G4B4 sysmem atlas with CopyRects.
+		//	TextureClass(surface) uses D3DXLoadSurfaceFromSurface, which only
+		//	handles 32-bit formats in our in-process D3DX stubs.
+		//
+		SurfaceClass::SurfaceDescription desc;
+		curr_surface->Get_Description (desc);
+
+		TextureClass *new_texture = new TextureClass (
+			desc.Width,
+			desc.Width,
+			WW3D_FORMAT_A4R4G4B4,
+			TextureClass::MIP_LEVELS_1);
+		SurfaceClass *texture_surface = new_texture->Get_Surface_Level ();
+		DX8Wrapper::_Copy_DX8_Rects (
+			curr_surface->Peek_D3D_Surface (),
+			NULL,
+			0,
+			texture_surface->Peek_D3D_Surface (),
+			NULL);
+		REF_PTR_RELEASE (texture_surface);
+
+#if defined(RENEGADE_BOOT_LOG)
+		Tex_Log_Load(
+			"font_atlas",
+			NULL,
+			true,
+			desc.Width,
+			desc.Height,
+			(void *)new_texture->Peek_DX8_Texture(),
+			"\"source\":\"Build_Textures\"");
 #endif
 
 		renderer->Set_Texture (new_texture);
@@ -630,7 +663,6 @@ Render2DSentenceClass::Draw_Sentence (uint32 color)
 {
 	Render2DClass *curr_renderer	= NULL;
 	SurfaceClass *curr_surface		= NULL;
-
 
 	DrawExtents.Set (0, 0, 0, 0);
 
@@ -1174,8 +1206,17 @@ FontCharsClass::Get_Char_Data (WCHAR ch)
 
 #if defined(RENEGADE_LINUX)
 	if ( retval == NULL || retval->Value != ch ) {
-		static const CharDataStruct fallback_space = { L' ', 0, NULL };
-		return &fallback_space;
+		static CharDataStruct fallback_glyph = { L'?', 8, NULL };
+		fallback_glyph.Value = ch;
+		int fallback_width = CharHeight / 2;
+		if (fallback_width < 4) {
+			fallback_width = (PointSize > 0) ? (PointSize / 2) : 8;
+		}
+		if (fallback_width < 4) {
+			fallback_width = 8;
+		}
+		fallback_glyph.Width = fallback_width;
+		return &fallback_glyph;
 	}
 #else
 	WWASSERT( retval->Value == ch );

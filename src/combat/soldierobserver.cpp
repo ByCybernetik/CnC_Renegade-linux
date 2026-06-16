@@ -40,7 +40,7 @@
 #include "debug.h"
 #include "crandom.h"
 #include "cover.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "persistfactory.h"
 #include "combatchunkid.h"
 #include "combat.h"

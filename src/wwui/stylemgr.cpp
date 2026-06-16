@@ -45,7 +45,7 @@
 #include "render2dsentence.h"
 #include "ini.h"
 #include "ffactory.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include <stdio.h>
 
 

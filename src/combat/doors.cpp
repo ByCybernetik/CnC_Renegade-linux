@@ -45,7 +45,7 @@
 #include "smartgameobj.h"
 #include "gameobjmanager.h"
 #include "soldier.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "wwprofile.h"
 #include "bitpackids.h"
 #include "diaglog.h"

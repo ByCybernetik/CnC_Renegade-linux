@@ -39,7 +39,7 @@
 #include "input.h"
 #include "cnetwork.h"
 #include "singlepl.h"
-#include "AudibleSound.H"
+#include "audiblesound.h"
 #include "debug.h"
 #include "registry.h"
 #include "_globals.h"
@@ -117,6 +117,10 @@
 #include "dialogmgr.h"
 #include "GameSpy_QnR.h"
 #include "win.h"
+#include "dx8wrapper.h"
+#if defined(RENEGADE_VULKAN)
+#include "../ww3d2_vulkan/vk_dx8_texture.h"
+#endif
 
 /*
 **
@@ -149,6 +153,12 @@ CombatGameMiscHandlerClass		GameMiscHandler;
 */
 static void Combat_To_Menu (RenegadeDialogMgrClass::LOCATION location)
 {
+#if defined(RENEGADE_LINUX)
+	if (WWAudioClass::Get_Instance () != NULL) {
+		WWAudioClass::Get_Instance ()->Pause_Game_Music_Bus ();
+	}
+#endif
+
    //
 	// Remember: Combat and Menu are not mutually exclusive.
 	// Therefore this function may be called when menu is already active.
@@ -176,6 +186,12 @@ static void Combat_To_Menu (RenegadeDialogMgrClass::LOCATION location)
 */
 static void Start_In_Game_Help(void)
 {
+#if defined(RENEGADE_LINUX)
+	if (WWAudioClass::Get_Instance () != NULL) {
+		WWAudioClass::Get_Instance ()->Pause_Game_Music_Bus ();
+	}
+#endif
+
 	//
 	// Remember: Combat and Menu are not mutually exclusive.
 	// Therefore this function may be called when menu is already active.
@@ -809,6 +825,17 @@ void CombatGameModeClass::Load_Level( void )
 	The_Game()->Reset_Game(is_reloaded);
 	WWLOG_INTERMEDIATE("The_Game()->Reset_Game(is_reloaded)");
 
+	{
+		char extension[_MAX_EXT] = { 0 };
+		::_splitpath( map_name, NULL, NULL, NULL, extension );
+		if ( ::strcmpi( extension, ".sav" ) == 0 ) {
+			const char * resolved_map = SaveGameManager::Get_Map_Filename();
+			if ( resolved_map != NULL && resolved_map[0] != '\0' ) {
+				The_Game()->Set_Map_Name( resolved_map );
+			}
+		}
+	}
+
 	// Buildings init ----------------------------------------------------------
 	// After the level loads, the buildings collect all of their components
 	INIT_STATUS("Init_Buildings");
@@ -828,6 +855,22 @@ void CombatGameModeClass::Load_Level( void )
 	LOADTIME_NETWORK_UPDATE;
 	TextureLoader::Update(IS_SOLOPLAY ? NULL : &cNetwork::Update);
 	WWLOG_INTERMEDIATE("TextureLoader::Update(&cNetwork::Update)");
+
+#if defined(RENEGADE_VULKAN)
+	if (DX8Wrapper::Vulkan_Device_Active()) {
+		ww3d_vulkan::Reset_File_Texture_Warmup();
+		while (!ww3d_vulkan::Warmup_File_Textures_Batch(64)) {
+			loading_screen.Render(true);
+			Windows_Message_Handler();
+		}
+		TextureLoader::Flush_Pending_Load_Tasks();
+		ww3d_vulkan::Reset_File_Texture_Warmup();
+		while (!ww3d_vulkan::Warmup_File_Textures_Batch(64)) {
+			loading_screen.Render(true);
+			Windows_Message_Handler();
+		}
+	}
+#endif
 	// -------------------------------------------------------------------------
 
 	//	Notify the game of "game start"
@@ -1055,7 +1098,7 @@ void CombatGameModeClass::Post_Load_Dynamic_Object_Filtering(void)
 			if (p_smart_obj->Has_Player() && (p_smart_obj->Get_Control_Owner() > 1 ||
 				(!cNetwork::I_Am_Client()))) {
 				Debug_Say(("* Removing loaded soldier belonging to another player.\n"));
-	         p_smart_obj->Set_Delete_Pending();
+				p_smart_obj->Set_Delete_Pending();
 			}
 
 			if (!p_smart_obj->Is_Delete_Pending() &&
@@ -1501,6 +1544,12 @@ void	CombatGameMiscHandlerClass::Star_Killed( void )
 
 void	CombatGameModeClass::Resume(void)
 {
+#if defined(RENEGADE_LINUX)
+	if (WWAudioClass::Get_Instance () != NULL) {
+		WWAudioClass::Get_Instance ()->Resume_Game_Music_Bus ();
+	}
+#endif
+
 	//
 	//	Show the message window (if necessary)
 	//

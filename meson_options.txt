@@ -1,11 +1,14 @@
 option('boot_log', type : 'boolean', value : false,
   description : 'Write renegade_boot.log (JSON): startup, text/font pipeline (T), x32/x64 layout; Wine/Linux compare')
 
-option('init_log', type : 'boolean', value : true,
-  description : 'Write game init steps to renegade-init.log in the game working directory')
-
 option('nav_log', type : 'boolean', value : false,
   description : 'Write NPC navigation trace to renegade-nav.log in the game working directory')
+
+option('wwprofile', type : 'boolean', value : false,
+  description : 'Linux: enable WWPROFILE instrumentation (-DRENEGADE_WWPROFILE) for in-game profiler')
+
+option('disable_audio', type : 'boolean', value : false,
+  description : 'Temporary: skip WWAudio init/update and sound creation (-DRENEGADE_DISABLE_AUDIO)')
 
 option('platform', type : 'combo',
   choices : ['windows', 'linux'],

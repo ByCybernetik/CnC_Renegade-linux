@@ -14,7 +14,6 @@
 #include "vk_texture.h"
 #include "../wwmath/matrix4.h"
 
-#include <cstdio>
 #include <d3d8.h>
 
 namespace ww3d_vulkan {
@@ -298,8 +297,8 @@ static bool Is_Ui_Dynamic_Draw(const RenderStateStruct &rs)
 	if (rs.vertex_buffer == nullptr) {
 		return false;
 	}
-	/* Screen-space 2D (Render2D); not terrain/sky/haze which use XYZ + normals. */
 	const unsigned fvf = rs.vertex_buffer->FVF_Info().Get_FVF();
+	/* Screen-space 2D (Render2D); not terrain/sky/haze which use XYZ + normals. */
 	return (fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW;
 }
 

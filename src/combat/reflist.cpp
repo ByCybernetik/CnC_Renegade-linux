@@ -233,7 +233,7 @@ const ReferencerClass & ReferencerClass::operator = ( const ScriptableGameObj * 
 
 	if ( reference_target != NULL ) {			// if new reference is non-null
 		ReferenceableClass<ScriptableGameObj> *referenceable = referenceable_from_gameobj( reference_target );
-		if ( !referenceable_ptr_ok( referenceable ) ) {
+		if ( referenceable == NULL ) {
 			return *this;
 		}
 

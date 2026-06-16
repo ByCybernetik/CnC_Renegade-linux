@@ -1,1 +1,1 @@
-../../../combat/combatsound.h
+../../../scripts/combatsound.h

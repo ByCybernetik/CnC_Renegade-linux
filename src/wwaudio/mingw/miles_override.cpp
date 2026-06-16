@@ -5,7 +5,7 @@
 */
 
 #include "mss_stub.h"
-#include "Utils.h"
+#include "utils.h"
 #include "miles_win32_util.h"
 
 #include <string.h>

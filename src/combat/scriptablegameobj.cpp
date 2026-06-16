@@ -60,7 +60,7 @@
 #include "matinfo.h"
 #include "gameobjmanager.h"
 #include "pscene.h"
-#include "SoundSceneObj.h"
+#include "soundsceneobj.h"
 #include "wwprofile.h"
 
 /*

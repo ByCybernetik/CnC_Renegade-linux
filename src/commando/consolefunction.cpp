@@ -37,6 +37,7 @@
 #include "consolefunction.h"
 #include "console.h"
 #include "textdisplay.h"
+#include "render2d.h"
 #include "combatgmode.h"
 #include "combat.h"
 #include "datasafe.h"
@@ -51,7 +52,7 @@
 #include "miscutil.h"
 #include "smartgameobj.h"
 #include "weapons.h"
-#include "WWAudio.H"
+#include "wwaudio.h"
 #include "wwprofile.h"
 //#include "gamesettings.h"
 #include "waypoint.h"
@@ -103,11 +104,15 @@
 #include "building.h"
 #include "vendor.h"
 #include "texture.h"
+#include "assetmgr.h"
 #include "rddesc.h"
 #include "combatchunkid.h"
 #include "dialogtests.h"
 #include "resource.h"
 #include "dx8wrapper.h"
+#if defined(RENEGADE_VULKAN)
+#include "../ww3d2_vulkan/vk_dx8_texture.h"
+#endif
 #include "sortingrenderer.h"
 #include "weathermgr.h"
 #include "mapmgr.h"
@@ -160,8 +165,20 @@
 #include "specialbuilds.h"
 #include "lightsolve.h"
 #include "lightsolvecontext.h"
+#include "gameinitmgr.h"
+#include "campaign.h"
 
 
+
+#if defined(RENEGADE_LINUX)
+static void Linux_Console_Log(const char *text)
+{
+	if (text != nullptr && text[0] != '\0') {
+		fputs(text, stderr);
+		fflush(stderr);
+	}
+}
+#endif
 
 void	ConsoleFunctionClass::Print( const char *format, ... )
 {
@@ -169,6 +186,9 @@ void	ConsoleFunctionClass::Print( const char *format, ... )
 	va_start (arg_list, format);
 	StringClass string;
 	string.Format_Args( format, arg_list );
+#if defined(RENEGADE_LINUX)
+	Linux_Console_Log(string.Peek_Buffer());
+#endif
 	if (Get_Text_Display()) {
 		WWASSERT( Get_Text_Display() );
 		Get_Text_Display()->Print_System( string );
@@ -3136,56 +3156,6 @@ public:
 */
 
 
-class ProfileConsoleFunctionClass : public ConsoleFunctionClass
-{
-public:
-	virtual	const char * Get_Name( void )	{ return "profile"; }
-	virtual	const char * Get_Help( void )	{ return "PROFILE - send a profile command (on,off,up,<#>)."; }
-	virtual	void Activate( const char * input ) {
-		Get_Console()->Profile_Command( input );
-	}
-};
-
-
-class QuickStatsConsoleFunctionClass : public ConsoleFunctionClass
-{
-public:
-	virtual	const char * Get_Name( void )	{ return "quick_stats"; }
-	virtual	const char * Get_Alias( void ){ return "qs"; }
-	virtual	const char * Get_Help( void )	{ return "QUICK_STATS - stats profile + profile on."; }
-	virtual	void Activate( const char * input ) {
-      ConsoleFunctionManager::Parse_Input("stats profile");
-		Get_Console()->Profile_Command( "on" );
-		Get_Console()->Profile_Command( "1" );
-		Get_Console()->Profile_Command( "reset" );
-		if (ConsoleBox.Is_Exclusive()) {
-			ConsoleBox.Set_Profile_Mode(true);
-		}
-	}
-};
-
-
-class ProfileCollectBeginConsoleFunctionClass : public ConsoleFunctionClass
-{
-public:
-	virtual	const char * Get_Name( void )	{ return "profile_collect_begin"; }
-	virtual	const char * Get_Help( void )	{ return "PROFILE_COLLECT_BEGIN"; }
-	virtual	void Activate( const char * input ) {
-		WWProfileManager::Begin_Collecting();
-	}
-};
-
-class ProfileCollectEndConsoleFunctionClass : public ConsoleFunctionClass
-{
-public:
-	virtual	const char * Get_Name( void )	{ return "profile_collect_end"; }
-	virtual	const char * Get_Help( void )	{ return "PROFILE_COLLECT_END"; }
-	virtual	void Activate( const char * input ) {
-		WWProfileManager::End_Collecting("profile_log.txt");
-	}
-};
-
-
 class SetTheStarConsoleFunctionClass : public ConsoleFunctionClass
 {
 public:
@@ -3299,6 +3269,268 @@ public:
 
 
 #endif // WWDEBUG, development only commands
+
+#if defined(WWDEBUG) || defined(RENEGADE_WWPROFILE)
+class ProfileConsoleFunctionClass : public ConsoleFunctionClass
+{
+public:
+	virtual	const char * Get_Name( void )	{ return "profile"; }
+	virtual	const char * Get_Help( void )	{ return "PROFILE - send a profile command (on,off,up,<#>)."; }
+	virtual	void Activate( const char * input ) {
+		Get_Console()->Profile_Command( input );
+	}
+};
+
+class QuickStatsConsoleFunctionClass : public ConsoleFunctionClass
+{
+public:
+	virtual	const char * Get_Name( void )	{ return "quick_stats"; }
+	virtual	const char * Get_Alias( void ){ return "qs"; }
+	virtual	const char * Get_Help( void )	{ return "QUICK_STATS - stats profile + profile on."; }
+	virtual	void Activate( const char * input ) {
+		ConsoleFunctionManager::Parse_Input("stats profile");
+		Get_Console()->Profile_Command( "on" );
+		Get_Console()->Profile_Command( "1" );
+		Get_Console()->Profile_Command( "reset" );
+		Get_Console()->Set_Profile_Overlay_Text(
+			"PROFILE DATA\n(collecting...)\n");
+		StatisticsDisplayManager::Set_Stat(
+			"profile",
+			"PROFILE DATA\n(collecting...)\n",
+			0xffffffff,
+			StatisticsDisplayManager::Default_Stat_Location());
+		Print("quick_stats: profiler overlay enabled (use 'stats off' to disable)\n");
+		if (ConsoleBox.Is_Exclusive()) {
+			ConsoleBox.Set_Profile_Mode(true);
+		}
+	}
+};
+
+class ProfileCollectBeginConsoleFunctionClass : public ConsoleFunctionClass
+{
+public:
+	virtual	const char * Get_Name( void )	{ return "profile_collect_begin"; }
+	virtual	const char * Get_Help( void )	{ return "PROFILE_COLLECT_BEGIN"; }
+	virtual	void Activate( const char * input ) {
+		WWProfileManager::Begin_Collecting();
+	}
+};
+
+class ProfileCollectEndConsoleFunctionClass : public ConsoleFunctionClass
+{
+public:
+	virtual	const char * Get_Name( void )	{ return "profile_collect_end"; }
+	virtual	const char * Get_Help( void )	{ return "PROFILE_COLLECT_END"; }
+	virtual	void Activate( const char * input ) {
+		WWProfileManager::End_Collecting("profile_log.txt");
+	}
+};
+#endif
+
+#if defined(RENEGADE_VULKAN)
+class TexProbeConsoleFunctionClass : public ConsoleFunctionClass {
+public:
+	virtual const char *Get_Name(void) { return "texprobe"; }
+	virtual const char *Get_Help(void)
+	{
+		return "TEXPROBE <name> - load texture and print Vulkan status (e.g. a_water)";
+	}
+	virtual void Activate(const char *input)
+	{
+		char name[256];
+		if (sscanf(input, "%255s", name) != 1) {
+			ConsoleFunctionClass::Print("usage: texprobe <texture_name>\n");
+			return;
+		}
+#if defined(RENEGADE_LINUX)
+		fprintf(stderr, "[texprobe] loading '%s'...\n", name);
+		fflush(stderr);
+#endif
+		TextureClass *tex = WW3DAssetManager::Get_Instance()->Get_Texture(name);
+		if (tex == nullptr) {
+			ConsoleFunctionClass::Print("texprobe: Get_Texture failed for '%s'\n", name);
+			return;
+		}
+		const bool loaded = ww3d_vulkan::Ensure_Texture_Loaded(tex);
+		const char *full_path = tex->Get_Full_Path().Peek_Buffer();
+		const char *tex_name = tex->Get_Texture_Name().Peek_Buffer();
+		const int w = loaded ? tex->Get_Width() : 0;
+		const int h = loaded ? tex->Get_Height() : 0;
+		StringClass result(true);
+		result.Format(
+			"texprobe '%s' name='%s' path='%s' loaded=%d %dx%d init=%d",
+			name,
+			tex_name != nullptr ? tex_name : "",
+			full_path != nullptr ? full_path : "",
+			loaded ? 1 : 0,
+			w,
+			h,
+			tex->Is_Initialized() ? 1 : 0);
+		ConsoleFunctionClass::Print("%s\n", result.Peek_Buffer());
+		if (Get_Console() != nullptr) {
+			Get_Console()->Set_Overlay_Help_Text(result.Peek_Buffer());
+		}
+		tex->Release_Ref();
+	}
+};
+#endif
+
+#if defined(WWDEBUG) || defined(RENEGADE_DEV_CONSOLE)
+
+class SpMapConsoleFunctionClass : public ConsoleFunctionClass {
+public:
+	virtual	const char * Get_Name( void )	{ return "spmap"; }
+	virtual	const char * Get_Help( void )	{ return "SPMAP <map> - load a single-player mission map (e.g. spmap m02, spmap M02.mix)."; }
+
+	static void Normalize_Map_Name( const char * input, StringClass & map_name )
+	{
+		map_name = "";
+
+		if ( input == NULL ) {
+			return;
+		}
+
+		while ( *input == ' ' || *input == '\t' ) {
+			input++;
+		}
+
+		if ( *input == '\0' ) {
+			return;
+		}
+
+		char root_name[ _MAX_FNAME ] = { 0 };
+		char extension[ _MAX_EXT ] = { 0 };
+		::_splitpath( input, NULL, NULL, root_name, extension );
+
+		if ( root_name[ 0 ] == '\0' ) {
+			return;
+		}
+
+		if ( root_name[ 0 ] >= '0' && root_name[ 0 ] <= '9' ) {
+			StringClass prefixed( 0, true );
+			prefixed.Format( "M%s", root_name );
+			::strncpy( root_name, prefixed.Peek_Buffer(), sizeof( root_name ) - 1 );
+			root_name[ sizeof( root_name ) - 1 ] = '\0';
+		}
+
+		if ( root_name[ 0 ] == 'm' ) {
+			root_name[ 0 ] = 'M';
+		}
+
+		if ( extension[ 0 ] == '\0' ) {
+			map_name.Format( "%s.mix", root_name );
+		} else {
+			map_name.Format( "%s%s", root_name, extension );
+		}
+	}
+
+	virtual	void Activate( const char * input ) {
+#ifndef MULTIPLAYERDEMO
+		StringClass map_name( 0, true );
+		Normalize_Map_Name( input, map_name );
+
+		if ( map_name.Is_Empty() ) {
+			Print( Get_Help() );
+			return;
+		}
+
+		if ( CombatManager::Is_Loading_Level() ) {
+			Print( "A level is already loading.\n" );
+			return;
+		}
+
+		GameModeClass * combat_mode = GameModeManager::Find( "Combat" );
+		if ( combat_mode != NULL && combat_mode->Is_Suspended() ) {
+			GameInitMgrClass::End_Game();
+			GameModeManager::Safely_Deactivate();
+		} else if ( GameInitMgrClass::Is_Game_In_Progress() ) {
+			GameInitMgrClass::End_Game();
+			GameModeManager::Safely_Deactivate();
+		}
+
+		GameInitMgrClass::Initialize_SP();
+		CampaignManager::Select_Backdrop_Number(
+			cGameData::Get_Mission_Number_From_Map_Name( map_name.Peek_Buffer() ) );
+		cGod::Reset_Inventory();
+		GameInitMgrClass::Start_Game( map_name, PLAYERTYPE_RENEGADE, 0 );
+		Print( "Loading %s...\n", map_name.Peek_Buffer() );
+#else
+		Print( "SPMAP is not available in the multiplayer demo build.\n" );
+#endif
+	}
+};
+
+#endif // WWDEBUG || RENEGADE_DEV_CONSOLE
+
+#if defined(RENEGADE_DEV_CONSOLE) && !defined(WWDEBUG)
+
+class DevAmmoConsoleFunctionClass : public ConsoleFunctionClass {
+public:
+	virtual	const char * Get_Name( void )	{ return "ammo"; }
+	virtual	const char * Get_Help( void )	{ return "AMMO <count> - sets the players weapon's ammo count."; }
+	virtual	void Activate( const char * input ) {
+		if ( COMBAT_STAR != NULL ) {
+			WeaponClass * weapon = COMBAT_STAR->Get_Weapon();
+			if ( weapon ) {
+				int amount = atoi( input );
+				weapon->Set_Total_Rounds( amount );
+				Print( "Ammo set to %d rounds\n", amount );
+			}
+		}
+	}
+};
+
+class DevGiveWeaponsConsoleFunctionClass : public ConsoleFunctionClass {
+public:
+	virtual	const char * Get_Name( void )	{ return "give_weapons"; }
+	virtual	const char * Get_Help( void )	{ return "GIVE_WEAPONS - give the commando all the weapons (single-player only)"; }
+	virtual	void Activate( const char * input ) {
+		(void)input;
+		if (cNetwork::I_Am_Server()) {
+			if (IS_SOLOPLAY && COMBAT_STAR ) {
+				COMBAT_STAR->Give_All_Weapons();
+			} else {
+				Print("Use FREE_WEAPONS instead in a multiplayer game.\n");
+			}
+		} else {
+			Print(Get_Help());
+		}
+	}
+};
+
+class DevMissionConsoleFunctionClass : public ConsoleFunctionClass {
+public:
+	virtual const char * Get_Name(void) {return "mission";}
+	virtual const char * Get_Help(void) {return "MISSION <success/failure> end mission with given status.";}
+	virtual void Activate(const char * input) {
+		if (!stricmp(input, "success")) {
+			CombatManager::Mission_Complete(true);
+		} else if (!stricmp(input, "failure")) {
+			CombatManager::Mission_Complete(false);
+		} else {
+			Print(Get_Help());
+		}
+	}
+};
+
+class DevGodConsoleFunctionClass : public ConsoleFunctionClass {
+public:
+	virtual	const char * Get_Name( void )	{ return "god"; }
+	virtual	const char * Get_Help( void )	{ return "GOD - toggle invulnerability (solo play).\n"; }
+
+	virtual	void Activate( const char * input ) {
+		(void)input;
+		if (cNetwork::I_Am_Client() && IS_SOLOPLAY) {
+			StringClass password;
+			cGodModeEvent * p_event = new cGodModeEvent;
+			p_event->Init(password);
+		} else {
+			Print(Get_Help());
+		}
+	}
+};
+
+#endif // RENEGADE_DEV_CONSOLE && !WWDEBUG
 
 class ScreenUVBiasConsoleFunctionClass : public ConsoleFunctionClass {
 public:
@@ -5028,6 +5260,7 @@ void	ConsoleFunctionManager::Init( void )
 	FunctionList.Add( new LrshCommandConsoleFunctionClass() );
 	FunctionList.Add( new LogMeshStatsConsoleFunctionClass() );
 	FunctionList.Add( new LogTexturesConsoleFunctionClass() );
+	FunctionList.Add( new SpMapConsoleFunctionClass() );
 	FunctionList.Add( new MainMenuConsoleFunctionClass() );
 	FunctionList.Add( new MaxFacingPenaltyConsoleFunctionClass() );
 	FunctionList.Add( new MeshDebuggerDisableMeshConsoleFunctionClass() );
@@ -5154,6 +5387,18 @@ void	ConsoleFunctionManager::Init( void )
 
 #endif // WWDEBUG (development commands)
 
+#if defined(RENEGADE_WWPROFILE) && !defined(WWDEBUG)
+	FunctionList.Add( new StatsConsoleFunctionClass() );
+	FunctionList.Add( new ProfileConsoleFunctionClass() );
+	FunctionList.Add( new QuickStatsConsoleFunctionClass() );
+	FunctionList.Add( new ProfileCollectBeginConsoleFunctionClass() );
+	FunctionList.Add( new ProfileCollectEndConsoleFunctionClass() );
+#endif
+
+#if defined(RENEGADE_VULKAN)
+	FunctionList.Add( new TexProbeConsoleFunctionClass() );
+#endif
+
    //
    // SHIPPING CONSOLE FUNCTIONS ONLY
    //
@@ -5177,6 +5422,13 @@ void	ConsoleFunctionManager::Init( void )
 	FunctionList.Add( new EditVehicleConsoleFunctionClass() );
 	FunctionList.Add( new NetUpdateRateConsoleFunctionClass() );
 	FunctionList.Add( new ClientPhysicsOptimizationConsoleFunctionClass() );
+#if defined(RENEGADE_DEV_CONSOLE) && !defined(WWDEBUG)
+	FunctionList.Add( new DevAmmoConsoleFunctionClass() );
+	FunctionList.Add( new DevGiveWeaponsConsoleFunctionClass() );
+	FunctionList.Add( new DevMissionConsoleFunctionClass() );
+	FunctionList.Add( new DevGodConsoleFunctionClass() );
+	FunctionList.Add( new SpMapConsoleFunctionClass() );
+#endif
 #ifndef FREEDEDICATEDSERVER
 	FunctionList.Add( new FPSConsoleFunctionClass() );		// Steve W wanted this.
 #endif //FREEDEDICATEDSERVER
@@ -5489,6 +5741,9 @@ void	ConsoleFunctionManager::Print( const char *format, ... )
 	va_start (arg_list, format);
 	StringClass string;
 	string.Format_Args( format, arg_list );
+#if defined(RENEGADE_LINUX)
+	Linux_Console_Log(string.Peek_Buffer());
+#endif
 	if (Get_Text_Display()) {
 		WWASSERT( Get_Text_Display() );
 		Get_Text_Display()->Print_System( string );

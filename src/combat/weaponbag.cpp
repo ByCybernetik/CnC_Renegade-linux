@@ -113,6 +113,10 @@ bool	WeaponBagClass::Load( ChunkLoadClass &cload )
 				break;
 
 			case CHUNKID_WEAPON_LIST:
+				while ( WeaponList.Count() > 1 ) {
+					delete WeaponList[ WeaponList.Count() - 1 ];
+					WeaponList.Delete( WeaponList.Count() - 1 );
+				}
 				WWASSERT( WeaponList.Count() == 1 );
 				while (cload.Open_Chunk()) {
 					WWASSERT( cload.Cur_Chunk_ID() == CHUNKID_WEAPON_ENTRY );
@@ -237,6 +241,7 @@ WeaponClass * 	WeaponBagClass::Add_Weapon( const WeaponDefinitionClass * def, in
 			Mark_Owner_Dirty();
 		}
 	} else {
+		weapon->Set_Owner( Owner );
 		if ( give_weapon ) {					// Make sure we have it if we are supposed to
 			weapon->Set_Weapon_Exists( true );
 			Mark_Owner_Dirty();
@@ -494,7 +499,17 @@ void	WeaponBagClass::Store_Inventory( InventoryClass * inventory )
 /*
 **
 */
-void	WeaponBagClass::Mark_Owner_Dirty( void ) 
+void	WeaponBagClass::Rebind_Owner( ArmedGameObj *owner )
+{
+	Owner = owner;
+	for ( int i = 1; i < WeaponList.Count(); i++ ) {
+		if ( WeaponList[i] != NULL ) {
+			WeaponList[i]->Set_Owner( owner );
+		}
+	}
+}
+
+void	WeaponBagClass::Mark_Owner_Dirty( void )
 {
 	if ( Owner != NULL ) {
 		Owner->Set_Object_Dirty_Bit( NetworkObjectClass::BIT_OCCASIONAL, true );

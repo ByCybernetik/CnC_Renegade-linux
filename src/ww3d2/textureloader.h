@@ -70,6 +70,9 @@ public:
 	static void Suspend_Texture_Load();
 	static void Continue_Texture_Load();
 
+	/* Cancel queued foreground/background loads so Vulkan can sync-reload. */
+	static void Abort_Pending_Load(TextureClass *tc);
+
 private:
 	static void Process_Foreground_Load			(TextureLoadTaskClass *task);
 	static void Process_Foreground_Thumbnail	(TextureLoadTaskClass *task);

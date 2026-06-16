@@ -87,10 +87,10 @@ unsigned WWProfile_Get_System_Time()
  *=============================================================================================*/
 inline void WWProfile_Get_Ticks(__int64 * ticks)
 {
-#ifdef _UNIX
-       *ticks = TIMEGETTIME();
-#elif defined(__GNUC__)
+#if defined(__GNUC__)
 	*ticks = (__int64)__rdtsc();
+#elif defined(_UNIX)
+	*ticks = TIMEGETTIME();
 #else
 	__asm
 	{

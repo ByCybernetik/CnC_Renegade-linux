@@ -2151,17 +2151,39 @@ void cGameData::On_Game_End(void)
 //-----------------------------------------------------------------------------
 int	cGameData::Get_Mission_Number_From_Map_Name( const char * map_name )
 {
-	// If tutorial, return tutorial number
-	if ( ::strnicmp( map_name, "M00_T", 5 ) == 0 ) {
+	if ( map_name == NULL || map_name[0] == '\0' ) {
+		return 0;
+	}
+
+	// Save games store the real map name in the file header, not in the filename.
+	StringClass resolved_name;
+	if ( SaveGameManager::Peek_Map_Name( map_name, resolved_name ) ) {
+		map_name = resolved_name.Peek_Buffer();
+	}
+
+	// Strip directory — map_name may be "M01.mix" or "save/foo/M01.mix".
+	const char * base = map_name;
+	const char * slash = base;
+	for ( const char * p = base; *p != '\0'; p++ ) {
+		if ( *p == '/' || *p == '\\' ) {
+			slash = p + 1;
+		}
+	}
+	base = slash;
+
+	// Tutorial load screen (Backdrop90).
+	if ( ::strnicmp( base, "M00_T", 5 ) == 0 ) {
 		#define	TUTORIAL_LOAD_MENU_NUMBER		90
 		return TUTORIAL_LOAD_MENU_NUMBER;
 	}
 
-
-	// Assume the map name is in the form "mXX.mix" where xx is the level number
-	if ( ::strlen( map_name ) > 0 ) {
-		return ::atoi( ((const char *)map_name)+1 );
+	// Mission maps: "M01.mix", "m13.mix", etc.
+	if ( base[0] == 'M' || base[0] == 'm' ) {
+		if ( base[1] != '\0' ) {
+			return ::atoi( base + 1 );
+		}
 	}
+
 	return 0;
 }
 

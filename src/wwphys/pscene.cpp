@@ -90,6 +90,9 @@
 #include "wwhack.h"
 #include "wwprofile.h"
 #include "wwmemlog.h"
+#if defined(RENEGADE_LINUX)
+#include "systimer.h"
+#endif
 #include "physgridcull.h"
 #include "staticaabtreecull.h"
 #include "dynamicaabtreecull.h"
@@ -1088,6 +1091,8 @@ void PhysicsSceneClass::Pre_Render_Processing(CameraClass & camera)
 {
 	WWPROFILE("Pre_Render_Processing");
 
+	camera.Invalidate_Frustum();
+
 	LastCameraPosition = camera.Get_Position();
 
 	DecalSystem->Update_Decal_Fade_Distances(camera);
@@ -1138,7 +1143,20 @@ void PhysicsSceneClass::Pre_Render_Processing(CameraClass & camera)
 			DynamicCullingSystem->Collect_Visible_Objects(camera.Get_Frustum(),pvs,VisibleDynamicObjectList);
 		}
 
-		// LOD processing 
+#if defined(RENEGADE_LINUX)
+		if (pvs != nullptr &&
+			VisibleStaticObjectList.Count() + VisibleWSMeshList.Count() == 0) {
+			VisibleStaticObjectList.Reset_List();
+			VisibleWSMeshList.Reset_List();
+			StaticCullingSystem->Collect_Visible_Objects(
+				camera.Get_Frustum(),
+				nullptr,
+				VisibleStaticObjectList,
+				VisibleWSMeshList);
+		}
+#endif
+
+		// LOD processing
 		Optimize_LODs(camera,&VisibleDynamicObjectList,&VisibleStaticObjectList,&VisibleWSMeshList);
 
 		// Texture projectors

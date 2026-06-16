@@ -43,7 +43,7 @@
 #include "textdisplay.h"
 #include "input.h"
 #include "combatgmode.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "systimer.h"
 #include "multihud.h"
 #include "useroptions.h"
@@ -1369,28 +1369,6 @@ void cNetwork::Hibernation_Think(void)
 
 				if (p_phys_go != NULL) {
 					p_phys_go->Reset_Hibernating();
-				}
-			}
-		} else if ( IS_MISSION && IS_SOLOPLAY && COMBAT_STAR != NULL ) {
-
-			#define MIN_HIB_DISTANCE 300
-
-			Vector3 star_pos;
-			COMBAT_STAR->Get_Position( &star_pos );
-
-			for (
-				SLNode<BaseGameObj> * p_objnode = GameObjManager::Get_Game_Obj_List()->Head();
-				p_objnode;
-				p_objnode = p_objnode->Next()) {
-
-				PhysicalGameObj * p_phys_go = p_objnode->Data()->As_PhysicalGameObj();
-				if ( p_phys_go != NULL && p_phys_go != COMBAT_STAR ) {
-					Vector3 pos;
-					p_phys_go->Get_Position( &pos );
-					pos -= star_pos;
-					if ( pos.Length2() < MIN_HIB_DISTANCE * MIN_HIB_DISTANCE ) {
-						p_phys_go->Reset_Hibernating();
-					}
 				}
 			}
 		} else {

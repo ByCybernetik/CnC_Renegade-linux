@@ -61,7 +61,7 @@
 #include "physcoltest.h"
 #include "htree.h"
 #include "animobj.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "soldierobserver.h"
 #include "playertype.h"
 #include "crandom.h"
@@ -70,7 +70,7 @@
 #include "translatedb.h"
 #include "translateobj.h"
 #include "hlod.h"
-#include "AudibleSound.h"
+#include "audiblesound.h"
 #include "wwprofile.h"
 #include "globalsettings.h"
 #include "colors.h"
@@ -3478,6 +3478,7 @@ float SoldierGameObj::Say_Dynamic_Dialogue
 			//
 			AudibleSoundClass *speech = WWAudioClass::Get_Instance ()->Create_Sound( sound_def_id );
 			if ( speech != NULL ) {
+				speech->Set_Type (AudibleSoundClass::TYPE_DIALOG);
 				duration = (speech->Get_Duration() / 1000.0F);
 
 				//

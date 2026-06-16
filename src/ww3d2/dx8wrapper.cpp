@@ -66,6 +66,7 @@
 #include "missingtexture.h"
 #include "thread.h"
 #include <stdio.h>
+#include <string.h>
 #include <D3dx8core.h>
 #include <d3d8caps.h>
 #include "pot.h"
@@ -85,6 +86,7 @@
 #include "render_device.h"
 #include "vulkan_render_device.h"
 #include "vk_dx8_bridge.h"
+#include "vk_dx8_texture.h"
 #include "vk_dx8_state.h"
 #include "vk_native_render_state.h"
 #include "dx8vertexbuffer.h"
@@ -2277,16 +2279,13 @@ void DX8Wrapper::Draw_Sorting_IB_VB(
 
 #if defined(RENEGADE_VULKAN)
 	if (Vulkan_Device_Active()) {
-		DX8VertexBufferClass *vb =
-			static_cast<DX8VertexBufferClass *>(dyn_vb_access.VertexBuffer);
-		DX8IndexBufferClass *ib =
-			static_cast<DX8IndexBufferClass *>(dyn_ib_access.IndexBuffer);
 		Matrix4 world;
 		Matrix4 view;
 		Matrix4 projection;
 		Get_Transform(D3DTS_WORLD, world);
 		Get_Transform(D3DTS_VIEW, view);
 		Get_Transform(D3DTS_PROJECTION, projection);
+		Apply_Render_State_Changes();
 		ww3d_vulkan::VulkanRenderDevice::Get().Prepare_Draw(
 			false,
 			render_state.shader,
@@ -2295,6 +2294,10 @@ void DX8Wrapper::Draw_Sorting_IB_VB(
 			projection,
 			render_state.Textures,
 			MAX_TEXTURE_STAGES);
+		DX8VertexBufferClass *vb =
+			static_cast<DX8VertexBufferClass *>(dyn_vb_access.VertexBuffer);
+		DX8IndexBufferClass *ib =
+			static_cast<DX8IndexBufferClass *>(dyn_ib_access.IndexBuffer);
 		ww3d_vulkan::DrawIndexedDesc draw_desc;
 		draw_desc.primitive_type = D3DPT_TRIANGLELIST;
 		draw_desc.start_index = dyn_ib_access.IndexBufferOffset;
@@ -2576,14 +2579,51 @@ void DX8Wrapper::Draw_Strip(
 //
 // ----------------------------------------------------------------------------
 
+#if defined(RENEGADE_VULKAN)
+void DX8Wrapper::Vulkan_Apply_Per_Draw_State()
+{
+	if (!Vulkan_Device_Active()) {
+		return;
+	}
+	/*
+	 * ShaderClass::Apply() no-ops when CurrentShader == ShaderBits, but sorting
+	 * still needs native stage modes and mapper UV updates every draw.
+	 */
+	ww3d_vulkan::Native_Render_State_On_Shader(render_state.shader);
+	render_state.shader.Apply();
+	for (unsigned i = 0; i < 2; ++i) {
+		if (render_state.Textures[i] != nullptr) {
+			render_state.Textures[i]->Apply(i);
+		} else {
+			TextureClass::Apply_Null(i);
+		}
+	}
+	if (render_state.material != nullptr) {
+		const_cast<VertexMaterialClass *>(render_state.material)->Apply();
+	}
+}
+#endif
+
 void DX8Wrapper::Apply_Render_State_Changes()
 {
+#if defined(RENEGADE_VULKAN)
+	if (Vulkan_Device_Active() && !render_state_changed) {
+		Vulkan_Apply_Per_Draw_State();
+		return;
+	}
+#endif
 	if (!render_state_changed) return;
 	if (render_state_changed&SHADER_CHANGED) {
 		SNAPSHOT_SAY(("DX8 - apply shader\n"));
 		render_state.shader.Apply();
 	}
 
+#if defined(RENEGADE_VULKAN)
+	if (Vulkan_Device_Active()) {
+		Vulkan_Apply_Per_Draw_State();
+	} else
+#endif
+	{
 	unsigned mask=TEXTURE0_CHANGED;
 	for (unsigned i=0;i<MAX_TEXTURE_STAGES;++i,mask<<=1) {
 		if (render_state_changed&mask) {
@@ -2594,6 +2634,7 @@ void DX8Wrapper::Apply_Render_State_Changes()
 		else {
 			SNAPSHOT_SAY(("DX8 - texture %d not changed (%s)\n",i,render_state.Textures[i] ? render_state.Textures[i]->Get_Full_Path() : "NULL"));
 		}
+	}
 	}
 
 	if (render_state_changed&MATERIAL_CHANGED) {
@@ -4073,6 +4114,7 @@ void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 
 	RenderStateStruct rs;
 	DX8Wrapper::Get_Render_State(rs);
+	bool draw_use_lighting = false;
 	Matrix4 view_m;
 	DX8Wrapper::Get_Transform(D3DTS_VIEW, view_m);
 	Matrix4 view_row = view_m.Transpose();
@@ -4096,12 +4138,43 @@ void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 		Vector3_To_Float4(specular, 1.0f, state->material_specular);
 		state->material_shininess = material->Get_Shininess();
 
-		if (material->Get_Lighting()) {
-			state->flags |= (uint32_t)FrameUBO::FLAG_LIGHTING;
+		bool use_lighting = material->Get_Lighting();
+		/*
+		 * W3D pickups store zero material colors. D3D8 MODULATE still passes texture RGB;
+		 * disable per-material lighting multiply and use white UBO coefficients.
+		 */
+		const float dr = diffuse.X;
+		const float dg = diffuse.Y;
+		const float db = diffuse.Z;
+		const float er = emissive.X;
+		const float eg = emissive.Y;
+		const float eb = emissive.Z;
+		const bool ui_overlay =
+			shader.Get_Depth_Mask() == ShaderClass::DEPTH_WRITE_DISABLE &&
+			shader.Get_Depth_Compare() == ShaderClass::PASS_ALWAYS;
+		const bool zero_w3d_material =
+			dr == 0.0f && dg == 0.0f && db == 0.0f &&
+			er == 0.0f && eg == 0.0f && eb == 0.0f;
+		if (zero_w3d_material) {
+			use_lighting = false;
+			Vector3 white(1.0f, 1.0f, 1.0f);
+			Vector3_To_Float4(white, 1.0f, state->material_diffuse);
+			Vector3_To_Float4(white, 1.0f, state->material_ambient);
+			Vector3_To_Float4(Vector3(0.0f, 0.0f, 0.0f), 1.0f, state->material_emissive);
 		}
 		if (material->Get_Diffuse_Color_Source() == VertexMaterialClass::COLOR1) {
 			state->flags |= (uint32_t)FrameUBO::FLAG_DIFFUSE_FROM_VERTEX;
+			/*
+			 * W3D pickups bake lighting into COLOR1 vertex colors; black solve zeros
+			 * MODULATE output. 2D UI also uses PRELIT_DIFFUSE (COLOR1) but draws as a
+			 * depth-less overlay — skip fixup there so intentional black text stays black.
+			 */
+			if (!ui_overlay) {
+				state->flags |= (uint32_t)FrameUBO::FLAG_COLOR1_UNLIT_MODULATE;
+				use_lighting = false;
+			}
 		}
+		draw_use_lighting = use_lighting;
 	} else {
 		state->material_ambient[0] = state->material_ambient[1] = state->material_ambient[2] = 1.0f;
 		state->material_ambient[3] = 1.0f;
@@ -4124,6 +4197,30 @@ void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 
 	ww3d_vulkan::Native_Render_State_On_Shader(shader);
 	ww3d_vulkan::Native_Render_State_Fill_Texture(state);
+
+	if (material != nullptr) {
+		const bool ui_overlay =
+			shader.Get_Depth_Mask() == ShaderClass::DEPTH_WRITE_DISABLE &&
+			shader.Get_Depth_Compare() == ShaderClass::PASS_ALWAYS;
+		/*
+		 * Dropped weapons skip static light-solve and keep default material with
+		 * lighting enabled — MODULATE × full dynamic lighting looks too bright.
+		 */
+		if (!ui_overlay &&
+				ww3d_vulkan::Last_Stage0_Texture_Is_Pickup() &&
+				shader.Get_Texturing() == ShaderClass::TEXTURING_ENABLE &&
+				material->Get_Diffuse_Color_Source() != VertexMaterialClass::COLOR1)
+		{
+			draw_use_lighting = false;
+			Vector3 white(1.0f, 1.0f, 1.0f);
+			Vector3_To_Float4(white, 1.0f, state->material_diffuse);
+			Vector3_To_Float4(white, 1.0f, state->material_ambient);
+		}
+	}
+
+	if (draw_use_lighting) {
+		state->flags |= (uint32_t)FrameUBO::FLAG_LIGHTING;
+	}
 
 	bool fog_active = false;
 	if (DX8Wrapper::Get_Fog_Enable()) {

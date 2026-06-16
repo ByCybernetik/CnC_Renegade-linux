@@ -122,10 +122,12 @@ protected:
 
 	void								Free(void);
 	void								Update_Sub_Object_Transforms(void);
+	void								Update_Cached_Poly_Count(void);
 	
 	DynamicVectorClass <ProxyClass>			ProxyList;
 	DynamicVectorClass <RenderObjClass *>	SubObjects;
 	SnapPointsClass *								SnapPoints;
+	mutable int										CachedPolyCount;
 
 	SphereClass										BoundSphere;
 	AABoxClass										BoundBox;

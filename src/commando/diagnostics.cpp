@@ -46,6 +46,7 @@
 #include "singlepl.h"
 #include "gameobjmanager.h"
 #include "gamemode.h"
+#include "timemgr.h"
 #include "humanphys.h"
 #include "playermanager.h"
 #include "useroptions.h"
@@ -58,6 +59,7 @@
 #include "specialbuilds.h"
 #include "consolemode.h"
 #include "gametype.h"
+#include "textdisplay.h"
 
 static int RendererFps;
 static int RendererSFps;
@@ -186,7 +188,17 @@ void cDiagnostics::Render(void)
 	bool changed=false;
 
 	if (cDevOptions::ShowFps.Is_True()) {
-		int fps=cNetwork::Get_Fps();
+		int fps = cNetwork::Get_Fps();
+#if defined(RENEGADE_LINUX)
+		if (GameModeManager::Find("Combat") != NULL &&
+			GameModeManager::Find("Combat")->Is_Active())
+		{
+			const float real_sec = TimeManager::Get_Frame_Real_Seconds();
+			if (real_sec > 0.001f) {
+				fps = (int)(1.0f / real_sec + 0.5f);
+			}
+		}
+#endif
 		if (fps!=RendererFps) {
 			RendererFps=fps;
 			changed=true;
@@ -252,6 +264,9 @@ void cDiagnostics::Render(void)
 
 	if (cDevOptions::ShowFps.Is_True()) {
 		// Stop the flicker
+		changed = true;
+	}
+	if (StatisticsDisplayManager::Is_Display_Active()) {
 		changed = true;
 	}
 	// Render only if changed!
@@ -476,6 +491,12 @@ void cDiagnostics::Render(void)
 
 #endif // WWDEBUG
 	PRenderer->Render();
+
+	if (StatisticsDisplayManager::Is_Display_Active()) {
+		RectClass rect = Render2DClass::Get_Screen_Resolution();
+		PRenderer->Set_Coordinate_Range(rect);
+		StatisticsDisplayManager::Render(PRenderer);
+	}
 
 }
 

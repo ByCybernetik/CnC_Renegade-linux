@@ -54,7 +54,7 @@
 #include "apppackettypes.h"
 #include "translateobj.h"
 #include "translatedb.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "messagewindow.h"
 #include "CNCModeSettings.h"
 

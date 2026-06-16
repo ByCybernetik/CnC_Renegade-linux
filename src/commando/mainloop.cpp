@@ -46,7 +46,7 @@
 #include "cnetwork.h"
 #include "miscutil.h"
 //#include "gamesettings.h"
-#include "WWAudio.H"
+#include "wwaudio.h"
 #include "devoptions.h"
 #include "multihud.h"
 #include "gamedata.h"
@@ -68,9 +68,6 @@
 #if defined(RENEGADE_LINUX)
 #include "../platform/sdl3_host.h"
 #include "binkmovie.h"
-#include "../ww3d2/dx8wrapper.h"
-#include "../ww3d2/assetmgr.h"
-#include "../ww3d2/texture.h"
 #endif
 
 
@@ -103,7 +100,9 @@ void _Game_Main_Loop_Loop(void)
 
    TimeManager::Update();
 
+#if defined(RENEGADE_LINUX)
    Windows_Message_Handler();
+#endif
    Input::Update();
 
 #if defined(RENEGADE_LINUX)
@@ -135,8 +134,6 @@ void _Game_Main_Loop_Loop(void)
    GameModeManager::Think();
 	GameInitMgrClass::Think();
 }
-
-
 
 {	WWPROFILE( "Dialog Mgr Update" );
    DialogMgrClass::On_Frame_Update ();
@@ -181,11 +178,13 @@ void _Game_Main_Loop_Loop(void)
 
 	DEMO_SECURITY_CHECK;
 
+#if !defined(RENEGADE_DISABLE_AUDIO)
 {	WWPROFILE( "Audio" );
 	if (!ConsoleBox.Is_Exclusive()) {
 		WWAudioClass::Get_Instance ()->On_Frame_Update (0);
 	}
 }
+#endif
 	// Give the sound manager a chance to think
   // PROFILE(	"Audio", WWAudioClass::Get_Instance ()->On_Frame_Update (0) );
 
@@ -207,6 +206,7 @@ void _Game_Main_Loop_Loop(void)
 
    DebugManager::Update();
 
+	cNetwork::Update_Fps();
 
 	/*
 	** Sleep for a while if we are hogging the CPU.

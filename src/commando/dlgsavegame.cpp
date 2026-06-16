@@ -717,9 +717,16 @@ SaveGameMenuClass::Check_HD_Space (void)
 
 	ULARGE_INTEGER freebytecount;		// Free bytes on disk available to caller (caller may not have access to entire disk).
 	ULARGE_INTEGER totalbytecount;	// Total bytes on disk.
-	StringClass		kernelpathname;
 	__int64			diskspace;
 
+#if defined(RENEGADE_LINUX)
+	// Linux shim implements GetDiskFreeSpaceEx directly; dynamic kernel32 lookup crashes.
+	if (!GetDiskFreeSpaceEx(NULL, &freebytecount, &totalbytecount, NULL)) {
+		return false;
+	}
+	diskspace = freebytecount.QuadPart;
+#else
+	StringClass		kernelpathname;
 	int (__stdcall *getfreediskspaceex) (LPCTSTR, PULARGE_INTEGER, PULARGE_INTEGER, PULARGE_INTEGER);
 
 	//	Get the free disk space on the drive.
@@ -745,6 +752,7 @@ SaveGameMenuClass::Check_HD_Space (void)
 		if (!GetDiskFreeSpace (NULL, &sectorspercluster, &bytespersector, &freeclustercount, &totalclustercount)) return (false); 
 		diskspace = sectorspercluster * bytespersector * freeclustercount;
 	}
+#endif
 	
 	//
 	//	Is there at least 2 megs of disk space available?

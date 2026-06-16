@@ -51,8 +51,8 @@
 #include "combatsound.h"
 #include "slnode.h"
 #include "scripts.h"
-#include "WWAudio.h"
-#include "Sound3D.h"
+#include "wwaudio.h"
+#include "sound3d.h"
 #include "chunkio.h"
 #include "assets.h"
 #include "bullet.h"
@@ -814,7 +814,12 @@ void	WeaponClass::Fire_Bullet( const AmmoDefinitionClass *ammo_def, bool primary
 {
 	WWPROFILE( "Fire Bullet" );
 
-	if ( Get_Owner() == COMBAT_STAR ) {
+	ArmedGameObj * owner = Get_Owner();
+	if ( owner == NULL ) {
+		return;
+	}
+
+	if ( owner == COMBAT_STAR ) {
 		Vector3 pos;
 		COMBAT_STAR->Get_Position( &pos );
 	   DIAG_LOG(( "WFRD", "%1.2f; %1.2f; %1.2f; %s; %d; %d", pos.X, pos.Y, pos.Z, Get_Definition()->Get_Name(), !primary, Get_Total_Rounds() ));
@@ -827,7 +832,7 @@ void	WeaponClass::Fire_Bullet( const AmmoDefinitionClass *ammo_def, bool primary
 
 	int muzzle_index = (Get_Total_Rounds_Fired() & 1) + ( primary ? 0 : 2 );
 
-	if ( !Get_Owner()->Muzzle_Exists( muzzle_index ) ) {
+	if ( !owner->Muzzle_Exists( muzzle_index ) ) {
 		// if the second muzzle doesn't exist, use the first
 		if ( muzzle_index & 1 ) {
 			muzzle_index--;
@@ -837,12 +842,12 @@ void	WeaponClass::Fire_Bullet( const AmmoDefinitionClass *ammo_def, bool primary
 	Matrix3D muzzle = Get_Muzzle( muzzle_index );
 
 	// Special test for first person
-	if ( CombatManager::Is_First_Person() && Get_Owner() == COMBAT_STAR ) {
+	if ( CombatManager::Is_First_Person() && owner == COMBAT_STAR ) {
 		Vector3	fp_muzzle_pos = WeaponViewClass::Get_Muzzle_Pos();
 
 		// cast to see what we hit
 		Vector3 start = fp_muzzle_pos;
-		Vector3 end = Get_Owner()->Get_Targeting_Pos();
+		Vector3 end = owner->Get_Targeting_Pos();
 		LineSegClass ray( start, end );
 		CastResultStruct res;
 		PhysRayCollisionTestClass raytest(ray,&res,BULLET_COLLISION_GROUP,COLLISION_TYPE_PROJECTILE);
@@ -856,7 +861,7 @@ void	WeaponClass::Fire_Bullet( const AmmoDefinitionClass *ammo_def, bool primary
 
 		// If the hit point is near the targeting_pos, use the first person muzzle
 		if ( raytest.Result->Fraction >= 0.99F ) {
-			muzzle.Obj_Look_At( fp_muzzle_pos, Get_Owner()->Get_Targeting_Pos(), 0 );
+			muzzle.Obj_Look_At( fp_muzzle_pos, owner->Get_Targeting_Pos(), 0 );
 		}
 	}
 
@@ -868,7 +873,7 @@ void	WeaponClass::Fire_Bullet( const AmmoDefinitionClass *ammo_def, bool primary
 		Vector3 start = muzzle.Get_Translation();
 
 		// (gth) this modification makes bikes able to target anything even though their muzzle doesn't rotate...
-		Vector3 end = Get_Owner()->Get_Targeting_Pos(); //muzzle * Vector3( ammo_def->Range, 0, 0 );
+		Vector3 end = owner->Get_Targeting_Pos(); //muzzle * Vector3( ammo_def->Range, 0, 0 );
 
 		LineSegClass ray( start, end );
 		CastResultStruct res;
@@ -999,7 +1004,7 @@ void	WeaponClass::Fire_Bullet( const AmmoDefinitionClass *ammo_def, bool primary
 	}
 
 	// Initiate recoil effects on our parent object.
-	Get_Owner()->Start_Recoil(muzzle_index,Get_Recoil_Scale(),Get_Recoil_Time());
+	owner->Start_Recoil(muzzle_index,Get_Recoil_Scale(),Get_Recoil_Time());
 
 	TotalRoundsFired++;
 }
@@ -1114,10 +1119,12 @@ void	WeaponClass::Do_Firing_Effects( void )
 
 	WWPROFILE( "Firing Effects" );
 
+	ArmedGameObj * owner = Get_Owner();
+
 	Matrix3D	muzzle = Get_Muzzle();
 
 	// Don't do these two if fired by the star in First Person Mode
-	if ( (Get_Owner() != COMBAT_STAR) || !CombatManager::Is_First_Person() ) {
+	if ( (owner != COMBAT_STAR) || !CombatManager::Is_First_Person() ) {
 
 #if 01
 		// create muzzle flash
@@ -1152,7 +1159,7 @@ void	WeaponClass::Do_Firing_Effects( void )
 #endif
 
 		// if this gun is fired by the STAR and they have an eject bone, eject a shell.
-		if ((Get_Owner() == COMBAT_STAR) && (Model != NULL)) {
+		if ((owner == COMBAT_STAR) && (Model != NULL)) {
 			WWPROFILE( "Eject" );
 			int eject_index = Model->Get_Bone_Index( "eject" );
 			if ( eject_index > 0 ) {
@@ -1186,7 +1193,7 @@ void	WeaponClass::Do_Firing_Effects( void )
 	// if we need to re-create the sound...
 	//
 	if ( FiringSound != NULL ) {
-		if ( Get_Owner() == COMBAT_STAR && CombatManager::Is_First_Person() ) {
+		if ( owner == COMBAT_STAR && CombatManager::Is_First_Person() ) {
 			
 			//
 			//	In first person, we need the sound to be "2D"
@@ -1228,10 +1235,15 @@ void	WeaponClass::Do_Firing_Effects( void )
 
 		FiringSound->Stop( false );
 
-		if ( Get_Owner() != COMBAT_STAR || CombatManager::Is_First_Person() == false ) {
+		if ( FiringSound->Get_Class_ID () == CLASSID_2D ) {
+			FiringSound->Set_Runtime_Priority (DEF_WEAPON_FIRE_RUNTIME_PRIORITY);
+		}
+
+		if ( owner != COMBAT_STAR || CombatManager::Is_First_Person() == false ) {
 			FiringSound->Add_To_Scene( true );
 			FiringSound->Play();
 		} else {
+			FiringSound->Remove_From_Scene ();
 			FiringSound->Play();
 		}
 
@@ -1258,7 +1270,7 @@ void	WeaponClass::Do_Firing_Effects( void )
 			//	Determine whether to play the sound as 2D or 3D
 			//
 			int classid_hint = CLASSID_3D;
-			if ( Get_Owner() == COMBAT_STAR && CombatManager::Is_First_Person() ) {
+			if ( owner == COMBAT_STAR && CombatManager::Is_First_Person() ) {
 				classid_hint = CLASSID_2D;
 			}
 
@@ -1266,7 +1278,7 @@ void	WeaponClass::Do_Firing_Effects( void )
 			//	Create the sound
 			//
 			RefCountedGameObjReference *owner_ref = new RefCountedGameObjReference;
-			owner_ref->Set_Ptr( Get_Owner() );
+			owner_ref->Set_Ptr( owner );
 			FiringSound = WWAudioClass::Get_Instance()->Create_Sound( sound_id, owner_ref, 0, classid_hint );
 			REF_PTR_RELEASE( owner_ref );
 		}
@@ -1276,7 +1288,15 @@ void	WeaponClass::Do_Firing_Effects( void )
 			FiringSoundDefID = sound_id;
 			FiringSound->Set_Transform( muzzle );
 			FiringSound->Attach_To_Object( Model );
-			FiringSound->Add_To_Scene( true );
+			if ( FiringSound->Get_Class_ID () == CLASSID_2D ) {
+				FiringSound->Set_Runtime_Priority (DEF_WEAPON_FIRE_RUNTIME_PRIORITY);
+			}
+			if ( owner == COMBAT_STAR && CombatManager::Is_First_Person() ) {
+				FiringSound->Remove_From_Scene ();
+				FiringSound->Play ();
+			} else {
+				FiringSound->Add_To_Scene( true );
+			}
 		}
 	}
 
@@ -1284,8 +1304,10 @@ void	WeaponClass::Do_Firing_Effects( void )
 	// Byon, this can be done with any RigidBody derived physics object (all vehicles)
 	// I suggest making it a parameter of the weapon and having the strength be a
 	// multiple of the mass of the vehicle.
-	ArmedGameObj * owner = Get_Owner();
-	VehicleGameObj * vehicle_game_obj = owner->As_VehicleGameObj();
+	VehicleGameObj * vehicle_game_obj = NULL;
+	if ( owner != NULL ) {
+		vehicle_game_obj = owner->As_VehicleGameObj();
+	}
 	if (vehicle_game_obj != NULL) {
 		PhysClass * vehicle = vehicle_game_obj->Peek_Physical_Object();
 		if (vehicle->As_TrackedVehicleClass() != NULL) {
@@ -1599,9 +1621,24 @@ void	WeaponClass::Update_State( float pending_time )
 
 void	WeaponClass::Force_Reload( void )
 {
+	if ( !Is_Reload_OK() ) {
+		return;
+	}
+
+	if ( State > STATE_READY ) {
+		return;
+	}
+
+	/*
+	** smartgameobj calls Force_Reload every frame while R is held. After Do_Reload the
+	** clip is full but the key is still down — replayed reload SFX (not an audio loop).
+	*/
+	if ( (int)ClipRounds >= (int)Definition->ClipSize ) {
+		return;
+	}
+
 	// Stop reloading on last bullet to fire faster
-//	if ( Is_Reload_OK() && State != STATE_RELOAD ) {
-	if ( Is_Reload_OK() && State <= STATE_READY ) {
+	{
 		/*
 		** Release the looping fire sound so reload does not share / fight over the same
 		** 2D sample handle (distorted noise under FAudio).
@@ -1647,12 +1684,11 @@ void	WeaponClass::Force_Reload( void )
 				reload_sound = WWAudioClass::Get_Instance()->Create_Sound(
 					Definition->ReloadSoundDefID, owner_ref, 0, CLASSID_2D );
 			}
-			int instant_id = 0;
 			if ( reload_sound != NULL ) {
+				reload_sound->Set_Loop_Count (1);
 				reload_sound->Set_Runtime_Priority (DEF_RELOAD_RUNTIME_PRIORITY);
 				reload_sound->Set_Transform (muzzle);
 				reload_sound->Cull_Sound (false);
-				instant_id = reload_sound->Get_ID ();
 				reload_sound->Play ();
 				reload_sound->Release_Ref ();
 			}
@@ -1873,13 +1909,21 @@ void	WeaponClass::Stop_Firing_Sound( void )
 void	WeaponClass::Display_Targeting( void )
 {
 	WWPROFILE( "Cast_Star_Weapon" );
+
+	ArmedGameObj * owner = Get_Owner();
+	if ( owner == NULL ) {
+		return;
+	}
+
 	int muzzle_index = Get_Total_Rounds_Fired() & 1;
 
 	// vehicles that don't have a turret bone and do have homing weapons target from the camera
 	Matrix3D muzzle;
-	VehicleGameObj * vehicle = Get_Owner()->As_VehicleGameObj();;
+	VehicleGameObj * vehicle = owner->As_VehicleGameObj();
 
-	if (vehicle && (vehicle->Has_Turret() == false) && (PrimaryAmmoDefinition->IsTracking)) {
+	if (vehicle && (vehicle->Has_Turret() == false) &&
+			PrimaryAmmoDefinition != NULL && PrimaryAmmoDefinition->IsTracking &&
+			COMBAT_CAMERA != NULL) {
 		muzzle = COMBAT_CAMERA->Get_Transform();
 		muzzle.Rotate_Z( DEG_TO_RADF(90.0) );
 		muzzle.Rotate_Y( DEG_TO_RADF(90.0) );
@@ -1897,7 +1941,7 @@ void	WeaponClass::Display_Targeting( void )
 
 	Ignore_Owner();
 
-	{
+	if ( COMBAT_SCENE != NULL ) {
 		WWPROFILE( "Cast_Ray" );
 		COMBAT_SCENE->Cast_Ray( raytest );
 	}
@@ -1913,7 +1957,7 @@ void	WeaponClass::Display_Targeting( void )
 	if ( raytest.CollidedPhysObj && raytest.CollidedPhysObj->Get_Observer() != NULL ) {
 		DamageableGameObj * obj = ((CombatPhysObserverClass *)raytest.CollidedPhysObj->Get_Observer())->As_DamageableGameObj();
 
-		if ( obj->Is_Targetable() == false ) {
+		if ( obj != NULL && obj->Is_Targetable() == false ) {
 			obj = NULL;
 		}
 

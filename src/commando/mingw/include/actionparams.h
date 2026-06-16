@@ -1,1 +1,1 @@
-../../../combat/actionparams.h
+../../../scripts/actionparams.h

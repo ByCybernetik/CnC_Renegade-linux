@@ -46,7 +46,11 @@
 #include "always.h"
 #include "dllist.h"
 #include <d3d8.h>
+#if defined(RENEGADE_VULKAN)
+#include "d3dx8_vulkan.h"
+#else
 #include <d3dx8.h>
+#endif
 #include "../platform/linux/d3d8_lockrect.h"
 #include "matrix4.h"
 #include "statistics.h"
@@ -554,10 +558,13 @@ protected:
 	static bool Find_Z_Mode(D3DFORMAT colorbuffer,D3DFORMAT backbuffer, D3DFORMAT *zmode);
 	static bool Test_Z_Mode(D3DFORMAT colorbuffer,D3DFORMAT backbuffer, D3DFORMAT zmode);
 	static void Compute_Caps(WW3DFormat display_format);
+#if defined(RENEGADE_VULKAN)
+	static void Vulkan_Apply_Per_Draw_State();
+#endif
 
 	/*
 	** Protected Member Variables
-	*/
+	 */
 
 	static RenderStateStruct			render_state;
 	static unsigned						render_state_changed;

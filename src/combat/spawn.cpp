@@ -47,7 +47,7 @@
 #include "gameobjmanager.h"
 #include "soldierobserver.h"
 #include "crandom.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "assets.h"
 #include "objlibrary.h"
 #include "movephys.h"
@@ -57,9 +57,6 @@
 #include "combatmaterialeffectmanager.h"
 #include "transitioneffect.h"
 #include "humanphys.h"
-#if defined(__GNUC__) && defined(_WIN32)
-#include <stdio.h>
-#endif
 
 
 //
@@ -602,7 +599,7 @@ void	SpawnerClass::Check_Auto_Spawn( float dtime )
 	} else if ( Get_Definition().KillHibernatingSpawn && _Allow_Killing_Hibernating_Spawn ) {
 		 // If our last spawn is alive, but hibernating
 		PhysicalGameObj * spawn = (PhysicalGameObj *)LastSpawn.Get_Ptr();
-		if ( spawn->Is_Hibernating() ) {
+		if ( spawn != NULL && spawn->Is_Hibernating() ) {
 			spawn->Set_Delete_Pending();	// Kill em
 			SpawnCount--;
 			SpawnDelayTimer = 0;		// no delay to bring him back

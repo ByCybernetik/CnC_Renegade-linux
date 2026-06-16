@@ -207,7 +207,8 @@ MeshClass::MeshClass(void) :
 	NextVisibleSkin(NULL),
 	IsDisabledByDebugger(false),
 	MeshDebugId(MeshDebugIdCount++),
-	UserLighting(NULL)
+	UserLighting(NULL),
+	CachedPolyCount(0)
 {
 }
 
@@ -234,9 +235,11 @@ MeshClass::MeshClass(const MeshClass & that) :
 	NextVisibleSkin(NULL),
 	IsDisabledByDebugger(false),
 	MeshDebugId(MeshDebugIdCount++),
-	UserLighting(NULL)
+	UserLighting(NULL),
+	CachedPolyCount(0)
 {
 	REF_PTR_SET(Model,that.Model);					// mesh instances share models by default
+	Update_Cached_Poly_Count();
 }
 
 
@@ -262,6 +265,7 @@ MeshClass & MeshClass::operator = (const MeshClass & that)
 
 		REF_PTR_SET(Model,that.Model);				// mesh instances share models by default
 		BaseVertexOffset = that.BaseVertexOffset;
+		Update_Cached_Poly_Count();
 
 		// just dont copy the decals or light environment
 		REF_PTR_RELEASE(DecalMesh);
@@ -337,6 +341,7 @@ void MeshClass::Free(void)
 		delete[] UserLighting;
 		UserLighting = NULL;
 	}
+	CachedPolyCount = 0;
 }
 
 
@@ -691,16 +696,21 @@ void MeshClass::Delete_Decal(uint32 decal_id)
  * HISTORY:                                                                                    *
  *   1/6/98     GTH : Created.                                                                 *
  *=============================================================================================*/
-int MeshClass::Get_Num_Polys(void) const
+void MeshClass::Update_Cached_Poly_Count(void) const
 {
 	if (Model) {
-		int num_passes=Model->Get_Pass_Count();
-		WWASSERT(num_passes>0);
-		int poly_count=Model->Get_Polygon_Count();
-		return num_passes*poly_count;
+		int num_passes = Model->Get_Pass_Count();
+		WWASSERT(num_passes > 0);
+		CachedPolyCount = num_passes * Model->Get_Polygon_Count();
 	} else {
-		return 0;
+		CachedPolyCount = 0;
 	}
+}
+
+
+int MeshClass::Get_Num_Polys(void) const
+{
+	return CachedPolyCount;
 }
 
 
@@ -1093,6 +1103,8 @@ void MeshClass::Make_Unique()
 	MeshModelClass *newmesh=NEW_REF(MeshModelClass,(*Model));
 	REF_PTR_SET(Model,newmesh);
 	REF_PTR_RELEASE(newmesh);
+
+	Update_Cached_Poly_Count();
 }
 
 /*********************************************************************************************** 
@@ -1132,6 +1144,8 @@ WW3DErrorType MeshClass::Load_W3D(ChunkLoadClass & cload)
 		Free();
 		return WW3D_ERROR_LOAD_FAILED;
 	}
+
+	Update_Cached_Poly_Count();
 
 	/*
 	** Pull interesting stuff out of the w3d attributes bits

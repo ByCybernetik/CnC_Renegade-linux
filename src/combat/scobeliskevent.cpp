@@ -40,7 +40,7 @@
 #include <stdlib.h>
 
 #include "networkobjectfactory.h"
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "matrix3d.h"
 #include "translatedb.h"
 #include "string_ids.h"

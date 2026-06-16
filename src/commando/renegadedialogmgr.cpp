@@ -78,18 +78,44 @@
 
 #if defined(RENEGADE_LINUX)
 #include "../platform/sdl3_host.h"
-#endif
+#include "../platform/linux/win32_minimal.h"
 
+static void Renegade_Linux_Forward_Console_Key(UINT message, WPARAM wParam)
+{
+	if (!Input::Is_Console_Enabled()) {
+		return;
+	}
 
-////////////////////////////////////////////////////////////////
-//	Globals
-////////////////////////////////////////////////////////////////
-WWUIInputClass *	_TheWWUIInput = NULL;
+	if (message == WM_CHAR) {
+		Input::Console_Add_Key((int)wParam);
+		return;
+	}
 
-#if defined(RENEGADE_LINUX)
+	if (message == WM_KEYDOWN) {
+		switch (wParam) {
+		case VK_RETURN:
+			Input::Console_Add_Key(13);
+			break;
+		case VK_ESCAPE:
+			Input::Console_Add_Key(27);
+			break;
+		case VK_BACK:
+			Input::Console_Add_Key(8);
+			break;
+		case VK_TAB:
+			Input::Console_Add_Key(9);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 static long Renegade_Linux_Window_Message_Handler(
 	HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	Renegade_Linux_Forward_Console_Key(message, wParam);
+
 	if (_TheWWUIInput != NULL && Input::Is_Console_Enabled() == false) {
 		LRESULT result = 0;
 		if (_TheWWUIInput->ProcessMessage(hwnd, message, wParam, lParam, result)) {
@@ -99,6 +125,12 @@ static long Renegade_Linux_Window_Message_Handler(
 	return 0;
 }
 #endif
+
+
+////////////////////////////////////////////////////////////////
+//	Globals
+////////////////////////////////////////////////////////////////
+WWUIInputClass *	_TheWWUIInput = NULL;
 
 
 ////////////////////////////////////////////////////////////////

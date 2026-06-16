@@ -193,6 +193,8 @@ public:
 	void								Set_Depth_Range(float zstart = 0.0f,float zend = 1.0f);
 	void								Get_Depth_Range(float * set_zstart,float * set_zend) const;
 
+	void								Invalidate_Frustum(void) const { FrustumValid = false; }
+
 	// Culling for various bounding volumes.  These functions will return true if the 
 	// given primitive is culled (i.e. it is *outside* the view frustum)
 	bool								Cull_Sphere(const SphereClass & sphere) const;

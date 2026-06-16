@@ -143,7 +143,8 @@ public:
  *   23/8/00    GTH : Created.                                                                 *
  *=============================================================================================*/
 CollectionClass::CollectionClass(void) :
-	SnapPoints(NULL)
+	SnapPoints(NULL),
+	CachedPolyCount(-1)
 {
 	Update_Obj_Space_Bounding_Volumes();
 }
@@ -163,7 +164,8 @@ CollectionClass::CollectionClass(void) :
  *=============================================================================================*/
 CollectionClass::CollectionClass(const CollectionDefClass & def) :
 	SubObjects(def.ObjectNames.Count()),	
-	SnapPoints(NULL)
+	SnapPoints(NULL),
+	CachedPolyCount(-1)
 {
 	// Set our name
 	Set_Name (def.Get_Name ());
@@ -206,7 +208,8 @@ CollectionClass::CollectionClass(const CollectionDefClass & def) :
 CollectionClass::CollectionClass(const CollectionClass & src) :
 	CompositeRenderObjClass(src),
 	SubObjects(src.SubObjects.Count()),
-	SnapPoints(NULL)
+	SnapPoints(NULL),
+	CachedPolyCount(-1)
 {
 	*this = src;
 }
@@ -245,6 +248,7 @@ CollectionClass & CollectionClass::operator = (const CollectionClass & that)
 
 		Update_Sub_Object_Bits();
 		Update_Obj_Space_Bounding_Volumes();
+		CachedPolyCount = -1;
 	}
 	return * this;
 }
@@ -300,6 +304,7 @@ RenderObjClass * CollectionClass::Clone(void) const
  *=============================================================================================*/
 void CollectionClass::Free(void)
 {
+	CachedPolyCount = -1;
 	for (int i=0; i<SubObjects.Count(); i++) {
 		SubObjects[i]->Set_Container(NULL);
 		SubObjects[i]->Release_Ref();
@@ -344,11 +349,31 @@ int CollectionClass::Class_ID(void)	const
  *=============================================================================================*/
 int CollectionClass::Get_Num_Polys(void) const
 {
-	int pcount = 0;
-	for (int i=0; i<SubObjects.Count(); i++) {
-		pcount += SubObjects[i]->Get_Num_Polys();
+	if (CachedPolyCount < 0) {
+		const_cast<CollectionClass*>(this)->Update_Cached_Poly_Count();
 	}
-	return pcount;
+	return CachedPolyCount;
+}
+
+
+/***********************************************************************************************
+ * CollectionClass::Update_Cached_Poly_Count -- recalculates the cached polygon count            *
+ *                                                                                             *
+ * INPUT:                                                                                      *
+ *                                                                                             *
+ * OUTPUT:                                                                                     *
+ *                                                                                             *
+ * WARNINGS:                                                                                   *
+ *                                                                                             *
+ * HISTORY:                                                                                    *
+ *   14/6/26    KIMI : Created.                                                                *
+ *=============================================================================================*/
+void CollectionClass::Update_Cached_Poly_Count(void)
+{
+	CachedPolyCount = 0;
+	for (int i=0; i<SubObjects.Count(); i++) {
+		CachedPolyCount += SubObjects[i]->Get_Num_Polys();
+	}
 }
 
 
@@ -503,6 +528,7 @@ int CollectionClass::Add_Sub_Object(RenderObjClass * subobj)
 	subobj->Set_Container(this);
 	subobj->Set_Transform(Transform);
 	int res = SubObjects.Add(subobj);
+	CachedPolyCount = -1;
 	Update_Sub_Object_Bits();
 	Update_Obj_Space_Bounding_Volumes();
 	if (Is_In_Scene()) {
@@ -547,6 +573,7 @@ int CollectionClass::Remove_Sub_Object(RenderObjClass * robj)
 	}
 
 	if (res != 0) {
+		CachedPolyCount = -1;
 		Update_Sub_Object_Bits();
 		Update_Obj_Space_Bounding_Volumes();
 	}

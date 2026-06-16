@@ -38,7 +38,7 @@
 #include "backgroundmgr.h"
 #include "apppackettypes.h"
 #include "assetmgr.h"
-#include "AudibleSound.h"
+#include "audiblesound.h"
 #include "camera.h"
 #include "dazzle.h"
 #include "dx8wrapper.h"
@@ -55,7 +55,7 @@
 #if defined(RENEGADE_VULKAN)
 #include <cstdio>
 #endif
-#include "WWAudio.h"
+#include "wwaudio.h"
 #include "wwmemlog.h"
 #include "seglinerenderer.h"
 #include "textureloader.h"

@@ -35,7 +35,7 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "sound2dhandle.h"
-#include "AudibleSound.h"
+#include "audiblesound.h"
 #include "wwprofile.h"
 #if defined(RENEGADE_LINUX)
 #endif

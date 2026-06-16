@@ -152,39 +152,10 @@ void cGod::Think(void)
 			cPlayer * p_player = cPlayerManager::Get_Player_Object_List()->Head()->Data();
 			if ( p_player != NULL ) {
 		   		SmartGameObj * p_soldier = GameObjManager::Find_Soldier_Of_Client_ID(p_player->Get_Id());
-				if ( p_soldier != NULL ) {
-					if ( p_player->Get_GameObj() == NULL ) {
-						// Remap
-						p_soldier->Set_Player_Data( p_player );
-						Debug_Say(( "Fixing up player data after load\n" ));
-					}
-
-					if ( cNetwork::I_Am_Client() &&
-						  p_player->Get_Id() == cNetwork::Get_My_Id() &&
-						  COMBAT_STAR == NULL ) {
-						SoldierGameObj * p_star = p_soldier->As_SoldierGameObj();
-						if ( p_star != NULL ) {
-							ActionClass * p_action = p_star->Get_Action();
-							WWASSERT( p_action != NULL );
-							GameObjManager::Activate_Cinematic_Freeze( false );
-							p_star->Control_Enable( true );
-							p_star->Set_Control_Owner( p_player->Get_Id() );
-							p_action->Reset( 9999.0f );
-							ActionParamsStruct parameters;
-							parameters.Priority = 9999.0f;
-							p_action->Follow_Input( parameters );
-							if ( COMBAT_CAMERA != NULL && COMBAT_CAMERA->Is_Using_Host_Model() ) {
-								COMBAT_CAMERA->Set_Host_Model( NULL );
-							}
-							CombatManager::Set_The_Star(p_star);
-							CombatManager::Update_Star();
-							if ( CombatManager::Is_First_Person() && p_star->Peek_Model() != NULL ) {
-								p_star->Peek_Model()->Set_Hidden( true );
-							}
-							WeaponViewClass::Purge_Orphan_Hands_From_Scene();
-							CheatMgrClass::Get_Instance()->Apply_Cheats();
-						}
-					}
+				if ( p_soldier && p_player->Get_GameObj() == NULL ) {
+					// Remap
+					p_soldier->Set_Player_Data( p_player );
+					Debug_Say(( "Fixing up player data after load\n" ));
 				}
 			}
 		}

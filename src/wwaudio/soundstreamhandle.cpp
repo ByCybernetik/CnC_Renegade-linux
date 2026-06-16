@@ -35,7 +35,7 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "soundstreamhandle.h"
-#include "AudibleSound.h"
+#include "audiblesound.h"
 
 
 //////////////////////////////////////////////////////////////////////
