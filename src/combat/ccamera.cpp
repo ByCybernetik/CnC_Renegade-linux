@@ -360,6 +360,32 @@ void CCameraClass::Sync_Device_Aspect_Ratio( void )
 	}
 }
 
+void CCameraClass::Apply_Profile_View_Plane( float hfov )
+{
+	Sync_Device_Aspect_Ratio();
+
+	if ( !CombatManager::Is_First_Person() ) {
+		Set_View_Plane( hfov );
+		return;
+	}
+
+	static const float REFERENCE_ASPECT = 4.0f / 3.0f;
+	const float aspect = Get_Aspect_Ratio();
+	if ( aspect <= REFERENCE_ASPECT + 0.001f ) {
+		Set_View_Plane( hfov );
+		return;
+	}
+
+	// Viewmodel layout was authored for 4:3. Keep the same vertical FOV on widescreen
+	// and widen horizontal FOV so hands/weapons stay at the intended screen height.
+	const float half_hfov_ref = ::tan( hfov * 0.5f );
+	const float half_vfov = half_hfov_ref / REFERENCE_ASPECT;
+	const float half_hfov = half_vfov * aspect;
+	const float vfov = 2.0f * ::atan( half_vfov );
+	const float hfov_wide = 2.0f * ::atan( half_hfov );
+	Set_View_Plane( hfov_wide, vfov );
+}
+
 CCameraClass::~CCameraClass(void)
 {
 	Set_Host_Model( NULL );
@@ -838,7 +864,7 @@ void CCameraClass::Update()
 	}
 
 	Sync_Device_Aspect_Ratio();
-	Set_View_Plane( profile.FOV );	// Apply Zoom
+	Apply_Profile_View_Plane( profile.FOV );	// Apply Zoom
 
 
 	// Calculate the Camera Transform

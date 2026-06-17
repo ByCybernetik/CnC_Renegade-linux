@@ -124,6 +124,7 @@ public:
 	bool				Is_Snap_Shot_Mode( void )				{ return SnapShotMode == SNAPSHOT_ON; }
 
 	void				Sync_Device_Aspect_Ratio( void );
+	void				Apply_Profile_View_Plane( float hfov );
 
 protected:
 	
