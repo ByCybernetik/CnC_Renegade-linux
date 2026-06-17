@@ -88,6 +88,8 @@
 #include "loadingevent.h"
 #include "cheatmgr.h"
 #include "menubackdrop.h"
+#include "menuviewport.h"
+#include "render2d.h"
 #include "translatedb.h"
 #include "thread.h"
 #include "dlgcncteaminfo.h"
@@ -423,6 +425,8 @@ public:
 
 		WWMEMLOG(MEM_GAMEDATA);
 
+		MenuViewportClass::Activate();
+
 		backdropText.Set_Texture_Size_Hint( 256 );
 		backdropText2.Set_Texture_Size_Hint( 256 );
 
@@ -567,6 +571,7 @@ public:
 
 	~LoadingScreenClass()
 	{
+		MenuViewportClass::Deactivate();
 	}
 
 	float	Get_Predicted_Percentage( int state )
@@ -612,9 +617,15 @@ public:
 		LoadPercentageDrawn += ( LoadPercentage - LoadPercentageDrawn ) * 0.1f;
 		backdrop.Set_Animation_Percentage( LoadPercentageDrawn );
 
+		MenuViewportClass::Activate();
+
 	   WW3D::Begin_Render( true, true, Vector3(0.0f,0.0f,0.0f), update_network ? &cNetwork::Update : NULL);
 
 		backdrop.Render();
+
+		const RectClass &screen = Render2DClass::Get_Screen_Resolution();
+		backdropText.Sync_Screen_Resolution( screen );
+		backdropText2.Sync_Screen_Resolution( screen );
 		backdropText.Render();
 		backdropText2.Render();
 
@@ -1499,6 +1510,7 @@ void 	CombatGameModeClass::Render()
 		}
    }
 
+	MenuViewportClass::Begin_Hud_Render();
 	MultiHUDClass::RenderHUD();
 	cBandwidthGraph::Render();
 	cPlayerManager::Render();
@@ -1506,6 +1518,7 @@ void 	CombatGameModeClass::Render()
 	WWASSERT(PTheGameData != NULL);
 	The_Game()->Render();
 	RadioCommandDisplayClass::Render ();
+	MenuViewportClass::End_Hud_Render();
 }
 
 //-----------------------------------------------------------------------------

@@ -47,6 +47,7 @@
 #include "scene.h"
 #include "rendobj.h"
 #include "stylemgr.h"
+#include "ww3d.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -55,10 +56,16 @@
 SceneClass *TextWindowClass::Scene	= NULL;
 
 
-////////////////////////////////////////////////////////////////
-//	Local constants
-////////////////////////////////////////////////////////////////
-static const char *	FONT_NAME	= "Arial MT";
+static RectClass
+Get_Text_Window_Screen_Resolution (void)
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution (width, height, bits, windowed);
+	return RectClass (0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
+}
 
 
 ////////////////////////////////////////////////////////////////
@@ -196,7 +203,11 @@ TextWindowClass::Set_Backdrop
 	const RectClass &	textback_rect
 )
 {
+	const bool was_displayed = IsDisplayed;
+	const int saved_first_line = FirstLineIndex;
 	Free_Backdrop ();
+	IsDisplayed = was_displayed;
+	FirstLineIndex = saved_first_line;
 
 	//
 	//	Load the backdrop texture
@@ -213,7 +224,7 @@ TextWindowClass::Set_Backdrop
 		//
 		//	Configure the renderer
 		//
-		Backdrop.Set_Coordinate_Range (Render2DClass::Get_Screen_Resolution ());
+		Backdrop.Set_Coordinate_Range (Get_Text_Window_Screen_Resolution ());
 
 		//
 		//	Calculate the width and height of the sections
@@ -358,7 +369,22 @@ TextWindowClass::Set_Backdrop
 		//
 		REF_PTR_RELEASE(texture);
 	}
-	
+
+	IsViewDirty = true;
+	return ;
+}
+
+
+////////////////////////////////////////////////////////////////
+//
+//	Set_Text_Area
+//
+////////////////////////////////////////////////////////////////
+void
+TextWindowClass::Set_Text_Area (const RectClass &rect)
+{
+	TextRect = rect;
+	IsViewDirty = true;
 	return ;
 }
 
@@ -663,6 +689,10 @@ TextWindowClass::Update_View (float *total_height, bool info_only)
 	if (TextRenderers[0] == NULL || TextRenderers[1] == NULL) {
 		Build_View ();
 	}
+
+	const RectClass screen = Get_Text_Window_Screen_Resolution();
+	TextRenderers[0]->Sync_Screen_Resolution(screen);
+	TextRenderers[1]->Sync_Screen_Resolution(screen);
 	
 	TextRenderers[0]->Reset ();
 	TextRenderers[1]->Reset ();

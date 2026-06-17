@@ -51,6 +51,7 @@
 #if defined(RENEGADE_LINUX)
 #include "../platform/sdl3_host.h"
 #include "../platform/linux/imagehlp.h"
+#include "../platform/linux/winreg.h"
 #include <string.h>
 #include <unistd.h>
 #endif
@@ -837,13 +838,12 @@ static bool Linux_Has_Always_Dat_In(const char *dir)
 void Set_Working_Directory(HINSTANCE instance)
 {
 #if defined(RENEGADE_LINUX)
-	/*
-	** When launched via a symlink from the game install dir, keep that cwd if
-	** Data/always.dat is present (readlink resolves to the build tree otherwise).
-	*/
+	Linux_Registry_Reload_For_Working_Directory();
 	if (Linux_Has_Always_Dat_In(NULL)) {
 		return;
 	}
+#else
+	(void)0;
 #endif
 
 	char path_to_exe[256];
@@ -855,4 +855,7 @@ void Set_Working_Directory(HINSTANCE instance)
 	_splitpath(path_to_exe, drive, dir, NULL, NULL);
 	_makepath(path, drive, dir, NULL, NULL);
 	SetCurrentDirectory(path);
+#if defined(RENEGADE_LINUX)
+	Linux_Registry_Reload_For_Working_Directory();
+#endif
 }

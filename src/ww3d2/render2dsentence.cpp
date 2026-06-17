@@ -237,6 +237,24 @@ Render2DSentenceClass::Render (void)
 
 ////////////////////////////////////////////////////////////////////////////////////
 //
+//	Sync_Screen_Resolution
+//
+////////////////////////////////////////////////////////////////////////////////////
+void
+Render2DSentenceClass::Sync_Screen_Resolution (const RectClass &screen)
+{
+	for (int index = 0; index < Renderers.Count (); index ++) {
+		if (Renderers[index].Renderer != NULL) {
+			Renderers[index].Renderer->Set_Coordinate_Range (screen);
+		}
+	}
+
+	return ;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////
+//
 //	Set_Base_Location
 //
 ////////////////////////////////////////////////////////////////////////////////////
@@ -656,6 +674,7 @@ Render2DSentenceClass::Draw_Sentence (uint32 color)
 				if (Renderers[renderer_index].Surface == curr_surface) {
 					found = true;
 					curr_renderer = Renderers[renderer_index].Renderer;
+					curr_renderer->Set_Coordinate_Range (Render2DClass::Get_Screen_Resolution ());
 					break;
 				}
 			}

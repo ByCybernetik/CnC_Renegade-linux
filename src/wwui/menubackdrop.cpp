@@ -35,6 +35,7 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "menubackdrop.h"
+#include "menuviewport.h"
 #include "dx8wrapper.h"
 #include "scene.h"
 #include "camera.h"
@@ -345,6 +346,8 @@ MenuBackDropClass::~MenuBackDropClass (void)
 void
 MenuBackDropClass::Render (void)
 {
+	MenuViewportClass::Apply_To_Camera(Camera);
+
 	//
 	//	Simple render the scene
 	//

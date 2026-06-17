@@ -149,6 +149,7 @@ public:
 	// Multiplayer support
    static	void	Set_Radar_Mode(RadarModeEnum mode)					{ RadarMode = mode; }
    static	RadarModeEnum	Get_Radar_Mode(void)							{ return RadarMode; }
+	static	void	Sync_Screen_Resolution(const RectClass &screen);
 
 private:
 	static	DynamicVectorClass<RadarMarkerClass>	Markers;

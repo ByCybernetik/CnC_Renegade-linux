@@ -36,6 +36,7 @@
 
 #include "menudialog.h"
 #include "menubackdrop.h"
+#include "menuviewport.h"
 #include "render2d.h"
 #include "stylemgr.h"
 #include "dialogmgr.h"
@@ -181,9 +182,12 @@ void
 MenuDialogClass::Start_Dialog (void)
 {
 	//
-	//	As a menu dialog we use the whole screen
+	//	Apply the 4:3 menu viewport before layout so controls use logical coordinates.
 	//
-	Rect = Render2DClass::Get_Screen_Resolution ();
+	MenuViewportClass::Activate();
+	if (BackDrop != NULL) {
+		MenuViewportClass::Apply_To_Camera(BackDrop->Peek_Camera());
+	}
 
 	DialogBaseClass::Start_Dialog ();
 	return ;
@@ -211,6 +215,10 @@ MenuDialogClass::On_Activate (bool onoff)
 		//	Switch to active state
 		//
 		ActiveMenu = this;
+		MenuViewportClass::Activate();
+		if (BackDrop != NULL) {
+			MenuViewportClass::Apply_To_Camera(BackDrop->Peek_Camera());
+		}
 		On_Menu_Activate (true);
 	}
 
@@ -245,6 +253,7 @@ MenuDialogClass::End_Dialog (void)
 	if (DialogMgrClass::Is_Flushing_Dialogs () == false) {
 
 		if (MenuStack.Count () == 1) {
+			MenuViewportClass::Deactivate();
 			On_Last_Menu_Ending ();
 		} else {
 

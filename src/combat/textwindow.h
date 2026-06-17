@@ -87,7 +87,7 @@ public:
 	//	Backdrop methods
 	//
 	void				Set_Backdrop (const char *texture_name, const RectClass &screen_rect, const Vector2 &texture_size, const RectClass &endcap_rect, const RectClass &fadeout_rect, const RectClass &textback_rect);
-	void				Set_Text_Area (const RectClass &rect)	{ TextRect = rect; }
+	void				Set_Text_Area (const RectClass &rect);
 	
 	//
 	//	Font control

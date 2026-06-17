@@ -59,6 +59,8 @@
 #endif
 
 RectClass							Render2DClass::ScreenResolution( 0,0,0,0 );
+bool								Render2DClass::CustomViewportActive = false;
+RectClass							Render2DClass::CustomViewport( 0,0,0,0 );
 
 
 /*
@@ -95,6 +97,17 @@ void	Render2DClass::Set_Screen_Resolution( const RectClass & screen )
 	}
 //	ScreenResolution = RectClass( 0, 0, 800, 600 );
 #endif
+}
+
+void Render2DClass::Set_Custom_Viewport(const RectClass &viewport)
+{
+	CustomViewport = viewport;
+	CustomViewportActive = true;
+}
+
+void Render2DClass::Clear_Custom_Viewport(void)
+{
+	CustomViewportActive = false;
 }
 
 ShaderClass
@@ -604,10 +617,17 @@ void Render2DClass::Render(void)
 	bool windowed;
 	WW3D::Get_Device_Resolution( width, height, bits, windowed );
 	D3DVIEWPORT8 vp = { 0 };
-	vp.X			= 0;
-	vp.Y			= 0;
-	vp.Width		= width;
-	vp.Height	= height;
+	if (CustomViewportActive) {
+		vp.X = (DWORD)CustomViewport.Left;
+		vp.Y = (DWORD)CustomViewport.Top;
+		vp.Width = (DWORD)CustomViewport.Width();
+		vp.Height = (DWORD)CustomViewport.Height();
+	} else {
+		vp.X = 0;
+		vp.Y = 0;
+		vp.Width = width;
+		vp.Height = height;
+	}
 	vp.MinZ		= 0;
 	vp.MaxZ		= 1;
 	DX8Wrapper::Set_Viewport(&vp);

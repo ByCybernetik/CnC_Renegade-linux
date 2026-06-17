@@ -58,8 +58,6 @@ cRegistryFloat::cRegistryFloat(LPCSTR registry_location, LPCSTR key_name, float 
 		WWASSERT(sizeof(temp_2) == sizeof(Value));
 		::memcpy(&Value, &temp_2, sizeof(temp_2));
    	delete registry;
-
-      Set(Value);
    }
 }
 

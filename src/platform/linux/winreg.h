@@ -41,6 +41,8 @@ LONG RegSetValueExA(HKEY key, LPCSTR name, DWORD reserved, DWORD type, const BYT
 	DWORD data_len);
 LONG RegDeleteValueA(HKEY key, LPCSTR name);
 LONG RegCloseKey(HKEY key);
+void Linux_Registry_Flush(void);
+void Linux_Registry_Reload_For_Working_Directory(void);
 LONG RegDeleteKeyA(HKEY root, LPCSTR sub);
 LONG RegQueryValueExW(HKEY key, LPCWSTR name, LPDWORD reserved, LPDWORD type, LPBYTE data,
 	LPDWORD data_len);

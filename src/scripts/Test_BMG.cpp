@@ -294,7 +294,7 @@ DECLARE_SCRIPT(BMG_Monitor_Events, "" )
 		Commands->Enable_Enemy_Seen( obj, true );
 	}
 
-	virtual	void	Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	virtual	void	Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		switch( type ) {
 
@@ -323,7 +323,7 @@ DECLARE_SCRIPT(BMG_Monitor_Events, "" )
 
 DECLARE_SCRIPT(BMG_Test_Powerup, "" )
 {
-	virtual	void	Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	virtual	void	Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if ( type == CUSTOM_EVENT_POWERUP_GRANTED ) {
 			Commands->Debug_Message( "POWERUP for %d\n", Commands->Get_ID( sender ) );
@@ -455,7 +455,7 @@ DECLARE_SCRIPT(BMG_Test_Messages, "speed=1.0:float")
 		Commands->Debug_Message("BMG DAMAGED\n");
 	}
 
-	virtual	void	Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	virtual	void	Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		Commands->Debug_Message("BMG CUSTOM %d %d\n", type, param );
 	}
@@ -695,7 +695,7 @@ DECLARE_SCRIPT( BMG_Test_Spawn, "" )
 
 DECLARE_SCRIPT( BMG_Test_Custom, "" )
 {
-	void	Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void	Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		Commands->Debug_Message("BMG Test Custom %d %d\n", type, param );
 	}
@@ -921,7 +921,7 @@ DECLARE_SCRIPT( BMG_Test_Priority_1, "" )
 		Commands->Debug_Message_2("BMG Test Priority 1 Complete %d\n", complete_reason );
 	}
 
-	void	Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void	Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		Commands->Debug_Message_2("BMG Test Priority 1 Custom from %p\n", (void *)sender );
 	}
@@ -953,7 +953,7 @@ DECLARE_SCRIPT( BMG_Test_Priority_2, "" )
 		Commands->Debug_Message_2("BMG Test Priority 2 Complete %d\n", complete_reason );
 	}
 
-	void	Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void	Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		Commands->Debug_Message_2("BMG Test Priority 2 Custom from %p\n", (void *)sender );
 	}

@@ -80,7 +80,7 @@ DECLARE_SCRIPT(MXX_Group_Member_DEL, "GroupName:string")
 
 		Group* group = controller->FindGroup(mGroupName);
 		assert(group != NULL);
-		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (int)&info);
+		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (intptr_t)&info);
 		}
 
 	
@@ -97,7 +97,7 @@ DECLARE_SCRIPT(MXX_Group_Member_DEL, "GroupName:string")
 
 		Group* group = controller->FindGroup(mGroupName);
 		assert(group != NULL);
-		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (int)&info);
+		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (intptr_t)&info);
 		}
 
 
@@ -114,7 +114,7 @@ DECLARE_SCRIPT(MXX_Group_Member_DEL, "GroupName:string")
 
 		Group* group = controller->FindGroup(mGroupName);
 		assert(group != NULL);
-		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (int)&info);
+		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (intptr_t)&info);
 		}
 
 
@@ -131,16 +131,16 @@ DECLARE_SCRIPT(MXX_Group_Member_DEL, "GroupName:string")
 
 		Group* group = controller->FindGroup(mGroupName);
 		assert(group != NULL);
-		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (int)&info);
+		group->SendCustomEvent(owner, SCMD_GROUP_EVENT, (intptr_t)&info);
 		}
 
 
 	#ifdef _DEBUG
-	void Custom(GameObject* owner, int event, int data, GameObject* sender)
+	void Custom(GameObject* owner, int event, intptr_t data, GameObject* sender)
 		{
 		if (SCMD_GROUP_EVENT == event)
 			{
-			GroupEventInfo* info = (GroupEventInfo*)data;
+			GroupEventInfo* info = (GroupEventInfo*)(intptr_t)data;
 			assert(info != NULL);
 
 			int senderID = Commands->Get_ID(sender);

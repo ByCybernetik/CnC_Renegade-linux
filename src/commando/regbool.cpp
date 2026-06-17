@@ -50,8 +50,6 @@ cRegistryBool::cRegistryBool(LPCSTR registry_location, LPCSTR key_name, bool def
 	WWASSERT(registry != NULL && registry->Is_Valid());
    Value = registry->Get_Int(KeyName, default_value == 1);
    delete registry;
-
-   Set(Value == 1);
 }
 
 //-----------------------------------------------------------------------------

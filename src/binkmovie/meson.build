@@ -26,6 +26,7 @@ if get_option('platform') == 'linux'
     '../ww3d2',
     '../wwmath',
     '../wwsaveload',
+    '../wwui',
     '../platform',
     '../platform/linux',
   ]

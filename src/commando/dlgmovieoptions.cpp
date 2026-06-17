@@ -413,7 +413,7 @@ MovieOptionsMenuClass::Play_Movie (const char *filename)
 		font->Release_Ref();
 	}
 
-	IsPlaying = true;
+	IsPlaying = BINKMovie::Is_Playing ();
 	return ;
 }
 

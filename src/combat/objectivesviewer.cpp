@@ -47,6 +47,8 @@
 #include "evasettings.h"
 #include "rendobj.h"
 #include "string_ids.h"
+#include "menuviewport.h"
+#include "ww3d.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -58,6 +60,45 @@ static const char *HEADER_FONT_NAME				= "FONT8X8.TGA";
 static const char *BACKGROUND_MODEL_NAME		= "FRAME_1BIG";
 static const char *UPPER_LEFT_BONE_NAME		= "BONE00";
 static const char *LOWER_RIGHT_BONE_NAME		= "BONE01";
+
+static RectClass SyncedObjectivesLayout(0, 0, 0, 0);
+static unsigned int SyncedObjectivesRevision = 0;
+
+static void
+Configure_Objectives_Text_Window (TextWindowClass *text_window)
+{
+	EvaSettingsDefClass *settings = EvaSettingsDefClass::Get_Instance ();
+	if (settings == NULL || text_window == NULL) {
+		return;
+	}
+
+	text_window->Set_Backdrop ("hud_6x4_Messages.tga", settings->Get_Objectives_Screen_Rect (),
+		settings->Get_Objectives_Texture_Size (), settings->Get_Objectives_Endcap_Rect (),
+		settings->Get_Objectives_Fadeout_Rect (), settings->Get_Objectives_Background_Rect ());
+	text_window->Set_Text_Area (settings->Get_Objectives_Text_Rect ());
+}
+
+static void
+Refresh_Objectives_Layout_If_Needed (TextWindowClass *text_window)
+{
+	if (text_window == NULL) {
+		return;
+	}
+
+	const unsigned int revision = MenuViewportClass::Get_Hud_Resolution_Revision ();
+	if (SyncedObjectivesRevision != revision) {
+		SyncedObjectivesLayout.Set (-1.0f, -1.0f, -1.0f, -1.0f);
+		SyncedObjectivesRevision = revision;
+	}
+
+	const RectClass screen = Get_Eva_Screen_Resolution ();
+	if (SyncedObjectivesLayout == screen) {
+		return;
+	}
+
+	SyncedObjectivesLayout = screen;
+	Configure_Objectives_Text_Window (text_window);
+}
 
 
 ////////////////////////////////////////////////////////////////
@@ -123,19 +164,12 @@ ObjectivesViewerClass::Initialize (void)
 	//
 	TextWindow = new TextWindowClass;
 
-	EvaSettingsDefClass *settings = EvaSettingsDefClass::Get_Instance ();
-
 	//
 	//	Configure the backdrop for the text window
 	//
-	TextWindow->Set_Backdrop ("hud_6x4_Messages.tga", settings->Get_Objectives_Screen_Rect (),
-		settings->Get_Objectives_Texture_Size (), settings->Get_Objectives_Endcap_Rect (),
-		settings->Get_Objectives_Fadeout_Rect (), settings->Get_Objectives_Background_Rect ());
-
-	//
-	//	Configure the area where text can be displayed in the window
-	//
-	TextWindow->Set_Text_Area (settings->Get_Objectives_Text_Rect ());
+	Configure_Objectives_Text_Window (TextWindow);
+	SyncedObjectivesLayout = Get_Eva_Screen_Resolution ();
+	SyncedObjectivesRevision = MenuViewportClass::Get_Hud_Resolution_Revision ();
 
 	//
 	//	Configure the fonts for the window
@@ -292,6 +326,7 @@ ObjectivesViewerClass::Render (void)
 		return ;
 	}
 
+	Refresh_Objectives_Layout_If_Needed (TextWindow);
 	TextWindow->Render ();
 	return ;
 }

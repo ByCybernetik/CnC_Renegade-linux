@@ -51,6 +51,7 @@ public:
 	static	void 	Shutdown( void );
 	static	void 	Update( void );
 	static	void 	Render( void );
+	static	void	Sync_Screen_Resolution(void);
 
 private:
 	static	void 	Build_Base( void );

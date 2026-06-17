@@ -78,6 +78,7 @@
 #include "dx8renderer.h"
 #include "rect.h"
 #include "dialogmgr.h"
+#include "menuviewport.h"
 #include "renegadedialogmgr.h"
 #include "textureloader.h"
 #include "input.h"
@@ -311,6 +312,7 @@ MenuGameModeClass2::Deactivate (void)
 		WWAudioClass::Get_Instance ()->Set_Active_Sound_Page (WWAudioClass::PAGE_PRIMARY);
 	}
 
+	MenuViewportClass::Deactivate();
 	DialogMgrClass::Flush_Dialogs ();
 	GameModeClass::Deactivate();
 	return ;

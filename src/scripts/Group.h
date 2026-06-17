@@ -93,7 +93,7 @@ class Group
 		GameObject* GetMember(int index);
 
 		// Send a command to all the members of the team.
-		void SendCustomEvent(GameObject* from, int event, int data);
+		void SendCustomEvent(GameObject* from, int event, intptr_t data);
 
 	protected:
 		// Only the TeamController can create and delete Teams

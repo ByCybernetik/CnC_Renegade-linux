@@ -42,6 +42,7 @@
 #include "rawfile.h"
 #include "assetmgr.h"
 #include "ww3d.h"
+#include "render2d.h"
 #include <stdlib.h>
 
 
@@ -111,8 +112,17 @@ SubTitleManagerClass::SubTitleManagerClass()
 	:
 	mSubTitles(NULL),
 	mSubTitleIndex(0),
-	mActiveSubTitle(NULL)
+	mActiveSubTitle(NULL),
+	mDisplayRect(0.0f, 0.0f, 0.0f, 0.0f),
+	mHasDisplayRect(false)
 {
+}
+
+
+void SubTitleManagerClass::Set_Display_Rect(const RectClass &rect)
+{
+	mDisplayRect = rect;
+	mHasDisplayRect = true;
 }
 
 
@@ -319,20 +329,28 @@ void SubTitleManagerClass::Draw_Sub_Title(const SubTitleClass* subtitle)
 	int w,h,bits;
 	bool windowed;
 	WW3D::Get_Device_Resolution(w,h,bits,windowed);
+	RectClass area(0.0f, 0.0f, (float)w, (float)h);
+	if (mHasDisplayRect) {
+		area = mDisplayRect;
+	}
+
+	const RectClass screen(0.0f, 0.0f, (float)w, (float)h);
+	Renderer.Sync_Screen_Resolution(screen);
+
 	Vector2 extents=Renderer.Get_Text_Extents( string );
 
 	// Assume left justification
-	int xPos = 0;
-	int yPos = subtitle->Get_Line_Position() * (h/16);
-	int xSize=extents[0];
+	int xPos = (int)area.Left;
+	int yPos = (int)area.Top + subtitle->Get_Line_Position() * ((int)area.Height() / 16);
+	int xSize=(int)extents[0];
 
 	SubTitleClass::Alignment align = subtitle->Get_Alignment();
 
 	if (align == SubTitleClass::Center)	{
-		xPos = ((w - xSize) / 2);
+		xPos = (int)(area.Left + (area.Width() - (float)xSize) * 0.5f);
 	}
 	else if (align == SubTitleClass::Right) {
-		xPos = (w - xSize);
+		xPos = (int)(area.Right - (float)xSize);
 	}
 
 	Renderer.Set_Location(Vector2(xPos,yPos));

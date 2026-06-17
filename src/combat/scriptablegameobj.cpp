@@ -629,9 +629,9 @@ void	ScriptableGameObj::Start_Observer_Timer( int observer_id, float duration, i
 	ObserverTimerList.Add( new GameObjObserverTimerClass( observer_id, duration, timer_id ) );
 }
 
-void	ScriptableGameObj::Start_Custom_Timer( ScriptableGameObj * from, float delay, int type, int param )
+void	ScriptableGameObj::Start_Custom_Timer( ScriptableGameObj * from, float delay, int type, intptr_t param )
 {
-	CustomTimerList.Add( new GameObjCustomTimerClass( from, delay, type, param ) );
+	CustomTimerList.Add( new GameObjCustomTimerClass( from, delay, type, (int)param ) );
 }
 
 void	ScriptableGameObj::Think( void )
@@ -698,7 +698,7 @@ void	ScriptableGameObj::Post_Think( void )
 
 			const GameObjObserverList & observer_list = Get_Observers();
 			for( int index = 0; index < observer_list.Count(); index++ ) {
-				observer_list[ index ]->Custom( this, CustomTimerList[i]->Type, CustomTimerList[i]->Param, sender );
+				observer_list[ index ]->Custom( this, CustomTimerList[i]->Type, (intptr_t)CustomTimerList[i]->Param, sender );
 			}
 
 			delete CustomTimerList[i];

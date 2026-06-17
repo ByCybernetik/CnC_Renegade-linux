@@ -63,6 +63,7 @@
 #include "wwphysids.h"
 #include "buildingaggregate.h"
 #include "persistfactory.h"
+#include "ww3d.h"
 
 
 #define MIN_FOV				0.02f
@@ -332,12 +333,31 @@ CCameraClass::CCameraClass() :
 {
 	Set_Clip_Planes( NearClipPlane, FarClipPlane );
 	Set_View_Plane( DEG_TO_RAD( 90.0 ) );
+	Sync_Device_Aspect_Ratio();
+	Set_View_Plane( DEG_TO_RAD( 90.0 ) );
 
 	SniperListener = new Listener3DClass;
 
 	DefaultProfile = CCameraProfileClass::Find( "default" );
 	DefaultProfileName="default";
 	Use_Default_Profile(); 
+}
+
+void CCameraClass::Sync_Device_Aspect_Ratio( void )
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution( width, height, bits, windowed );
+	if ( width <= 0 || height <= 0 ) {
+		return;
+	}
+
+	const float aspect = static_cast<float>( width ) / static_cast<float>( height );
+	if ( WWMath::Fabs( AspectRatio - aspect ) > 0.0001f ) {
+		Set_Aspect_Ratio( aspect );
+	}
 }
 
 CCameraClass::~CCameraClass(void)
@@ -605,6 +625,7 @@ void	CCameraClass::Use_Host_Model( void )
 	if ( !CinematicSnipingEnabled ) {
 		CurrentProfile->FOV = DEG_TO_RADF( 75.0f );
 	}
+	Sync_Device_Aspect_Ratio();
 	Set_View_Plane( CurrentProfile->FOV );
 
 #ifdef ATI_DEMO_HACK
@@ -816,6 +837,7 @@ void CCameraClass::Update()
 		LastHeading	= Heading;
 	}
 
+	Sync_Device_Aspect_Ratio();
 	Set_View_Plane( profile.FOV );	// Apply Zoom
 
 

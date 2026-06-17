@@ -46,7 +46,7 @@ public:
 	void Start_Timer(GameObject * obj, ScriptClass * script, float duration, int timer_id);
 	void Trigger_Weapon(GameObject * obj, bool trigger, const Vector3 & target, bool primary = true);
 	void Select_Weapon(GameObject * obj, const char * weapon_name);
-	void Send_Custom_Event(GameObject * from, GameObject * to, int type = 0, int param = 0, float delay = 0);
+	void Send_Custom_Event(GameObject * from, GameObject * to, int type = 0, intptr_t param = 0, float delay = 0);
 	void Send_Damaged_Event(GameObject * object, GameObject * damager);
 	float Get_Random(float min, float max);
 	int Get_Random_Int(int min, int max);

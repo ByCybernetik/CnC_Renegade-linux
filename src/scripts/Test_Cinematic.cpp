@@ -60,7 +60,7 @@ DECLARE_SCRIPT (M00_Cinematic_Attack_Command_DLS, "AttackDuration=1.0:float")
 		Commands->Send_Custom_Event( obj, obj, 1, 1, Get_Float_Parameter("AttackDuration") );
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		Commands->Action_Reset( obj, 100 );
 
@@ -1030,7 +1030,7 @@ public:
 		Parse_Commands(obj);
 	}
 
-	void	Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void	Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		if ( type == M00_CUSTOM_CINEMATIC_PRIMARY_KILLED ) {
 			if ( !PrimaryKilled ) {		// Prevent loops

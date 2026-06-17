@@ -109,6 +109,9 @@ void _Game_Main_Loop_Loop(void)
 		GameModeClass *movie_mode = GameModeManager::Find("Movie");
 		if (movie_mode != NULL && movie_mode->Is_Active()) {
 			movie_mode->Think();
+		} else {
+			// Menu video playback skips GameModeManager::Think() below; decode here.
+			BINKMovie::Update();
 		}
 
 		if (!BINKMovie::Should_Present_Frame()) {

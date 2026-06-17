@@ -171,6 +171,7 @@ public:
 	void	Build_Sentence (const WCHAR *text);
 	void	Reset_Sentence_Data (bool release_surfaces = true);
 	void	Draw_Sentence (uint32 color = 0xFFFFFFFF);
+	void	Sync_Screen_Resolution (const RectClass &screen);
 
 	//
 	//	Texture hint

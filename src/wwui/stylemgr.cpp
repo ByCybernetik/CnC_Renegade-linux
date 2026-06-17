@@ -132,13 +132,16 @@ StringClass								StyleMgrClass::EventAudioList[StyleMgrClass::EVENT_AUDIO_MAX]
 //
 ////////////////////////////////////////////////////////////////
 void
+StyleMgrClass::Update_Scale_For_Resolution(const RectClass &screen)
+{
+	ScaleX = screen.Width() / 800.0F;
+	ScaleY = screen.Height() / 600.0F;
+}
+
+void
 StyleMgrClass::Initialize (void)
 {
-	//
-	//	Compute the scale
-	//
-	ScaleX = Render2DClass::Get_Screen_Resolution().Width () / 800.0F;
-	ScaleY = Render2DClass::Get_Screen_Resolution().Height () / 600.0F;
+	Update_Scale_For_Resolution(Render2DClass::Get_Screen_Resolution());
 
 	//
 	//	Load each font
@@ -175,11 +178,7 @@ StyleMgrClass::Initialize_From_INI (const char *filename)
 {
 	Shutdown ();
 
-	//
-	//	Compute the scale
-	//
-	ScaleX = Render2DClass::Get_Screen_Resolution().Width () / 800.0F;
-	ScaleY = Render2DClass::Get_Screen_Resolution().Height () / 600.0F;
+	Update_Scale_For_Resolution(Render2DClass::Get_Screen_Resolution());
 
 	//
 	//	Get the INI file

@@ -36,6 +36,9 @@
 
 
 #include "shutdown.h"
+#if defined(RENEGADE_LINUX)
+#include "../platform/linux/winreg.h"
+#endif
 #include "wwmath.h"
 #include "wwsaveload.h"
 #include "ww3d.h"
@@ -433,6 +436,9 @@ void Game_Shutdown(void)
 	PathMgrClass::Shutdown();
 	WWMath::Shutdown();
 	WWSaveLoad::Shutdown();
+	if (WW3D::Is_Initted()) {
+		WW3D::Registry_Save_Render_Device(APPLICATION_SUB_KEY_NAME_RENDER);
+	}
 	WW3D::Shutdown();
 	WWPhys::Shutdown();
 
@@ -465,6 +471,10 @@ void Game_Shutdown(void)
 	if ( registry.Is_Valid() ) {
 		registry.Set_Int( VALUE_NAME_APPLICATION_CRASH_VERSION, 0 );
 	}
+
+#if defined(RENEGADE_LINUX)
+	Linux_Registry_Flush();
+#endif
 
 #ifdef FREEDEDICATEDSERVER
 	Copy_Logs(DebugManager::Get_Version_Number());

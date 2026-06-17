@@ -185,7 +185,7 @@ DECLARE_SCRIPT(RMV_Engineer_Wander, "Custom_Type:int, Custom_Param_1:int, Custom
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == c_type)
 		{
@@ -274,7 +274,7 @@ DECLARE_SCRIPT(RMV_Engineer_Wander, "Custom_Type:int, Custom_Param_1:int, Custom
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == c_type) && (param == c_param_1) && (!i_am_occupied))
 		{
@@ -307,7 +307,7 @@ DECLARE_SCRIPT(RMV_Building_Engineer_Controller, "Killed_Broadcast_Radius:float,
 		sent_25 = sent_50 = sent_75 = false;
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{		
 		if (type == CUSTOM_EVENT_BUILDING_DAMAGED)
 		{
@@ -460,7 +460,7 @@ DECLARE_SCRIPT(RMV_Toggled_Engineer_Target, "Emergency=1:int, Animation_Name:str
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 1000 && param == 1000)
 		{
@@ -542,7 +542,7 @@ DECLARE_SCRIPT(M00_Play_Sound, "Sound_Preset:string, Is_3D=1:int, Offset:vector3
 		Commands->Monitor_Sound(obj, id);
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == CUSTOM_EVENT_SOUND_ENDED)
 		{

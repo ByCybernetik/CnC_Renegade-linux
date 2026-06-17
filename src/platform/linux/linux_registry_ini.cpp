@@ -1,5 +1,7 @@
 /*
- * Linux registry shim: persist RegistryClass data in Data/config/registry.ini.
+ * Linux registry shim: persist RegistryClass data in renegade.conf (INI format).
+ * Runtime/debug keys go to renegade.state so user-edited renegade.conf is not rewritten on exit.
+ * Override path with RENEGADE_CONF or legacy RENEGADE_REGISTRY_INI.
  */
 #include "winreg.h"
 #include "winerror.h"
@@ -7,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <unistd.h>
 #include <map>
 #include <string>
 #include <vector>
@@ -68,10 +72,87 @@ static bool &linux_registry_loaded_flag(void)
 	return *loaded;
 }
 
-static bool &linux_registry_dirty_flag(void)
+static bool &linux_registry_conf_dirty_flag(void)
 {
 	static bool *dirty = new bool(false);
 	return *dirty;
+}
+
+static bool &linux_registry_state_dirty_flag(void)
+{
+	static bool *dirty = new bool(false);
+	return *dirty;
+}
+
+static std::map<std::string, LinuxRegSection> &linux_registry_conf_snapshot(void)
+{
+	static std::map<std::string, LinuxRegSection> *snapshot =
+		new std::map<std::string, LinuxRegSection>();
+	return *snapshot;
+}
+
+static bool linux_registry_section_is_state(const std::string &section)
+{
+	const size_t debug_suffix = 6;
+	if (section.size() >= debug_suffix &&
+		section.compare(section.size() - debug_suffix, debug_suffix, "/Debug") == 0) {
+		return true;
+	}
+	return section.find("/Debug/") != std::string::npos;
+}
+
+static void linux_registry_mark_section_dirty(const std::string &section)
+{
+	if (linux_registry_section_is_state(section)) {
+		linux_registry_state_dirty_flag() = true;
+	} else {
+		linux_registry_conf_dirty_flag() = true;
+	}
+}
+
+static bool linux_registry_sections_equal(
+	const std::map<std::string, LinuxRegValue> &a, const std::map<std::string, LinuxRegValue> &b)
+{
+	if (a.size() != b.size()) {
+		return false;
+	}
+	for (const auto &it : a) {
+		const auto found = b.find(it.first);
+		if (found == b.end() || found->second.type != it.second.type || found->second.data != it.second.data) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static void linux_registry_update_conf_snapshot(void)
+{
+	linux_registry_conf_snapshot().clear();
+	for (const auto &section_it : linux_registry_sections()) {
+		if (!linux_registry_section_is_state(section_it.first)) {
+			linux_registry_conf_snapshot()[section_it.first] = section_it.second;
+		}
+	}
+}
+
+static bool linux_registry_conf_matches_snapshot(void)
+{
+	for (const auto &section_it : linux_registry_conf_snapshot()) {
+		const auto found = linux_registry_sections().find(section_it.first);
+		if (found == linux_registry_sections().end() ||
+			!linux_registry_sections_equal(section_it.second.values, found->second.values)) {
+			return false;
+		}
+	}
+	for (const auto &section_it : linux_registry_sections()) {
+		if (linux_registry_section_is_state(section_it.first)) {
+			continue;
+		}
+		if (linux_registry_conf_snapshot().find(section_it.first) == linux_registry_conf_snapshot().end()) {
+			return false;
+		}
+	}
+	return true;
 }
 
 static void linux_registry_normalize_path(const char *in, std::string &out)
@@ -85,16 +166,165 @@ static void linux_registry_normalize_path(const char *in, std::string &out)
 	}
 }
 
+static const char *linux_registry_default_path(void)
+{
+	return "renegade.conf";
+}
+
+static const char *linux_registry_legacy_path(void)
+{
+	return "Data/config/registry.ini";
+}
+
+static bool linux_registry_path_has_payload(const char *path)
+{
+	FILE *fp = fopen(path, "r");
+	if (fp == NULL) {
+		return false;
+	}
+	int c = 0;
+	bool found = false;
+	while ((c = fgetc(fp)) != EOF) {
+		if (c != ' ' && c != '\t' && c != '\r' && c != '\n' && c != ';' && c != '#') {
+			found = true;
+			break;
+		}
+	}
+	fclose(fp);
+	return found;
+}
+
+static void linux_registry_normalize_section_name(std::string &section)
+{
+	if (section == "Render") {
+		section = "Software/Westwood/Renegade/Render";
+	}
+}
+
+static void linux_registry_get_exe_dir(char *exe_dir, size_t exe_dir_size)
+{
+	exe_dir[0] = '\0';
+	char exe_path[1024];
+	const ssize_t exe_len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+	if (exe_len <= 0) {
+		return;
+	}
+	exe_path[exe_len] = '\0';
+	char *slash = strrchr(exe_path, '/');
+	if (slash != NULL) {
+		*slash = '\0';
+		strncpy(exe_dir, exe_path, exe_dir_size - 1);
+		exe_dir[exe_dir_size - 1] = '\0';
+	}
+}
+
+static bool linux_registry_resolve_path(const char *candidate, char *resolved, size_t resolved_size)
+{
+	char normalized[PATH_MAX];
+	strncpy(normalized, candidate, sizeof(normalized) - 1);
+	normalized[sizeof(normalized) - 1] = '\0';
+	if (realpath(normalized, resolved) != NULL) {
+		resolved[resolved_size - 1] = '\0';
+		return true;
+	}
+	strncpy(resolved, candidate, resolved_size - 1);
+	resolved[resolved_size - 1] = '\0';
+	return false;
+}
+
+static bool linux_registry_pick_conf_path(char *path, size_t path_size, bool for_write)
+{
+	const char *from_env = getenv("RENEGADE_CONF");
+	if (from_env == NULL || from_env[0] == '\0') {
+		from_env = getenv("RENEGADE_REGISTRY_INI");
+	}
+	if (from_env != NULL && from_env[0] != '\0') {
+		linux_registry_resolve_path(from_env, path, path_size);
+		return true;
+	}
+
+	char exe_dir[1024];
+	linux_registry_get_exe_dir(exe_dir, sizeof(exe_dir));
+
+	static const char *exe_relative_paths[] = {
+		"../game/renegade.conf",
+		"../../game/renegade.conf",
+		"renegade.conf",
+		NULL,
+	};
+
+	if (exe_dir[0] != '\0') {
+		for (int i = 0; exe_relative_paths[i] != NULL; ++i) {
+			char candidate[PATH_MAX];
+			snprintf(candidate, sizeof(candidate), "%s/%s", exe_dir, exe_relative_paths[i]);
+			char resolved[PATH_MAX];
+			linux_registry_resolve_path(candidate, resolved, sizeof(resolved));
+			if (linux_registry_path_has_payload(resolved)) {
+				strncpy(path, resolved, path_size - 1);
+				path[path_size - 1] = '\0';
+				return true;
+			}
+		}
+
+		if (for_write) {
+			for (int i = 0; exe_relative_paths[i] != NULL; ++i) {
+				char candidate[PATH_MAX];
+				snprintf(candidate, sizeof(candidate), "%s/%s", exe_dir, exe_relative_paths[i]);
+				char resolved[PATH_MAX];
+				if (linux_registry_resolve_path(candidate, resolved, sizeof(resolved))) {
+					strncpy(path, resolved, path_size - 1);
+					path[path_size - 1] = '\0';
+					return true;
+				}
+			}
+		}
+	}
+
+	if (linux_registry_path_has_payload(linux_registry_default_path())) {
+		strncpy(path, linux_registry_default_path(), path_size - 1);
+		path[path_size - 1] = '\0';
+		return true;
+	}
+
+	if (for_write && exe_dir[0] != '\0') {
+		char candidate[PATH_MAX];
+		snprintf(candidate, sizeof(candidate), "%s/../../game/%s", exe_dir, linux_registry_default_path());
+		char resolved[PATH_MAX];
+		if (linux_registry_resolve_path(candidate, resolved, sizeof(resolved))) {
+			strncpy(path, resolved, path_size - 1);
+			path[path_size - 1] = '\0';
+			return true;
+		}
+		snprintf(candidate, sizeof(candidate), "%s/../game/%s", exe_dir, linux_registry_default_path());
+		if (linux_registry_resolve_path(candidate, resolved, sizeof(resolved))) {
+			strncpy(path, resolved, path_size - 1);
+			path[path_size - 1] = '\0';
+			return true;
+		}
+	}
+
+	strncpy(path, linux_registry_default_path(), path_size - 1);
+	path[path_size - 1] = '\0';
+	return false;
+}
+
 static const char *linux_registry_file_path(void)
 {
 	static char path[1024];
-	const char *from_env = getenv("RENEGADE_REGISTRY_INI");
-	if (from_env != NULL && from_env[0] != '\0') {
-		strncpy(path, from_env, sizeof(path) - 1);
-		path[sizeof(path) - 1] = '\0';
-		return path;
+	linux_registry_pick_conf_path(path, sizeof(path), true);
+	return path;
+}
+
+static const char *linux_registry_state_file_path(void)
+{
+	static char path[1024];
+	const char *conf = linux_registry_file_path();
+	const size_t len = strlen(conf);
+	if (len >= 5 && strcmp(conf + len - 5, ".conf") == 0) {
+		snprintf(path, sizeof(path), "%.*s.state", (int)(len - 5), conf);
+	} else {
+		snprintf(path, sizeof(path), "%s.state", conf);
 	}
-	snprintf(path, sizeof(path), "Data/config/registry.ini");
 	return path;
 }
 
@@ -112,24 +342,68 @@ static void linux_registry_trim(std::string &s)
 	}
 }
 
-static void linux_registry_store_value(
+static bool linux_registry_section_is_render(const std::string &section)
+{
+	const char *suffix = "/Render";
+	const size_t suffix_len = strlen(suffix);
+	return section.size() >= suffix_len &&
+		section.compare(section.size() - suffix_len, suffix_len, suffix) == 0;
+}
+
+static void linux_registry_map_render_setting_key(std::string &name, DWORD &type)
+{
+	struct Entry {
+		const char *alias;
+		const char *canonical;
+		bool dword;
+	};
+	static const Entry entries[] = {
+		{"Width", "RenderDeviceWidth", true},
+		{"Height", "RenderDeviceHeight", true},
+		{"Depth", "RenderDeviceDepth", true},
+		{"Windowed", "RenderDeviceWindowed", true},
+		{"TextureDepth", "RenderDeviceTextureDepth", true},
+		{"Device", "RenderDeviceName", false},
+		{"RenderDevice", "RenderDeviceName", false},
+	};
+	for (const Entry &entry : entries) {
+		if (name == entry.alias) {
+			name = entry.canonical;
+			if (entry.dword) {
+				type = REG_DWORD;
+			}
+			return;
+		}
+	}
+}
+
+static bool linux_registry_try_parse_dword(const std::string &value, DWORD &dword)
+{
+	char *end = NULL;
+	const unsigned long parsed = strtoul(value.c_str(), &end, 10);
+	if (end == value.c_str() || (end != NULL && *end != '\0')) {
+		return false;
+	}
+	dword = (DWORD)parsed;
+	return true;
+}
+static bool linux_registry_store_value(
 	const std::string &section, const std::string &name, DWORD type, const std::vector<unsigned char> &data)
 {
 	LinuxRegValue &val = linux_registry_sections()[section].values[name];
+	if (val.type == type && val.data == data) {
+		return false;
+	}
 	val.type = type;
 	val.data = data;
+	return true;
 }
 
-static void linux_registry_load(void)
+static bool linux_registry_load_file(const char *path)
 {
-	if (linux_registry_loaded_flag()) {
-		return;
-	}
-	linux_registry_loaded_flag() = true;
-
-	FILE *fp = fopen(linux_registry_file_path(), "r");
+	FILE *fp = fopen(path, "r");
 	if (fp == NULL) {
-		return;
+		return false;
 	}
 
 	std::string section;
@@ -143,8 +417,11 @@ static void linux_registry_load(void)
 		if (raw[0] == '[') {
 			const size_t end = raw.find(']');
 			if (end != std::string::npos && end > 1) {
-				section = raw.substr(1, end - 1);
-				linux_registry_normalize_path(section.c_str(), section);
+				std::string section_name = raw.substr(1, end - 1);
+				std::string normalized;
+				linux_registry_normalize_path(section_name.c_str(), normalized);
+				section = normalized;
+				linux_registry_normalize_section_name(section);
 			}
 			continue;
 		}
@@ -163,21 +440,39 @@ static void linux_registry_load(void)
 		linux_registry_trim(value);
 
 		DWORD type = REG_SZ;
-		const char *name = key.c_str();
+		std::string name = key;
 		if (strncmp(key.c_str(), "STRING_", 7) == 0) {
-			name = key.c_str() + 7;
+			name = key.substr(7);
+			type = REG_SZ;
 		} else if (strncmp(key.c_str(), "DWORD_", 6) == 0) {
-			name = key.c_str() + 6;
+			name = key.substr(6);
 			type = REG_DWORD;
 		} else if (strncmp(key.c_str(), "BIN_", 4) == 0) {
 			continue;
 		}
 
+		if (linux_registry_section_is_render(section)) {
+			linux_registry_map_render_setting_key(name, type);
+		}
+
 		std::vector<unsigned char> bytes;
 		if (type == REG_DWORD) {
-			const DWORD dword = (DWORD)strtoul(value.c_str(), NULL, 10);
+			DWORD dword = 0;
+			if (!linux_registry_try_parse_dword(value, dword)) {
+				continue;
+			}
 			const unsigned char *src = (const unsigned char *)&dword;
 			bytes.assign(src, src + sizeof(dword));
+		} else if (linux_registry_section_is_render(section) && name != "RenderDeviceName") {
+			DWORD dword = 0;
+			if (linux_registry_try_parse_dword(value, dword)) {
+				type = REG_DWORD;
+				const unsigned char *src = (const unsigned char *)&dword;
+				bytes.assign(src, src + sizeof(dword));
+			} else {
+				bytes.assign(value.begin(), value.end());
+				bytes.push_back('\0');
+			}
 		} else {
 			bytes.assign(value.begin(), value.end());
 			bytes.push_back('\0');
@@ -186,22 +481,55 @@ static void linux_registry_load(void)
 	}
 
 	fclose(fp);
+	return true;
 }
 
-static void linux_registry_save(void)
+static void linux_registry_load(void)
 {
-	if (!linux_registry_dirty_flag()) {
+	if (linux_registry_loaded_flag()) {
 		return;
 	}
+	linux_registry_loaded_flag() = true;
 
-	const char *path = linux_registry_file_path();
-	FILE *fp = fopen(path, "w");
-	if (fp == NULL) {
-		return;
+	char path[1024];
+	const bool path_exists = linux_registry_pick_conf_path(path, sizeof(path), false);
+	bool loaded = path_exists && linux_registry_load_file(path);
+	if (!loaded) {
+		const char *legacy = linux_registry_legacy_path();
+		if (strcmp(path, legacy) != 0 && linux_registry_load_file(legacy)) {
+			linux_registry_conf_dirty_flag() = true;
+			loaded = true;
+		}
 	}
 
+	linux_registry_load_file(linux_registry_state_file_path());
+	linux_registry_update_conf_snapshot();
+}
+
+void Linux_Registry_Reload_For_Working_Directory(void)
+{
+	linux_registry_open_keys().clear();
+	linux_registry_sections().clear();
+	linux_registry_conf_snapshot().clear();
+	linux_registry_loaded_flag() = false;
+	linux_registry_conf_dirty_flag() = false;
+	linux_registry_state_dirty_flag() = false;
+	linux_registry_load();
+}
+
+static void linux_registry_write_sections(FILE *fp, bool state_only)
+{
 	for (const auto &section_it : linux_registry_sections()) {
+		if (linux_registry_section_is_state(section_it.first) != state_only) {
+			continue;
+		}
+		if (section_it.second.values.empty()) {
+			continue;
+		}
 		fprintf(fp, "[%s]\n", section_it.first.c_str());
+		if (!state_only && linux_registry_section_is_render(section_it.first)) {
+			fprintf(fp, "; Screen resolution: RenderDeviceWidth x RenderDeviceHeight\n");
+		}
 		for (const auto &value_it : section_it.second.values) {
 			const LinuxRegValue &val = value_it.second;
 			if (val.type == REG_DWORD && val.data.size() >= sizeof(DWORD)) {
@@ -214,9 +542,47 @@ static void linux_registry_save(void)
 		}
 		fprintf(fp, "\n");
 	}
+}
 
+static void linux_registry_save_conf(void)
+{
+	if (!linux_registry_conf_dirty_flag()) {
+		return;
+	}
+	if (linux_registry_conf_matches_snapshot()) {
+		linux_registry_conf_dirty_flag() = false;
+		return;
+	}
+
+	FILE *fp = fopen(linux_registry_file_path(), "w");
+	if (fp == NULL) {
+		return;
+	}
+	linux_registry_write_sections(fp, false);
 	fclose(fp);
-	linux_registry_dirty_flag() = false;
+	linux_registry_update_conf_snapshot();
+	linux_registry_conf_dirty_flag() = false;
+}
+
+static void linux_registry_save_state(void)
+{
+	if (!linux_registry_state_dirty_flag()) {
+		return;
+	}
+
+	FILE *fp = fopen(linux_registry_state_file_path(), "w");
+	if (fp == NULL) {
+		return;
+	}
+	linux_registry_write_sections(fp, true);
+	fclose(fp);
+	linux_registry_state_dirty_flag() = false;
+}
+
+static void linux_registry_save(void)
+{
+	linux_registry_save_conf();
+	linux_registry_save_state();
 }
 
 static std::string linux_registry_full_path(HKEY root, LPCSTR sub)
@@ -441,9 +807,9 @@ LONG RegSetValueExA(HKEY key, LPCSTR name, DWORD reserved, DWORD type, const BYT
 	}
 
 	std::vector<unsigned char> bytes(data, data + data_len);
-	linux_registry_store_value(linux_registry_open_keys()[key], name, type, bytes);
-	linux_registry_dirty_flag() = true;
-	linux_registry_save();
+	if (linux_registry_store_value(linux_registry_open_keys()[key], name, type, bytes)) {
+		linux_registry_mark_section_dirty(linux_registry_open_keys()[key]);
+	}
 	return ERROR_SUCCESS;
 }
 
@@ -456,8 +822,7 @@ LONG RegDeleteValueA(HKEY key, LPCSTR name)
 	if (section->values.erase(name) == 0) {
 		return ERROR_FILE_NOT_FOUND;
 	}
-	linux_registry_dirty_flag() = true;
-	linux_registry_save();
+	linux_registry_mark_section_dirty(linux_registry_open_keys()[key]);
 	return ERROR_SUCCESS;
 }
 
@@ -465,6 +830,11 @@ LONG RegCloseKey(HKEY key)
 {
 	linux_registry_open_keys().erase(key);
 	return ERROR_SUCCESS;
+}
+
+void Linux_Registry_Flush(void)
+{
+	linux_registry_save();
 }
 
 LONG RegDeleteKeyA(HKEY, LPCSTR)

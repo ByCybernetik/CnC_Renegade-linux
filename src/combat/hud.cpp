@@ -51,7 +51,11 @@
 #include "texture.h"
 #include "phys.h"
 #include "render2d.h"
+#include "menuviewport.h"
 #include "hudinfo.h"
+#include "ww3d.h"
+
+static void Sync_Hud_Screen_Resolution(void);
 #include "globalsettings.h"
 #include "translatedb.h"
 #include "playerdata.h"
@@ -213,9 +217,22 @@ Vector2 TARGET_NAME_UV_LR( 91, 164 );
 Vector2 TARGET_NAME_OFFSET( 125, 24 );
 
 
-	// Reticle
-#define	RETICLE_WIDTH	(64.0f/640.0f)
-#define	RETICLE_HEIGHT	(64.0f/480.0f)
+	// Reticle (64px diameter on the original 640x480 reference resolution)
+#define	RETICLE_DIAMETER_PX	64.0f
+
+static void
+Get_Reticle_Half_Extents_NDC (float &half_w, float &half_h)
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution (width, height, bits, windowed);
+
+	const float half_px = RETICLE_DIAMETER_PX * 0.5f;
+	half_w = half_px / static_cast<float>(width);
+	half_h = half_px / static_cast<float>(height);
+}
 
 
 //
@@ -645,7 +662,7 @@ static	void	HUD_Help_Text_Render( void )
 		const RectClass &screen_rect = Render2DClass::Get_Screen_Resolution();
 		float x_pos = screen_rect.Center ().X - (HUDHelpTextExtents.X * 0.5F);
 		float y_pos = screen_rect.Center ().Y - (HUDHelpTextExtents.Y);
-		y_pos -= (RETICLE_HEIGHT * screen_rect.Height () * 0.25F);
+		y_pos -= (RETICLE_DIAMETER_PX * 0.25F);
 
 		HUDHelpTextRenderer->Set_Location( Vector2( x_pos, y_pos ) );
 		HUDHelpTextRenderer->Draw_Sentence( RGB_TO_INT32 (0, 0, 0) );
@@ -1399,7 +1416,10 @@ static	void	Damage_Update( void )
 
 void	HUDClass::Damage_Render( void )
 {
+	MenuViewportClass::Begin_Hud_Render();
+	Sync_Hud_Screen_Resolution();
 	DamageRenderer->Render();
+	MenuViewportClass::End_Hud_Render();
 }
 
 /*
@@ -2348,6 +2368,8 @@ Render2DTextClass * InfoHealthCountRenderer;
 Render2DTextClass * InfoShieldCountRenderer;
 
 Vector2	InfoBase(0,0);
+static RectClass	SyncedHudScreenResolution(0, 0, 0, 0);
+static unsigned int SyncedHudRevision = 0;
 
 float	LastHealth = 0;
 float	CenterHealthTimer = 0;
@@ -2850,6 +2872,9 @@ void 	HUDClass::Init(bool render_available)
 		HUD_Help_Text_Init();
 
 		_HUDInited = true;
+
+		SyncedHudScreenResolution.Set(-1.0f, -1.0f, -1.0f, -1.0f);
+		Sync_Hud_Screen_Resolution();
 	}
 }
 
@@ -2870,6 +2895,8 @@ void 	HUDClass::Shutdown()
 		Powerup_Shutdown();
 		HUD_Help_Text_Shutdown();
 		SniperHUDClass::Shutdown();
+
+		SyncedHudScreenResolution.Set(0, 0, 0, 0);
 
 		for( int i = 0; i < NUM_RENDER_IMAGES; i++ ) {
 			if ( RenderImages[i] ) {
@@ -2892,6 +2919,9 @@ void 	HUDClass::Reset( void )
 void 	HUDClass::Render()
 {
 	WWPROFILE( "HUD Render" );
+
+	MenuViewportClass::Begin_Hud_Render();
+	Sync_Hud_Screen_Resolution();
 
 #ifdef ATI_DEMO_HACK
 	RenderImages[DEMO_HUD_IMAGE]->Render();
@@ -2922,6 +2952,8 @@ void 	HUDClass::Render()
 		}
 	}
 #endif
+
+	MenuViewportClass::End_Hud_Render();
 }
 
 
@@ -2933,6 +2965,116 @@ static bool	Is_HUD_Displayed( void )
 				!COMBAT_STAR->Is_Destroyed() );
 }
 
+static RectClass Get_Hud_Physical_Screen_Resolution(void)
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution(width, height, bits, windowed);
+	return RectClass(0, 0, (float)width, (float)height);
+}
+
+static void Sync_Render2D_Coordinate_Range(Render2DClass *renderer, const RectClass &screen)
+{
+	if (renderer != NULL) {
+		renderer->Set_Coordinate_Range(screen);
+	}
+}
+
+static void Sync_Reticle_Coordinate_Range(Render2DClass *renderer)
+{
+	if (renderer != NULL) {
+		// Reticle quads are authored in normalized device coordinates (-1..1).
+		renderer->Set_Coordinate_Range(RectClass(-1.0f, 1.0f, 1.0f, -1.0f));
+	}
+}
+
+static void Sync_Sentence_Screen_Resolution(Render2DSentenceClass *renderer, const RectClass &screen)
+{
+	if (renderer != NULL) {
+		renderer->Sync_Screen_Resolution(screen);
+	}
+}
+
+static void Rebuild_Weapon_Box(const RectClass &screen)
+{
+	if (WeaponBoxRenderer == NULL) {
+		return;
+	}
+
+	WeaponBoxRenderer->Reset();
+	WeaponBoxRenderer->Set_Coordinate_Range(screen);
+
+	RectClass box_uv(WEAPON_BOX_UV_UL, WEAPON_BOX_UV_LR);
+	RectClass draw_box = box_uv;
+	box_uv.Scale(Vector2(1.0f / 256.0f, 1.0f / 256.0f));
+	draw_box += screen.Lower_Right() - Vector2(WEAPON_OFFSET) - draw_box.Upper_Left();
+	WeaponBoxRenderer->Add_Quad(draw_box, box_uv);
+	WeaponBase = draw_box.Upper_Left();
+}
+
+static void Sync_Hud_Screen_Resolution(void)
+{
+	const unsigned int revision = MenuViewportClass::Get_Hud_Resolution_Revision();
+	if (SyncedHudRevision != revision) {
+		SyncedHudScreenResolution.Set(-1.0f, -1.0f, -1.0f, -1.0f);
+		SyncedHudRevision = revision;
+	}
+
+	const RectClass screen = Get_Hud_Physical_Screen_Resolution();
+	if (SyncedHudScreenResolution == screen) {
+		return;
+	}
+
+	SyncedHudScreenResolution = screen;
+	InfoBase = screen.Lower_Left() + Vector2(INFO_OFFSET);
+
+	Sync_Render2D_Coordinate_Range(DamageRenderer, screen);
+	Sync_Render2D_Coordinate_Range(InfoRenderer, screen);
+	Sync_Render2D_Coordinate_Range(InfoHealthCountRenderer, screen);
+	Sync_Render2D_Coordinate_Range(InfoShieldCountRenderer, screen);
+	Sync_Render2D_Coordinate_Range(PowerupBoxRenderer, screen);
+	Sync_Render2D_Coordinate_Range(WeaponImageRenderer, screen);
+	Sync_Render2D_Coordinate_Range(WeaponClipCountRenderer, screen);
+	Sync_Render2D_Coordinate_Range(WeaponTotalCountRenderer, screen);
+	Sync_Render2D_Coordinate_Range(WeaponChartBoxRenderer, screen);
+	Sync_Render2D_Coordinate_Range(TargetRenderer, screen);
+	Sync_Render2D_Coordinate_Range(TargetBoxRenderer, screen);
+	Sync_Render2D_Coordinate_Range(ObjectiveArrowRenderer, screen);
+
+	for (int i = 0; i < LeftPowerupIconList.Count(); i++) {
+		Sync_Render2D_Coordinate_Range(LeftPowerupIconList[i]->Renderer, screen);
+	}
+	for (int i = 0; i < RightPowerupIconList.Count(); i++) {
+		Sync_Render2D_Coordinate_Range(RightPowerupIconList[i]->Renderer, screen);
+	}
+	for (int i = 0; i < WeaponChartIcons.Count(); i++) {
+		Sync_Render2D_Coordinate_Range(WeaponChartIcons[i], screen);
+	}
+#ifndef ATI_DEMO_HACK
+	for (int i = 0; i < NUM_RENDER_IMAGES; i++) {
+		if (i == RETICLE || i == RETICLE_HIT) {
+			Sync_Reticle_Coordinate_Range(RenderImages[i]);
+		} else {
+			Sync_Render2D_Coordinate_Range(RenderImages[i], screen);
+		}
+	}
+#endif
+
+	Rebuild_Weapon_Box(screen);
+	RadarManager::Sync_Screen_Resolution(screen);
+	SniperHUDClass::Sync_Screen_Resolution();
+	Sync_Sentence_Screen_Resolution(HUDHelpTextRenderer, screen);
+	Sync_Sentence_Screen_Resolution(PowerupTextRenderer, screen);
+	Sync_Sentence_Screen_Resolution(WeaponNameRenderer, screen);
+	Sync_Sentence_Screen_Resolution(WeaponChartKeynameRenderer, screen);
+	Sync_Sentence_Screen_Resolution(TargetNameRenderer, screen);
+	Sync_Sentence_Screen_Resolution(InfoDebugRenderer, screen);
+	Sync_Sentence_Screen_Resolution(ObjectiveTextRenderer, screen);
+	Weapon_Reset();
+}
+
 /*
 **	called each time through the main loop
 */
@@ -2940,14 +3082,21 @@ void 	HUDClass::Think()
 {
 	WWPROFILE( "HUD Think" );
 
+	MenuViewportClass::Begin_Hud_Render();
+	Sync_Hud_Screen_Resolution();
+
 #ifndef ATI_DEMO_HACK
 	if ( COMBAT_CAMERA && COMBAT_CAMERA->Draw_Sniper() ) {
 		SniperHUDClass::Update();
 	}
 
 	if ( !Is_HUD_Displayed() ) {
+		MenuViewportClass::End_Hud_Render();
 		return;
 	}
+
+	// Re-sync after menu viewport changes so Think builds HUD geometry at physical resolution.
+	Sync_Hud_Screen_Resolution();
 
 	if ( HUDInfo::Display_Action_Status_Bar() ) {
 
@@ -3037,8 +3186,13 @@ void 	HUDClass::Think()
 	}
 
 	Vector2 reticle_offset = COMBAT_CAMERA->Get_Camera_Target_2D_Offset();
+	float reticle_half_w = 0.0f;
+	float reticle_half_h = 0.0f;
+	Get_Reticle_Half_Extents_NDC (reticle_half_w, reticle_half_h);
 	RenderImages[RETICLE]->Reset();
-	RenderImages[RETICLE]->Add_Quad( RectClass( reticle_offset.X - RETICLE_WIDTH/2, reticle_offset.Y - RETICLE_HEIGHT/2, reticle_offset.X + RETICLE_WIDTH/2, reticle_offset.Y + RETICLE_HEIGHT/2 ), reticle_color);
+	RenderImages[RETICLE]->Add_Quad (RectClass (
+		reticle_offset.X - reticle_half_w, reticle_offset.Y - reticle_half_h,
+		reticle_offset.X + reticle_half_w, reticle_offset.Y + reticle_half_h), reticle_color);
 
 	//RenderImages[RETICLE]->Set_Hidden( false );
 	//TSS092401
@@ -3056,7 +3210,9 @@ void 	HUDClass::Think()
 		COMBAT_CAMERA->Project( reticle_hit_offset, pos3d );
 //		weapon_hitting = HUDInfo::Get_Weapon_Target_Object() != NULL;
 		RenderImages[RETICLE_HIT]->Reset();
-		RenderImages[RETICLE_HIT]->Add_Quad( RectClass( reticle_hit_offset.X - RETICLE_WIDTH/2, reticle_hit_offset.Y - RETICLE_HEIGHT/2, reticle_hit_offset.X + RETICLE_WIDTH/2, reticle_hit_offset.Y + RETICLE_HEIGHT/2 ), reticle_color);
+		RenderImages[RETICLE_HIT]->Add_Quad (RectClass (
+			reticle_hit_offset.X - reticle_half_w, reticle_hit_offset.Y - reticle_half_h,
+			reticle_hit_offset.X + reticle_half_w, reticle_hit_offset.Y + reticle_half_h), reticle_color);
 		RenderImages[RETICLE_HIT]->Set_Hidden( false );
 	} else {
 		RenderImages[RETICLE_HIT]->Set_Hidden( true );
@@ -3092,6 +3248,8 @@ void 	HUDClass::Think()
 	}
 #endif
 #endif // ATI_DEMO_HACK
+
+	MenuViewportClass::End_Hud_Render();
 }
 
 void	HUDClass::Toggle_Hide_Points( void )

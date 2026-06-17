@@ -713,6 +713,38 @@ void Game_Init_Failed_Cleanup(void)
 }
 #endif
 
+#if defined(RENEGADE_LINUX)
+static bool Linux_Snapshot_Has_Render_Resolution(void)
+{
+	static const char *render_section = "Software/Westwood/Renegade/Render";
+	RegistryClass check(APPLICATION_SUB_KEY_NAME_RENDER, false);
+	if (!check.Is_Valid()) {
+		return false;
+	}
+	return check.Get_Int("RenderDeviceWidth", -1) > 0 && check.Get_Int("RenderDeviceHeight", -1) > 0;
+}
+
+static void Linux_Ensure_Render_Device_In_Config(void)
+{
+	if (Linux_Snapshot_Has_Render_Resolution()) {
+		return;
+	}
+
+	RegistryClass check(APPLICATION_SUB_KEY_NAME_RENDER, false);
+	bool need_seed = !check.Is_Valid();
+	if (!need_seed) {
+		char device[200];
+		check.Get_String("RenderDeviceName", device, sizeof(device));
+		const int width = check.Get_Int("RenderDeviceWidth", -1);
+		const int height = check.Get_Int("RenderDeviceHeight", -1);
+		need_seed = (device[0] == '\0' || width <= 0 || height <= 0);
+	}
+	if (need_seed) {
+		WW3D::Registry_Save_Render_Device(APPLICATION_SUB_KEY_NAME_RENDER);
+	}
+}
+#endif
+
 bool Game_Init(void)
 {
 	WWMEMLOG(MEM_GAMEINIT);
@@ -902,11 +934,15 @@ bool Game_Init(void)
 			WWDEBUG_SAY(("WW3D::Registry_Load_Render_Device Failed!\r\n"));
 			return false;
 		}
-	
+
+#if !defined(RENEGADE_LINUX)
 		if ( WW3D::Registry_Save_Render_Device( APPLICATION_SUB_KEY_NAME_RENDER ) != WW3D_ERROR_OK ) {
 			WWDEBUG_SAY(("WW3D::Registry_Save_Render_Device Failed!\r\n"));
 			return false;
 		}
+#else
+		Linux_Ensure_Render_Device_In_Config();
+#endif
 			WW3D::Enable_Static_Sort_Lists (true);
 	}
 	if (AutoRestart.Get_Restart_Flag() || ServerSettingsClass::Is_Command_Line_Mode() || ConsoleBox.Is_Exclusive()) {

@@ -37,6 +37,7 @@ void Platform_Set_Window_Message_Handler(Platform_Window_Message_Handler handler
 
 typedef void (*Platform_Window_Resize_Handler)(int width, int height);
 void Platform_Set_Window_Resize_Handler(Platform_Window_Resize_Handler handler);
+void Platform_Apply_Window_Display_Mode(bool windowed, int width, int height);
 #endif
 
 #ifdef __cplusplus

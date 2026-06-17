@@ -258,7 +258,7 @@ GameObject* Group::GetMember(int index)
 *
 ******************************************************************************/
 
-void Group::SendCustomEvent(GameObject* from, int event, int data)
+void Group::SendCustomEvent(GameObject* from, int event, intptr_t data)
 	{
 	for (int index = 0; index < mMembers.Count(); index++)
 		{

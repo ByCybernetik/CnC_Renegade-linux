@@ -53,8 +53,6 @@ cRegistryInt::cRegistryInt(LPCSTR registry_location, LPCSTR key_name, int defaul
 	   WWASSERT(registry != NULL && registry->Is_Valid());
       Value = registry->Get_Int(KeyName, default_value);
    	delete registry;
-
-      Set(Value);
    }
 }
 

@@ -40,7 +40,136 @@
 #include "always.h"
 #include "definition.h"
 #include "rect.h"
-#include "render2d.h"
+#include "ww3d.h"
+
+
+//////////////////////////////////////////////////////////////////////////
+//	Physical display resolution for in-game EVA overlays (HUD path).
+//////////////////////////////////////////////////////////////////////////
+inline RectClass
+Get_Eva_Screen_Resolution (void)
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution (width, height, bits, windowed);
+	return RectClass (0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+//	Map normalized EVA UI coords through a centered 4:3 canvas on widescreen.
+//////////////////////////////////////////////////////////////////////////
+inline RectClass
+Map_Eva_Normalized_Rect (const RectClass &normalized_rect)
+{
+	RectClass adjusted_rect = normalized_rect;
+
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution (width, height, bits, windowed);
+
+	float scale_w = static_cast<float>(width);
+	float scale_h = static_cast<float>(height);
+	float x_offset = 0.0f;
+
+	const float physical_w = static_cast<float>(width);
+	const float physical_h = static_cast<float>(height);
+	if (physical_w * 3.0f > physical_h * 4.0f) {
+		scale_w = physical_h * (4.0f / 3.0f);
+		scale_h = physical_h;
+		x_offset = (physical_w - scale_w) * 0.5f;
+	}
+
+	adjusted_rect.Scale (Vector2 (scale_w, scale_h));
+	adjusted_rect += Vector2 (x_offset, 0.0f);
+	adjusted_rect.Left	= float (int(adjusted_rect.Left + 0.5F));
+	adjusted_rect.Top		= float (int(adjusted_rect.Top + 0.5F));
+	adjusted_rect.Right	= float (int(adjusted_rect.Right + 0.5F));
+	adjusted_rect.Bottom	= float (int(adjusted_rect.Bottom + 0.5F));
+	return adjusted_rect;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+//	Map normalized EVA message UI coords to physical HUD space and center.
+//////////////////////////////////////////////////////////////////////////
+inline float
+Get_Messages_Hud_X_Offset (const RectClass &screen_normalized_rect)
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution (width, height, bits, windowed);
+
+	const float physical_w = static_cast<float>(width);
+	const float uncentered_left = screen_normalized_rect.Left * physical_w;
+	const float bar_width = (screen_normalized_rect.Right - screen_normalized_rect.Left) * physical_w;
+	const float centered_left = (physical_w - bar_width) * 0.5f;
+
+	return centered_left - uncentered_left;
+}
+
+
+inline RectClass
+Map_Messages_Hud_Rect (const RectClass &normalized_rect, float x_offset)
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution (width, height, bits, windowed);
+
+	const float physical_w = static_cast<float>(width);
+	const float physical_h = static_cast<float>(height);
+
+	RectClass rect (
+		normalized_rect.Left * physical_w,
+		normalized_rect.Top * physical_h,
+		normalized_rect.Right * physical_w,
+		normalized_rect.Bottom * physical_h);
+	rect += Vector2 (x_offset, 0.0f);
+
+	rect.Left = float (int (rect.Left + 0.5F));
+	rect.Top = float (int (rect.Top + 0.5F));
+	rect.Right = float (int (rect.Right + 0.5F));
+	rect.Bottom = float (int (rect.Bottom + 0.5F));
+	return rect;
+}
+
+
+inline Vector2
+Map_Messages_Hud_Point (const Vector2 &normalized_point, const RectClass &screen_normalized_rect)
+{
+	const float x_offset = Get_Messages_Hud_X_Offset (screen_normalized_rect);
+
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution (width, height, bits, windowed);
+
+	Vector2 point (
+		normalized_point.X * static_cast<float>(width) + x_offset,
+		normalized_point.Y * static_cast<float>(height));
+	return point;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+//	Map normalized EVA UI points through a centered 4:3 canvas on widescreen.
+//////////////////////////////////////////////////////////////////////////
+inline Vector2
+Map_Eva_Normalized_Point (const Vector2 &normalized_point)
+{
+	RectClass mapped_rect = Map_Eva_Normalized_Rect (
+		RectClass (normalized_point.X, normalized_point.Y, normalized_point.X, normalized_point.Y));
+	return mapped_rect.Upper_Left ();
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -127,18 +256,7 @@ protected:
 inline RectClass
 EvaSettingsDefClass::Get_Objectives_Screen_Rect (void) const
 {
-	RectClass adjusted_rect = ObjectivesScreenRect;
-
-	//
-	//	Convert the normalized screen coords to pixels
-	//
-	const RectClass &screen_rect = Render2DClass::Get_Screen_Resolution ();
-	adjusted_rect.Scale (Vector2 (screen_rect.Width (), screen_rect.Height ()));
-	adjusted_rect.Left	= float (int(adjusted_rect.Left + 0.5F));
-	adjusted_rect.Top		= float (int(adjusted_rect.Top + 0.5F));
-	adjusted_rect.Right	= float (int(adjusted_rect.Right + 0.5F));
-	adjusted_rect.Bottom	= float (int(adjusted_rect.Bottom + 0.5F));
-	return adjusted_rect;
+	return Map_Eva_Normalized_Rect (ObjectivesScreenRect);
 }
 
 
@@ -148,18 +266,7 @@ EvaSettingsDefClass::Get_Objectives_Screen_Rect (void) const
 inline RectClass
 EvaSettingsDefClass::Get_Objectives_Text_Rect (void) const
 {
-	RectClass adjusted_rect = ObjectivesTextRect;
-
-	//
-	//	Convert the normalized screen coords to pixels
-	//
-	const RectClass &screen_rect = Render2DClass::Get_Screen_Resolution ();
-	adjusted_rect.Scale (Vector2 (screen_rect.Width (), screen_rect.Height ()));
-	adjusted_rect.Left	= float (int(adjusted_rect.Left + 0.5F));
-	adjusted_rect.Top		= float (int(adjusted_rect.Top + 0.5F));
-	adjusted_rect.Right	= float (int(adjusted_rect.Right + 0.5F));
-	adjusted_rect.Bottom	= float (int(adjusted_rect.Bottom + 0.5F));
-	return adjusted_rect;
+	return Map_Eva_Normalized_Rect (ObjectivesTextRect);
 }
 
 
@@ -169,18 +276,8 @@ EvaSettingsDefClass::Get_Objectives_Text_Rect (void) const
 inline RectClass
 EvaSettingsDefClass::Get_Messages_Screen_Rect (void) const
 {
-	RectClass adjusted_rect = MessagesScreenRect;
-
-	//
-	//	Convert the normalized screen coords to pixels
-	//
-	const RectClass &screen_rect = Render2DClass::Get_Screen_Resolution ();
-	adjusted_rect.Scale (Vector2 (screen_rect.Width (), screen_rect.Height ()));
-	adjusted_rect.Left	= float (int(adjusted_rect.Left + 0.5F));
-	adjusted_rect.Top		= float (int(adjusted_rect.Top + 0.5F));
-	adjusted_rect.Right	= float (int(adjusted_rect.Right + 0.5F));
-	adjusted_rect.Bottom	= float (int(adjusted_rect.Bottom + 0.5F));
-	return adjusted_rect;
+	const float x_offset = Get_Messages_Hud_X_Offset (MessagesScreenRect);
+	return Map_Messages_Hud_Rect (MessagesScreenRect, x_offset);
 }
 
 
@@ -190,18 +287,8 @@ EvaSettingsDefClass::Get_Messages_Screen_Rect (void) const
 inline RectClass
 EvaSettingsDefClass::Get_Messages_Text_Rect (void) const
 {
-	RectClass adjusted_rect = MessagesTextRect;
-
-	//
-	//	Convert the normalized screen coords to pixels
-	//
-	const RectClass &screen_rect = Render2DClass::Get_Screen_Resolution ();
-	adjusted_rect.Scale (Vector2 (screen_rect.Width (), screen_rect.Height ()));
-	adjusted_rect.Left	= float (int(adjusted_rect.Left + 0.5F));
-	adjusted_rect.Top		= float (int(adjusted_rect.Top + 0.5F));
-	adjusted_rect.Right	= float (int(adjusted_rect.Right + 0.5F));
-	adjusted_rect.Bottom	= float (int(adjusted_rect.Bottom + 0.5F));
-	return adjusted_rect;
+	const float x_offset = Get_Messages_Hud_X_Offset (MessagesScreenRect);
+	return Map_Messages_Hud_Rect (MessagesTextRect, x_offset);
 }
 
 
@@ -211,14 +298,7 @@ EvaSettingsDefClass::Get_Messages_Text_Rect (void) const
 inline Vector2
 EvaSettingsDefClass::Get_Messages_Icon_Position (void) const
 {
-	Vector2 adjusted_point = MessagesIconPos;
-
-	//
-	//	Convert the normalized screen coords to pixels
-	//
-	adjusted_point.X *= Render2DClass::Get_Screen_Resolution ().Width ();
-	adjusted_point.Y *= Render2DClass::Get_Screen_Resolution ().Height ();
-	return adjusted_point;
+	return Map_Messages_Hud_Point (MessagesIconPos, MessagesScreenRect);
 }
 
 

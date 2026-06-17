@@ -118,6 +118,7 @@ public:
 	//
 	static void				Initialize (void);
 	static void				Initialize_From_INI (const char *filename);
+	static void				Update_Scale_For_Resolution (const RectClass &screen);
 	static void				Shutdown (void);
 
 	//

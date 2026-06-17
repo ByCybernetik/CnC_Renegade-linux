@@ -56,6 +56,20 @@
 
 #if defined(RENEGADE_COLLISION_FIX)
 
+static void
+Linux_Pad_Query_AABox ( AABoxClass &bounds, float min_extent )
+{
+	if ( bounds.Extent.X < min_extent ) {
+		bounds.Extent.X = min_extent;
+	}
+	if ( bounds.Extent.Y < min_extent ) {
+		bounds.Extent.Y = min_extent;
+	}
+	if ( bounds.Extent.Z < min_extent ) {
+		bounds.Extent.Z = min_extent;
+	}
+}
+
 /*
 ** Reject codes for vehicle cull-intersect fallback (0 = allowed).
 */
@@ -152,16 +166,7 @@ static void
 Linux_Init_Ray_Query_Bounds ( const LineSegClass &ray, AABoxClass &out_bounds )
 {
 	out_bounds.Init ( ray );
-	const float min_extent = 1.0f;
-	if ( out_bounds.Extent.X < min_extent ) {
-		out_bounds.Extent.X = min_extent;
-	}
-	if ( out_bounds.Extent.Y < min_extent ) {
-		out_bounds.Extent.Y = min_extent;
-	}
-	if ( out_bounds.Extent.Z < min_extent ) {
-		out_bounds.Extent.Z = min_extent;
-	}
+	Linux_Pad_Query_AABox ( out_bounds, 1.0f );
 }
 #endif
 
@@ -241,6 +246,25 @@ PhysicsSceneClass::Linux_Collect_Static_In_AABox
 				!obj->Is_Ignore_Me () &&
 				CollisionMath::Overlap_Test ( query_bounds, obj->Get_Cull_Box () ) != CollisionMath::OUTSIDE )
 		{
+			list->Add ( obj );
+		}
+	}
+}
+
+void
+PhysicsSceneClass::Linux_Collect_Static_In_AABox_All
+(
+	const AABoxClass &query_bounds,
+	NonRefPhysListClass *list
+)
+{
+	AABoxClass bounds = query_bounds;
+	Linux_Pad_Query_AABox ( bounds, 0.5f );
+
+	RefPhysListIterator it ( &StaticObjList );
+	for ( it.First (); !it.Is_Done (); it.Next () ) {
+		PhysClass *obj = it.Peek_Obj ();
+		if ( CollisionMath::Overlap_Test ( bounds, obj->Get_Cull_Box () ) != CollisionMath::OUTSIDE ) {
 			list->Add ( obj );
 		}
 	}
@@ -381,31 +405,27 @@ bool PhysicsSceneClass::Cast_Ray(PhysRayCollisionTestClass & raytest,bool use_co
 
 #if defined(RENEGADE_COLLISION_FIX)
 			//
-			//	If the tree missed geometry along the ray, fall back to a
-			//	linear scan.  Without this, vehicle wheel suspension
-			//	raycasts miss ground polygons on LP64 (broken AABTree),
-			//	causing harvesters to never detect ground contact.
+			//	The tree may miss geometry or return the wrong fraction.
+			//	Always run the linear scan so the nearest hit wins.
 			//
-			if ( !res ) {
 #if defined(RENEGADE_LINUX)
-				AABoxClass ray_bounds;
-				Linux_Init_Ray_Query_Bounds ( raytest.Ray, ray_bounds );
+			AABoxClass ray_bounds;
+			Linux_Init_Ray_Query_Bounds ( raytest.Ray, ray_bounds );
 #endif
-				RefPhysListIterator it ( &StaticObjList );
-				for ( it.First (); !it.Is_Done (); it.Next () ) {
-					PhysClass *obj = it.Peek_Obj ();
-					if (	Do_Groups_Collide ( obj->Get_Collision_Group (), raytest.CollisionGroup ) &&
-							!obj->Is_Ignore_Me () )
-					{
+			RefPhysListIterator it ( &StaticObjList );
+			for ( it.First (); !it.Is_Done (); it.Next () ) {
+				PhysClass *obj = it.Peek_Obj ();
+				if (	Do_Groups_Collide ( obj->Get_Collision_Group (), raytest.CollisionGroup ) &&
+						!obj->Is_Ignore_Me () )
+				{
 #if defined(RENEGADE_LINUX)
-						if ( CollisionMath::Overlap_Test ( ray_bounds, obj->Get_Cull_Box () ) == CollisionMath::OUTSIDE ) {
-							continue;
-						}
+					if ( CollisionMath::Overlap_Test ( ray_bounds, obj->Get_Cull_Box () ) == CollisionMath::OUTSIDE ) {
+						continue;
+					}
 #endif
-						res |= obj->Cast_Ray ( raytest );
-						if ( raytest.Result->StartBad ) {
-							return true;
-						}
+					res |= obj->Cast_Ray ( raytest );
+					if ( raytest.Result->StartBad ) {
+						return true;
 					}
 				}
 			}
@@ -461,8 +481,16 @@ bool PhysicsSceneClass::Cast_AABox(PhysAABoxCollisionTestClass & boxtest,bool us
 		** Cull the collision check using the culling systems
 		*/
 		if (boxtest.CheckStaticObjs) {
+#if defined(RENEGADE_LINUX)
+			/*
+			** LP64 AABTree sweeps can miss walls or report the wrong fraction.
+			** Use the linear cull-box prefilter (same pattern as Cast_Ray).
+			*/
+			res = false;
+#else
 			res |= StaticCullingSystem->Cast_AABox(boxtest);
 			if (boxtest.Result->StartBad) return true;
+#endif
 
 #if defined(RENEGADE_COLLISION_FIX)
 			//
@@ -470,7 +498,7 @@ bool PhysicsSceneClass::Cast_AABox(PhysAABoxCollisionTestClass & boxtest,bool us
 			//	returned a hit (res == true).  Always run the linear scan
 			//	so the nearest fraction wins.
 			//
-			if ( !res && boxtest.Move.Length2 () > WWMATH_EPSILON ) {
+			if ( boxtest.Move.Length2 () > WWMATH_EPSILON ) {
 				AABoxClass sweep_bounds;
 				sweep_bounds.Init_Min_Max ( boxtest.SweepMin, boxtest.SweepMax );
 
@@ -564,8 +592,12 @@ bool PhysicsSceneClass::Cast_OBBox(PhysOBBoxCollisionTestClass & boxtest,bool us
 		** Cull the collision check using the culling systems
 		*/
 		if (boxtest.CheckStaticObjs) {
+#if defined(RENEGADE_LINUX)
+			res = false;
+#else
 			res |= StaticCullingSystem->Cast_OBBox(boxtest);
 			if (boxtest.Result->StartBad) return true;
+#endif
 
 #if defined(RENEGADE_COLLISION_FIX)
 			//
@@ -573,7 +605,7 @@ bool PhysicsSceneClass::Cast_OBBox(PhysOBBoxCollisionTestClass & boxtest,bool us
 			//	returned a hit (res == true).  Always run the linear scan
 			//	so the nearest fraction wins.
 			//
-			if ( !res && boxtest.Move.Length2 () > WWMATH_EPSILON ) {
+			if ( boxtest.Move.Length2 () > WWMATH_EPSILON ) {
 				AABoxClass sweep_bounds;
 				sweep_bounds.Init_Min_Max ( boxtest.SweepMin, boxtest.SweepMax );
 
@@ -861,17 +893,35 @@ void PhysicsSceneClass::Collect_Objects
 {
 	WWASSERT(list != NULL);
 
+#if defined(RENEGADE_COLLISION_FIX)
+	if (static_objs) {
+		Linux_Collect_Static_In_AABox_All ( box, list );
+	}
+#else
 	if (static_objs) {
 		StaticCullingSystem->Reset_Collection();
 		StaticCullingSystem->Collect_Objects(box);
 	}
+#endif
 
 	if (dynamic_objs) {
 		DynamicCullingSystem->Reset_Collection();
 		DynamicCullingSystem->Collect_Objects(box);
 	}
 
+#if defined(RENEGADE_COLLISION_FIX)
+	if (dynamic_objs) {
+		PhysClass *obj = NULL;
+		for (	obj = DynamicCullingSystem->Get_First_Collected_Object ();
+				obj != NULL;
+				obj = DynamicCullingSystem->Get_Next_Collected_Object ( obj ) )
+		{
+			list->Add ( obj );
+		}
+	}
+#else
 	Add_Collected_Objects_To_List(static_objs,dynamic_objs,list);
+#endif
 }
 
 void PhysicsSceneClass::Collect_Objects
@@ -883,17 +933,39 @@ void PhysicsSceneClass::Collect_Objects
 )
 {
 	WWASSERT(list != NULL);
+
+#if defined(RENEGADE_COLLISION_FIX)
+	if (static_objs) {
+		AABoxClass query_bounds;
+		query_bounds.Center = box.Center;
+		box.Compute_Axis_Aligned_Extent ( &query_bounds.Extent );
+		Linux_Collect_Static_In_AABox_All ( query_bounds, list );
+	}
+#else
 	if (static_objs) {
 		StaticCullingSystem->Reset_Collection();
 		StaticCullingSystem->Collect_Objects(box);
 	}
+#endif
 
 	if (dynamic_objs) {
 		DynamicCullingSystem->Reset_Collection();
 		DynamicCullingSystem->Collect_Objects(box);
 	}
 
+#if defined(RENEGADE_COLLISION_FIX)
+	if (dynamic_objs) {
+		PhysClass *obj = NULL;
+		for (	obj = DynamicCullingSystem->Get_First_Collected_Object ();
+				obj != NULL;
+				obj = DynamicCullingSystem->Get_Next_Collected_Object ( obj ) )
+		{
+			list->Add ( obj );
+		}
+	}
+#else
 	Add_Collected_Objects_To_List(static_objs,dynamic_objs,list);
+#endif
 }
 
 void PhysicsSceneClass::Collect_Objects

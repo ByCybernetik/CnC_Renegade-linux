@@ -156,6 +156,9 @@ public:
 	// statics to access the Screen Resolution in Pixels
 	static void	Set_Screen_Resolution( const RectClass & screen );
 	static const RectClass & Get_Screen_Resolution( void )			{ return ScreenResolution; }
+	static void	Set_Custom_Viewport( const RectClass & viewport );
+	static void	Clear_Custom_Viewport( void );
+	static bool	Has_Custom_Viewport( void )							{ return CustomViewportActive; }
 
 protected:
 	Vector2										CoordinateScale;
@@ -175,6 +178,8 @@ protected:
 	float											ZValue;
 
 	static RectClass							ScreenResolution;
+	static bool									CustomViewportActive;
+	static RectClass							CustomViewport;
 
 	Vector2 Convert_Vert( const Vector2 & v );
 	void	  Convert_Vert( Vector2 & vert_out, const Vector2 & vert_in );

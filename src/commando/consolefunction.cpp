@@ -124,6 +124,8 @@
 #include "cstextobj.h"
 #include "suicideevent.h"
 #include "godmodeevent.h"
+#include "soldier.h"
+#include "weaponbag.h"
 #include "serverfps.h"
 #include "warpevent.h"
 //#include "helptext.h"
@@ -3530,6 +3532,74 @@ public:
 	}
 };
 
+static void Console_Grant_All_To_Soldier( SoldierGameObj *soldier )
+{
+	if ( soldier == NULL ) {
+		return;
+	}
+
+	/*
+	** Same weapon set as the original cheat menu / give_weapons: only defs
+	** marked AGiveWeaponsWeapon.  Granting every CLASSID_DEF_WEAPON fills the
+	** HUD weapon chart with hundreds of icons (AI/boss/vehicle variants).
+	*/
+	soldier->Give_All_Weapons();
+
+	WeaponBagClass *weapon_bag = soldier->Get_Weapon_Bag();
+	if ( weapon_bag != NULL ) {
+		for ( int weapon_index = 0; weapon_index < weapon_bag->Get_Count(); ++weapon_index ) {
+			WeaponClass *weapon = weapon_bag->Peek_Weapon( weapon_index );
+			if ( weapon != NULL ) {
+				weapon->Add_Rounds( -1 );
+			}
+		}
+	}
+
+	for ( int key_index = 0; key_index < 32; ++key_index ) {
+		soldier->Give_Key( key_index );
+	}
+
+	DefenseObjectClass *defense = soldier->Get_Defense_Object();
+	if ( defense != NULL ) {
+		defense->Set_Health( defense->Get_Health_Max() );
+		defense->Set_Shield_Strength( defense->Get_Shield_Strength_Max() );
+	}
+
+	if ( soldier->Is_Human_Controlled() && cNetwork::I_Am_Server() ) {
+		cPlayer *player = cPlayerManager::Find_Player( cNetwork::Get_My_Id() );
+		if ( player != NULL ) {
+			player->Increment_Money( 100000 );
+			player->Mark_As_Modified();
+		}
+	}
+}
+
+class DevGiveAllConsoleFunctionClass : public ConsoleFunctionClass {
+public:
+	virtual	const char * Get_Name( void )	{ return "give"; }
+	virtual	const char * Get_Help( void )	{ return "GIVE ALL - player arsenal, keys, full ammo/health (solo/server)."; }
+
+	virtual	void Activate( const char * input ) {
+		if ( input == NULL || ::stricmp( input, "all" ) != 0 ) {
+			Print( "Usage: give all\n" );
+			return;
+		}
+
+		if ( !cNetwork::I_Am_Server() ) {
+			Print( "Server only.\n" );
+			return;
+		}
+
+		if ( COMBAT_STAR == NULL ) {
+			Print( "No player soldier in game.\n" );
+			return;
+		}
+
+		Console_Grant_All_To_Soldier( COMBAT_STAR );
+		Print( "Granted all weapons, items, and supplies.\n" );
+	}
+};
+
 #endif // RENEGADE_DEV_CONSOLE && !WWDEBUG
 
 class ScreenUVBiasConsoleFunctionClass : public ConsoleFunctionClass {
@@ -3847,6 +3917,9 @@ public:
 				rect.Bottom = resos[i].Height;
 
 				Render2DClass::Set_Screen_Resolution(rect);
+#if defined(RENEGADE_LINUX)
+				WW3D::Registry_Save_Render_Device(APPLICATION_SUB_KEY_NAME_RENDER);
+#endif
 				Print( "Resolution changed to %d * %d, %d bits\n", resos[i].Width,resos[i].Height,resos[i].BitDepth);
 			}
 			else {
@@ -5425,6 +5498,7 @@ void	ConsoleFunctionManager::Init( void )
 #if defined(RENEGADE_DEV_CONSOLE) && !defined(WWDEBUG)
 	FunctionList.Add( new DevAmmoConsoleFunctionClass() );
 	FunctionList.Add( new DevGiveWeaponsConsoleFunctionClass() );
+	FunctionList.Add( new DevGiveAllConsoleFunctionClass() );
 	FunctionList.Add( new DevMissionConsoleFunctionClass() );
 	FunctionList.Add( new DevGodConsoleFunctionClass() );
 	FunctionList.Add( new SpMapConsoleFunctionClass() );

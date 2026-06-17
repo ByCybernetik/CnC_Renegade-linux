@@ -93,6 +93,9 @@
 #include "simpledefinitionfactory.h"
 #include "wwphysids.h"
 #include "w3d_file.h"
+#if defined(RENEGADE_LINUX)
+#include "renegade_collision_fix.h"
+#endif
 
 
 DECLARE_FORCE_LINK(phys3);
@@ -1524,6 +1527,66 @@ bool Phys3Class::Collide_Move(const Vector3 & requested_move,float dt)
  * HISTORY:                                                                                    *
  *   9/16/2000  gth : Created.                                                                 *
  *=============================================================================================*/
+
+#if defined(RENEGADE_LINUX) && defined(RENEGADE_COLLISION_FIX)
+
+/*
+** When the player capsule already overlaps geometry (StartBad), Apply_Move
+** used to freeze in place.  Nudge along a few axes to escape minor wall clips.
+*/
+static bool Linux_Phys3_Try_Depenetrate(Phys3Class *phys)
+{
+	AABoxClass box;
+	phys->Get_Collision_Box(&box);
+
+	PhysAABoxIntersectionTestClass test(
+		box,
+		phys->Get_Collision_Group(),
+		COLLISION_TYPE_PHYSICAL);
+
+	phys->Inc_Ignore_Counter();
+	bool intersecting = PhysicsSceneClass::Get_Instance()->Intersection_Test(test);
+	phys->Dec_Ignore_Counter();
+	if (!intersecting) {
+		return false;
+	}
+
+	static const float k_push = 0.05f;
+	static const Vector3 pushes[] = {
+		Vector3(0.0f, 0.0f, k_push),
+		Vector3(k_push, 0.0f, 0.0f),
+		Vector3(-k_push, 0.0f, 0.0f),
+		Vector3(0.0f, k_push, 0.0f),
+		Vector3(0.0f, -k_push, 0.0f),
+		Vector3(k_push, k_push, 0.0f),
+		Vector3(-k_push, k_push, 0.0f),
+		Vector3(k_push, -k_push, 0.0f),
+		Vector3(-k_push, -k_push, 0.0f),
+	};
+
+	const Vector3 cur_pos = phys->Get_Position();
+	for (unsigned i = 0; i < sizeof(pushes) / sizeof(pushes[0]); ++i) {
+		AABoxClass try_box = box;
+		try_box.Center += pushes[i];
+
+		PhysAABoxIntersectionTestClass try_test(
+			try_box,
+			phys->Get_Collision_Group(),
+			COLLISION_TYPE_PHYSICAL);
+
+		phys->Inc_Ignore_Counter();
+		bool still = PhysicsSceneClass::Get_Instance()->Intersection_Test(try_test);
+		phys->Dec_Ignore_Counter();
+		if (!still) {
+			phys->Set_Position(cur_pos + pushes[i]);
+			return true;
+		}
+	}
+
+	return false;
+}
+#endif
+
 bool Phys3Class::Apply_Move
 (
 	const Vector3 & input_move,
@@ -1671,9 +1734,13 @@ bool Phys3Class::Apply_Move
 		
 		VERBOSE_LOG(("  Checking collision results:  "));
 		if (result.StartBad) {
-			//WWDEBUG_WARNING(("result.StartBad\n"));
-			//PhysicsSceneClass::Get_Instance()->Add_Debug_AABox(box,Vector3(1,0,0));
 			VERBOSE_LOG(("StartBad!\r\n"));
+#if defined(RENEGADE_LINUX) && defined(RENEGADE_COLLISION_FIX)
+			if (Linux_Phys3_Try_Depenetrate(this)) {
+				result.Reset();
+				continue;
+			}
+#endif
 			done = true;
 		
 		} else {

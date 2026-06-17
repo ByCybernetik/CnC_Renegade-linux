@@ -118,7 +118,7 @@ DECLARE_SCRIPT(MPR_A01_CivLeader_PMP, "Follower_ID:int")
 		}
 	}
 
-	void Custom(GameObject* obj, int event, int param, GameObject* host)
+	void Custom(GameObject* obj, int event, intptr_t param, GameObject* host)
 	{
 		if (event == MPR_CUSTOM_I_AM_DEAD_DEL)
 		{
@@ -202,7 +202,7 @@ DECLARE_SCRIPT(MPR_A01_CivFollower_PMP, "Host_ID:int, Host_distance=1.5:float")
 		Host_ID = Get_Int_Parameter("Host_ID");
 	}	
 
-	void Custom(GameObject* obj, int event, int param, GameObject* host)
+	void Custom(GameObject* obj, int event, intptr_t param, GameObject* host)
 	{
 		if (event == MPR_CUSTOM_ESCORT_ATTACKED_DEL)
 		{
@@ -474,7 +474,7 @@ MPR_A01_GET_TO_CHINOOK
 
 DECLARE_SCRIPT(MPR_A01_Get_To_Chinook_PMP,"")
 {
-	void Custom(GameObject* obj, int event, int param, GameObject* host)
+	void Custom(GameObject* obj, int event, intptr_t param, GameObject* host)
 	{
 		if (event == MPR_CUSTOM_EVAC_CALL_DEL)
 		{
@@ -1086,7 +1086,7 @@ DECLARE_SCRIPT(MPR_ApacheController, "")
 		mCanShoot = false;
 	}
 
-	void Custom(GameObject* apache, int event, int param, GameObject*)
+	void Custom(GameObject* apache, int event, intptr_t param, GameObject*)
 	{
 		if (event == MPR_CUSTOM_APACHE_GOTO_POSITION_DEL)
 		{

@@ -54,12 +54,15 @@
 #include "scene.h"
 #include "ww3d.h"
 #include "wwmemlog.h"
+#include "menuviewport.h"
 
 ////////////////////////////////////////////////////////////////
 //	Constants
 ////////////////////////////////////////////////////////////////
 static const char *FONT_NAME						= "FONT6X8.TGA";
 static const char *HEADER_FONT_NAME				= "FONT8X8.TGA";
+
+static unsigned int SyncedMessageWindowRevision = 0;
 
 
 
@@ -415,6 +418,12 @@ MessageWindowClass::Update_Window_Rectangle (void)
 
 	if (settings == NULL || TextWindow == NULL) {
 		return;
+	}
+
+	if (MenuViewportClass::Get_Hud_Resolution_Revision () != SyncedMessageWindowRevision) {
+		SyncedMessageWindowRevision = MenuViewportClass::Get_Hud_Resolution_Revision ();
+		IsRectangleDirty = true;
+		Reset_Current_Rect ();
 	}
 
 	WWASSERT(settings != NULL);

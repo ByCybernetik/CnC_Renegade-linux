@@ -148,7 +148,7 @@ DECLARE_SCRIPT(M03_Objective_Controller, "")  //1100004
 		}
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == GUNBOAT_KILLED)
 		{
@@ -762,7 +762,7 @@ DECLARE_SCRIPT(RMV_Test_Big_Gun_Turning, "")
 	}
 
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == GUNBOAT_KILLED)
 		{
@@ -973,7 +973,7 @@ DECLARE_SCRIPT(M03_Gunboat_Controller_RMV, "Receive_Type:int, Receive_Param_For_
 		}
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == CANNON_KILLED)
 		{
@@ -1173,7 +1173,7 @@ DECLARE_SCRIPT(M03_Gunboat_Controller_RMV, "Receive_Type:int, Receive_Param_For_
 		last = 0;
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		char *list[11];
 		
@@ -1288,7 +1288,7 @@ DECLARE_SCRIPT(M03_Outro_Cinematic, "")
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == 8000) && (param >= 3))
 		{
@@ -1391,7 +1391,7 @@ DECLARE_SCRIPT(RMV_Volcano_And_Lava_Ball_Creator, "")
 
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == 500) && (param == 500))
 		{
@@ -1587,7 +1587,7 @@ DECLARE_SCRIPT(M03_CommCenter_SateliteDish_Controller_JDG, "")
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if (param == stop_sounds)
 		{
@@ -1638,7 +1638,7 @@ DECLARE_SCRIPT(M03_CommCenter_SateliteDish_Controller_JDG, "")
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if (param == stop_sounds)
 		{
@@ -1693,7 +1693,7 @@ DECLARE_SCRIPT(M03_Ambient_Birdcall_Controller_JDG, "")
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if (param == stop_birdcalls)
 		{
@@ -1835,7 +1835,7 @@ DECLARE_SCRIPT(M03_Announce_PowerPlant_Controller_JDG, "")
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		
 
@@ -2261,7 +2261,7 @@ DECLARE_SCRIPT(M03_Announce_Refinery_Controller_JDG, "")
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if (param == stop_announcements)
 		{
@@ -2752,7 +2752,7 @@ DECLARE_SCRIPT(M03_Announce_CommCenter_Controller_JDG, "")
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if (param == stop_announcements)
 		{
@@ -3052,7 +3052,7 @@ DECLARE_SCRIPT(M03_Initial_Powerups, "")
 		}	
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == 12176) && (param == 12176))
 		{
@@ -3086,11 +3086,11 @@ DECLARE_SCRIPT(M03_Commando_Script, "Controller_ID:int")
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 3000)
 		{
-			int *occupied = (int *)param;
+			int *occupied = (int *)(intptr_t)param;
 			if (occupied != NULL)
 			{
 				(*occupied) = has_escort ? 1 : 0;
@@ -3171,7 +3171,7 @@ DECLARE_SCRIPT(M03_Move_Commando_To_Start, "")
 		}
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == 100) && (param == 100))
 		{
@@ -3206,7 +3206,7 @@ DECLARE_SCRIPT(M03_Chinook_Drop_Soldiers_GDI, "Controller_ID:int")
 		return type - 4001;
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		GameObject *soldier;
 		
@@ -3339,7 +3339,7 @@ DECLARE_SCRIPT(M03_Chinook_Reinforcements, "Beach_Preset:string, Inlet_Preset:st
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 2000)
 		{
@@ -3577,7 +3577,7 @@ DECLARE_SCRIPT(M03_Chinook_Spawned_Soldier_GDI, "Area:int, Send_Type_When_Killed
 	void Poked(GameObject * obj, GameObject * poker)
 	{
 		int has_escort = 1;
-		Commands->Send_Custom_Event(obj, poker, 3000, (int)&has_escort);
+		Commands->Send_Custom_Event(obj, poker, 3000, (intptr_t)&has_escort);
 		if (has_escort == 1)
 		{
 
@@ -3637,7 +3637,7 @@ DECLARE_SCRIPT(M03_Chinook_Spawned_Soldier_GDI, "Area:int, Send_Type_When_Killed
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 999 && param == 999)
 		{
@@ -3713,7 +3713,7 @@ DECLARE_SCRIPT(M03_Objective_Tracker, "")
 		number_completed = 0;
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == 300) || (type == 308) || (type == 309))
 		{
@@ -3733,7 +3733,7 @@ DECLARE_SCRIPT(M03_Objective_Tracker, "")
 
 DECLARE_SCRIPT(M03_Intro_Substitute, "")
 {
-	void Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		if (type == 999)
 		{
@@ -3837,7 +3837,7 @@ DECLARE_SCRIPT(M03_Alternate_Sam_Site, "Chinook_Controller_ID:int")
 		
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (Commands->Find_Object(1100003) == NULL)
 		{
@@ -3910,7 +3910,7 @@ DECLARE_SCRIPT(M03_Flyover_Controller, "")
 		comanches = true;
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 511 && param == 511)
 		{
@@ -3989,7 +3989,7 @@ DECLARE_SCRIPT(M03_Destroyed_Chinook, "Controller_ID:int, Simple_ID:int")
 
 DECLARE_SCRIPT(M03_Chinook_Fodder_Creator, "")
 {
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (Commands->Find_Object(1100003) == NULL)
 		{
@@ -4086,7 +4086,7 @@ DECLARE_SCRIPT(M03_Tailgun_Fodder_Zone, "Spawner_ID_1:int, Spawner_ID_2:int, Spa
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 5000)
 		{
@@ -4191,7 +4191,7 @@ DECLARE_SCRIPT(M03_Inlet_Nod_Reinforcements, "")
 		}
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == 300) && (param == 300))
 		{
@@ -4349,7 +4349,7 @@ DECLARE_SCRIPT(M03_Base_Harvester, "Tiberium_Loc:vector3, Dock_Location:vector3,
 		Commands->Action_Goto(Owner(), params);
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 622 && param == 622)
 		{
@@ -4478,11 +4478,11 @@ DECLARE_SCRIPT(M03_Reinforce_Area, "")
 		}
 	}*/
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 5000)
 		{
-			int *area = (int *)param;
+			int *area = (int *)(intptr_t)param;
 			if (beach_active)
 			{
 				*area = 0;
@@ -4502,7 +4502,7 @@ DECLARE_SCRIPT(M03_Reinforce_Area, "")
 		}
 		if (type == 6300)
 		{
-			int *target_count = (int *)param;
+			int *target_count = (int *)(intptr_t)param;
 			if (beach_active)
 			{
 				*target_count = target_killed[0];
@@ -4647,7 +4647,7 @@ DECLARE_SCRIPT(M03_Officer_With_Key_Card2, "")
 
 DECLARE_SCRIPT(M03_Key_Card, "")
 {
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		GameObject * con = Commands->Find_Object(1100004);
 		if (con)
@@ -4838,7 +4838,7 @@ DECLARE_SCRIPT(M03_Chinook_ParaDrop, "Preset:string")
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 23000 && param == 23000)
 		{
@@ -4883,7 +4883,7 @@ DECLARE_SCRIPT(M03_Reinforcement_Chinook, "Controller_ID:int")
 
 DECLARE_SCRIPT(M03_Staged_Conversation_1, "Soldier_1_ID:int, Soldier_2_ID:int")
 {
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 1000 && param == 1000)
 		{
@@ -4949,7 +4949,7 @@ DECLARE_SCRIPT(M03_Staged_Conversation_Soldier, "")
 		Commands->Innate_Soldier_Enable_Bullet_Heard(obj, true);
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		Commands->Set_Innate_Is_Stationary(obj, false);
 		Commands->Innate_Soldier_Enable_Footsteps_Heard(obj, true);
@@ -5082,7 +5082,7 @@ DECLARE_SCRIPT(M03_SAM_Site_Logic, "")
 		Commands->Attach_Script(destroyedSam, "M03_Destroyed_SAM_Site", "");
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == M00_CUSTOM_SAM_SITE_IGNORE && current < 10 && current >= 0)
 		{
@@ -5158,7 +5158,7 @@ DECLARE_SCRIPT(M03_Beach_Scenario_Controller, "")
 		count = 0;
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		count++;
 		if (count >= 4)
@@ -5197,7 +5197,7 @@ DECLARE_SCRIPT(M03_Beach_Scenario_Controller, "")
 		active = false;
 	}
 	
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 100 && param == 100)
 		{
@@ -5291,7 +5291,7 @@ DECLARE_SCRIPT(M03_Beach_Scenario_Controller, "")
 
 /*DECLARE_SCRIPT(M03_Dock_Evacuation_Controller, "")
 {
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 100 && param == 100)
 		{
@@ -5442,7 +5442,7 @@ DECLARE_SCRIPT(DLS_Volcano_Active, "Receive_Type=0:int, Receive_Param=0:int, Vol
 
 	}
 
-	void Custom(GameObject* obj, int type, int param, GameObject* sender)
+	void Custom(GameObject* obj, int type, intptr_t param, GameObject* sender)
 	{
 		if((type == receive_type) && (param == receive_param))
 		{
@@ -5847,14 +5847,14 @@ DECLARE_SCRIPT(M03_Area_Troop_Counter, "")
 		killed_count[0] = killed_count[1] = killed_count[2] = 0;
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == 1000 && param == 1000)
 		{
 			int area = -1;
 			int target_count = -1;
-			Commands->Send_Custom_Event(obj, obj, 5000, (int)&area);
-			Commands->Send_Custom_Event(obj, obj, 6300, (int)&target_count);
+			Commands->Send_Custom_Event(obj, obj, 5000, (intptr_t)&area);
+			Commands->Send_Custom_Event(obj, obj, 6300, (intptr_t)&target_count);
 			if (area >= 0 && area <= 2)
 			{
 				area_count[area]--;
@@ -5976,7 +5976,7 @@ DECLARE_SCRIPT (M03_CommCenter_Warning, "")
 		already_entered = false;
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == MCT_ACCESSED)
 		{
@@ -6014,7 +6014,7 @@ DECLARE_SCRIPT (M03_PowerPlant_Warning, "")
 		already_entered = false;
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == MCT_ACCESSED)
 		{
@@ -6060,7 +6060,7 @@ DECLARE_SCRIPT (M03_CommCenter_Arrow, "")
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == MCT_ACCESSED)
 		{
@@ -6149,7 +6149,7 @@ DECLARE_SCRIPT (M03_Comm_Killed, "")
 		max_health = Commands->Get_Health (obj);
 	}
 
-	void Custom (GameObject *obj, int type, int param, GameObject *sender)
+	void Custom(GameObject *obj, int type, intptr_t param, GameObject *sender)
 	{
 		if (type == BASE_ENTERED)
 		{
@@ -6188,7 +6188,7 @@ DECLARE_SCRIPT (M03_Conversation_Zone, "Conv_Num:int")
 		first_conv_played = false;
 	}
 
-	void Custom (GameObject *obj, int type, int param, GameObject *sender)
+	void Custom(GameObject *obj, int type, intptr_t param, GameObject *sender)
 	{
 		if (type == ENTERED)
 		{
@@ -6386,7 +6386,7 @@ DECLARE_SCRIPT(M03_Holograph_EntryZone_JDG, "")
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if (param == 8000)
 		{
@@ -6444,7 +6444,7 @@ DECLARE_SCRIPT(M03_KaneHead_JDG, "") //2017221
 		}
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if (param == 8000)//conversation is over--go away
 		{
@@ -6596,7 +6596,7 @@ DECLARE_SCRIPT(M03_Beach_Reinforce, "")
 		}
 	}	
 
-	void Custom (GameObject *obj, int type, int param, GameObject *sender)
+	void Custom(GameObject *obj, int type, intptr_t param, GameObject *sender)
 	{
 		if (type == LOCATION)
 		{
@@ -6691,7 +6691,7 @@ DECLARE_SCRIPT(M03_Engineer_Target, "")
 		full_health = Commands->Get_Health (obj);
 	}
 
-	void Custom (GameObject *obj, int type, int param, GameObject *sender)
+	void Custom(GameObject *obj, int type, intptr_t param, GameObject *sender)
 	{
 		if (type == ENGINEER)
 		{
@@ -6811,7 +6811,7 @@ DECLARE_SCRIPT(M03_Radar_Scramble, "")
 		already_entered = false;				
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		if (type == ENTERED)
 		{
@@ -6928,7 +6928,7 @@ DECLARE_SCRIPT (M10_Elevator_All_Controller, "")
 		}
 	}
 
-	void Custom (GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		
 		if (type == ACTIVATE)
@@ -7011,7 +7011,7 @@ DECLARE_SCRIPT(M03_Paratrooper_Run, "")
 		
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (!initial_damage)
 		{
@@ -7091,7 +7091,7 @@ DECLARE_SCRIPT (M03_Damage_Modifier_All, "Damage_multiplier:float")
 
 DECLARE_SCRIPT(M03_Cine_Explosion, "")
 {
-	void Custom (GameObject *obj, int type, int param, GameObject *sender)
+	void Custom(GameObject *obj, int type, intptr_t param, GameObject *sender)
 	{
 		if (type == 600)
 		{
@@ -7114,7 +7114,7 @@ DECLARE_SCRIPT(M03_ConYardSeen, "")
 		already_entered = false;				
 	}
 
-	void Custom( GameObject * obj, int type, int param, GameObject * sender )
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender )
 	{
 		if (type == 900)
 		{
@@ -7134,7 +7134,7 @@ DECLARE_SCRIPT(M03_ConYardSeen, "")
 
 DECLARE_SCRIPT(M03_DataDiscMessage, "")
 {
-	void Custom( GameObject * obj, int type, int param, GameObject * sender ) 
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject * sender ) 
 	{
 		if ( type == CUSTOM_EVENT_POWERUP_GRANTED ) 
 		{

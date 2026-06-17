@@ -28,6 +28,8 @@
 #include "rect.h"
 #include "subtitlemanager.h"
 #include "dx8caps.h"
+#include "ww3d.h"
+#include "menuviewport.h"
 #if defined(RENEGADE_VULKAN)
 #include "vk_dx8_texture.h"
 #endif
@@ -74,6 +76,46 @@ class BINKMovieClass
 
 
 static BINKMovieClass* CurrentMovie;
+
+
+static RectClass Compute_Bink_Display_Rect(int video_width, int video_height)
+{
+	int screen_width = 0;
+	int screen_height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution(screen_width, screen_height, bits, windowed);
+
+	if (video_width <= 0 || video_height <= 0 || screen_width <= 0 || screen_height <= 0) {
+		return RectClass(0.0f, 0.0f, (float)screen_width, (float)screen_height);
+	}
+
+	const float video_aspect = (float)video_width / (float)video_height;
+	const float screen_aspect = (float)screen_width / (float)screen_height;
+
+	float display_width = 0.0f;
+	float display_height = 0.0f;
+	float x_offset = 0.0f;
+	float y_offset = 0.0f;
+
+	if (video_aspect > screen_aspect) {
+		display_width = (float)screen_width;
+		display_height = display_width / video_aspect;
+		x_offset = 0.0f;
+		y_offset = ((float)screen_height - display_height) * 0.5f;
+	} else {
+		display_height = (float)screen_height;
+		display_width = display_height * video_aspect;
+		x_offset = ((float)screen_width - display_width) * 0.5f;
+		y_offset = 0.0f;
+	}
+
+	return RectClass(
+		x_offset,
+		y_offset,
+		x_offset + display_width,
+		y_offset + display_height);
+}
 
 
 void BINKMovie::Play(const char* filename,const char* subtitlename, FontCharsClass* font)
@@ -454,22 +496,42 @@ void BINKMovieClass::Render()
 		return;
 	}
 
+	// Menu pillarbox uses a 4:3 custom viewport; draw video full-screen.
+	MenuViewportClass::Begin_Hud_Render();
+
+	int screen_width = 0;
+	int screen_height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution(screen_width, screen_height, bits, windowed);
+	const RectClass screen_rect(0.0f, 0.0f, (float)screen_width, (float)screen_height);
+	const RectClass display_rect = Compute_Bink_Display_Rect(Bink->Width, Bink->Height);
+
 	for (unsigned t = 0; t < TextureCount; ++t) {
 		Renderer.Reset();
 		Renderer.Enable_Texturing(true);
 		Renderer.Set_Texture(TextureInfos[t].Texture);
-		Renderer.Set_Coordinate_Range(RectClass(0.0f, 0.0f, 1.0f, 1.0f));//Bink->Width,Bink->Height));
+		Renderer.Set_Coordinate_Range(screen_rect);
 
-		RectClass rect(TextureInfos[t].TextureLocX, TextureInfos[t].TextureLocY, TextureInfos[t].TextureWidth, TextureInfos[t].TextureHeight);
-		Renderer.Add_Quad(TextureInfos[t].Rect, TextureInfos[t].UV, 0xffffffff);
+		const RectClass &normalized_rect = TextureInfos[t].Rect;
+		RectClass draw_rect;
+		draw_rect.Left = display_rect.Left + normalized_rect.Left * display_rect.Width();
+		draw_rect.Top = display_rect.Top + normalized_rect.Top * display_rect.Height();
+		draw_rect.Right = display_rect.Left + normalized_rect.Right * display_rect.Width();
+		draw_rect.Bottom = display_rect.Top + normalized_rect.Bottom * display_rect.Height();
+
+		Renderer.Add_Quad(draw_rect, TextureInfos[t].UV, 0xffffffff);
 		Renderer.Render();
 	}
 
 	if (SubTitleManager) {
+		SubTitleManager->Set_Display_Rect(display_rect);
 		unsigned long movieTime = (Bink->FrameNum * TicksPerFrame);
 		SubTitleManager->Process(movieTime);
 		SubTitleManager->Render();
 	}
+
+	MenuViewportClass::End_Hud_Render();
 }
 
 

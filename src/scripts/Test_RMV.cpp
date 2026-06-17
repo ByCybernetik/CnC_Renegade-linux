@@ -171,7 +171,7 @@ DECLARE_SCRIPT(M00_Put_Script_On_Commando, "")
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == 12176) && (param == 12176))
 		{
@@ -582,7 +582,7 @@ DECLARE_SCRIPT(RMV_Transport_Evac, "Number:int, Nod=0:int")
 		}
 	}
 
-	void Custom(GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		loading_complete = true;
 	}

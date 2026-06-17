@@ -36,6 +36,7 @@
 
 #include "sniper.h"
 #include "render2d.h"
+#include "ww3d.h"
 #include "texture.h"
 #include "assets.h"
 #include "combat.h"
@@ -117,6 +118,25 @@ void 	SniperHUDClass::Init( void )
 /*
 **
 */
+void	SniperHUDClass::Sync_Screen_Resolution(void)
+{
+	int width = 0;
+	int height = 0;
+	int bits = 0;
+	bool windowed = false;
+	WW3D::Get_Device_Resolution(width, height, bits, windowed);
+	const RectClass screen(0, 0, (float)width, (float)height);
+
+	if (_Sniper2DBaseRenderer != NULL) {
+		_Sniper2DBaseRenderer->Set_Coordinate_Range(screen);
+		Build_Base();
+	}
+
+	if (_Sniper2DRenderer != NULL) {
+		_Sniper2DRenderer->Set_Coordinate_Range(screen);
+	}
+}
+
 void 	SniperHUDClass::Shutdown( void )
 {
 	if ( _Sniper2DBaseRenderer ) {

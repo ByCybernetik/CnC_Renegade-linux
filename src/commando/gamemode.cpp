@@ -53,6 +53,7 @@
 #include "objectives.h"
 #include "messagewindow.h"
 #include "dialogmgr.h"
+#include "menuviewport.h"
 #include "pscene.h"
 #include "phys.h"
 #include "ccamera.h"
@@ -259,14 +260,18 @@ void	GameModeManager::Render( void )
 
 		{
 			WWPROFILE( "Message Window" );
+			MenuViewportClass::Begin_Hud_Render();
 			if (CombatManager::Get_Message_Window () != NULL) {
 				CombatManager::Get_Message_Window ()->Render();
 			}
+			MenuViewportClass::End_Hud_Render();
 		}
 
 		{
 			WWPROFILE( "ObjectiveViewer" );
+			MenuViewportClass::Begin_Hud_Render();
 			ObjectiveManager::Render_Viewer();
+			MenuViewportClass::End_Hud_Render();
 		}
 
 		{

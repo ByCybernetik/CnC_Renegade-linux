@@ -305,6 +305,34 @@ void Platform_Set_Window_Resize_Handler(Platform_Window_Resize_Handler handler)
 	g_resize_handler = handler;
 }
 
+void Platform_Apply_Window_Display_Mode(bool windowed, int width, int height)
+{
+	if (g_window == NULL) {
+		return;
+	}
+
+	if (windowed) {
+		SDL_SetWindowFullscreen(g_window, false);
+		SDL_SetWindowFullscreenMode(g_window, NULL);
+		if (width > 0 && height > 0) {
+			SDL_SetWindowSize(g_window, width, height);
+		}
+	} else {
+		SDL_DisplayID display = SDL_GetDisplayForWindow(g_window);
+		SDL_DisplayMode mode;
+		if (width > 0 && height > 0 &&
+			SDL_GetClosestFullscreenDisplayMode(display, width, height, 0.0f, true, &mode)) {
+			SDL_SetWindowFullscreenMode(g_window, &mode);
+		} else {
+			SDL_SetWindowFullscreenMode(g_window, NULL);
+		}
+		SDL_SetWindowFullscreen(g_window, true);
+	}
+
+	SDL_SyncWindow(g_window);
+	Platform_Pump_Events();
+}
+
 void Platform_Pump_Events(void)
 {
 	SDL_Event ev;

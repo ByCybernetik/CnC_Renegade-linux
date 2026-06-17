@@ -46,6 +46,7 @@
 #include "wwstring.h"
 #include <windows.h>
 #include "render2dsentence.h"
+#include "rect.h"
 
 class SubTitleClass;
 class Surface;
@@ -61,6 +62,8 @@ public:
 
 	// Check if there are subtitles.
 	bool Has_Sub_Titles(void) const { return (mSubTitles != NULL); }
+
+	void Set_Display_Rect(const RectClass &rect);
 
 	// Reset subtitles to start
 	void Reset(void);
@@ -82,6 +85,8 @@ private:
 	int mSubTitleIndex;
 	SubTitleClass* mActiveSubTitle;
 	Render2DSentenceClass Renderer;
+	RectClass mDisplayRect;
+	bool mHasDisplayRect;
 };
 
 #endif // _SUBTITLEMANAGER_H_

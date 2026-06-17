@@ -22,6 +22,7 @@ wwui_sources = files(
   'mapctrl.cpp',
   'menubackdrop.cpp',
   'menudialog.cpp',
+  'menuviewport.cpp',
   'menuentryctrl.cpp',
   'merchandisectrl.cpp',
   'mousemgr.cpp',

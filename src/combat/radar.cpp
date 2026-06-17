@@ -313,6 +313,22 @@ Vector2	RadarCenter(0.0f,0.0f);
 float	RadarIntensity;
 long	RadarColor;
 
+void	RadarManager::Sync_Screen_Resolution(const RectClass &screen)
+{
+	if (Renderer == NULL) {
+		return;
+	}
+
+	Renderer->Set_Coordinate_Range(screen);
+
+	for (int i = 0; i < 8; i++) {
+		delete CompassRenderers[i];
+		CompassRenderers[i] = NULL;
+	}
+
+	OldRadarCenter.Set(-1.0f, -1.0f);
+}
+
 float	RadarManager::Add_Blip( const Vector3 & pos, int shape_type, int color_type, float intensity, bool bracket, bool altitude_fade ) 
 {
 	if ( shape_type != BLIP_SHAPE_TYPE_NONE ) {

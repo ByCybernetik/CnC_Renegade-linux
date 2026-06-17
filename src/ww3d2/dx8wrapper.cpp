@@ -78,7 +78,6 @@
 #include "bound.h"
 #if defined(RENEGADE_LINUX)
 #include "../platform/sdl3_host.h"
-#include <time.h>
 #include <SDL3/SDL.h>
 #endif
 #if defined(RENEGADE_VULKAN)
@@ -931,6 +930,37 @@ bool DX8Wrapper::Set_Any_Render_Device(void)
 	return false;
 }
 
+#if defined(RENEGADE_LINUX)
+namespace {
+void linux_apply_sdl_display_mode(
+	bool resize_window, bool windowed, int &width, int &height, D3DPRESENT_PARAMETERS &present)
+{
+	if (!resize_window) {
+		return;
+	}
+
+	Platform_Apply_Window_Display_Mode(windowed, width, height);
+	SDL_Window *window = Platform_Get_SDL_Window();
+	if (window == NULL) {
+		return;
+	}
+
+	int win_w = 0;
+	int win_h = 0;
+	SDL_GetWindowSize(window, &win_w, &win_h);
+	if (win_w <= 0 || win_h <= 0) {
+		return;
+	}
+
+	width = win_w;
+	height = win_h;
+	present.BackBufferWidth = width;
+	present.BackBufferHeight = height;
+	Render2DClass::Set_Screen_Resolution(RectClass(0, 0, width, height));
+}
+} /* namespace */
+#endif
+
 bool DX8Wrapper::Set_Render_Device
 (
 	const char * dev_name,
@@ -1017,13 +1047,7 @@ bool DX8Wrapper::Set_Render_Device(int dev, int width, int height, int bits, int
 		BitDepth = 32;
 
 #if defined(RENEGADE_LINUX)
-		if (resize_window) {
-			SDL_Window *window = (SDL_Window *)_Hwnd;
-			if (window != NULL) {
-				SDL_SetWindowSize(window, ResolutionWidth, ResolutionHeight);
-				Platform_Pump_Events();
-			}
-		}
+		linux_apply_sdl_display_mode(resize_window, IsWindowed, ResolutionWidth, ResolutionHeight, _PresentParameters);
 #endif
 		return Create_Device();
 	}
@@ -1125,13 +1149,7 @@ bool DX8Wrapper::Set_Render_Device(int dev, int width, int height, int bits, int
 	}
 
 #if defined(RENEGADE_LINUX)
-	if (resize_window) {
-		SDL_Window *window = (SDL_Window *)_Hwnd;
-		if (window != NULL) {
-			SDL_SetWindowSize(window, ResolutionWidth, ResolutionHeight);
-			Platform_Pump_Events();
-		}
-	}
+	linux_apply_sdl_display_mode(resize_window, IsWindowed, ResolutionWidth, ResolutionHeight, _PresentParameters);
 #elif defined(_WINDOWS)
 	// PWG 4/13/2000 - changed so that if you say to resize the window it resizes
 	// regardless of whether its windowed or not as OpenGL resizes its self around
@@ -1430,12 +1448,11 @@ bool DX8Wrapper::Set_Device_Resolution(int width,int height,int bits,int windowe
 		Render2DClass::Set_Screen_Resolution(
 			RectClass(0, 0, ResolutionWidth, ResolutionHeight));
 #if defined(RENEGADE_LINUX)
-		if (resize_window && IsWindowed) {
-			SDL_Window *window = Platform_Get_SDL_Window();
-			if (window != NULL) {
-				SDL_SetWindowSize(window, ResolutionWidth, ResolutionHeight);
-			}
+		if (windowed != -1) {
+			IsWindowed = (windowed != 0);
+			_PresentParameters.Windowed = IsWindowed;
 		}
+		linux_apply_sdl_display_mode(resize_window, IsWindowed, ResolutionWidth, ResolutionHeight, _PresentParameters);
 #endif
 #pragma message("TODO: support changing windowed status and changing the bit depth")
 		return Reset_Device();
@@ -1523,6 +1540,17 @@ bool DX8Wrapper::Registry_Save_Render_Device( const char *sub_key, int device, i
 #endif
 	}
 
+#if defined(RENEGADE_LINUX)
+	{
+		const int persisted_windowed = registry->Get_Int(VALUE_NAME_RENDER_DEVICE_WINDOWED, -1);
+		if (persisted_windowed != -1) {
+			windowed = persisted_windowed != 0;
+		} else {
+			windowed = true;
+		}
+	}
+#endif
+
 	registry->Set_String( VALUE_NAME_RENDER_DEVICE_NAME,
 		_RenderDeviceShortNameTable[device] );
 	registry->Set_Int( VALUE_NAME_RENDER_DEVICE_WIDTH,	width );
@@ -1540,22 +1568,52 @@ bool DX8Wrapper::Registry_Load_Render_Device( const char * sub_key, bool resize_
 	char	name[ 200 ];
 	int	width,height,depth,windowed;
 
-	if (	Registry_Load_Render_Device(	sub_key,
-													name,
-													sizeof(name),
-													width,
-													height,
-													depth,
-													windowed,
-													TextureBitDepth) &&
+	const bool loaded = Registry_Load_Render_Device(
+		sub_key,
+		name,
+		sizeof(name),
+		width,
+		height,
+		depth,
+		windowed,
+		TextureBitDepth);
+
+#if defined(RENEGADE_LINUX)
+	if (loaded && width > 0 && height > 0) {
+		if (name[0] == '\0' && _RenderDeviceNameTable.Count() > 0) {
+			strncpy(name, _RenderDeviceShortNameTable[0].Peek_Buffer(), sizeof(name) - 1);
+			name[sizeof(name) - 1] = '\0';
+		}
+		if (depth <= 0) {
+			depth = DEFAULT_BIT_DEPTH;
+		}
+		if (windowed < 0) {
+			windowed = 1;
+		}
+		if (TextureBitDepth != 16 && TextureBitDepth != 32) {
+			TextureBitDepth = 16;
+		}
+
+		WWDEBUG_SAY(( "Linux render config %s (%d X %d) %d bit windowed:%d\n",
+			name, width, height, depth, windowed));
+
+		if (name[0] != '\0' &&
+			Set_Render_Device(name, width, height, depth, windowed, resize_window)) {
+			return true;
+		}
+		if (_RenderDeviceNameTable.Count() > 0 &&
+			Set_Render_Device(0, width, height, depth, windowed, resize_window)) {
+			return true;
+		}
+
+		WWDEBUG_SAY(( "Linux: failed to apply configured resolution %dx%d\n", width, height));
+	}
+#endif
+
+	if (	loaded &&
 			(*name != 0))
 	{
 		WWDEBUG_SAY(( "Device %s (%d X %d) %d bit windowed:%d\n", name,width,height,depth,windowed));
-
-#if defined(RENEGADE_LINUX)
-		// Registry from Windows often requests fullscreen; windowed is more reliable with SDL3 WSI.
-		windowed = 1;
-#endif
 
 		if (TextureBitDepth==16 || TextureBitDepth==32) {
 //			WWDEBUG_SAY(( "Texture depth %d\n", TextureBitDepth));
@@ -1653,7 +1711,11 @@ bool DX8Wrapper::Registry_Load_Render_Device( const char * sub_key, bool resize_
 
 bool DX8Wrapper::Registry_Load_Render_Device( const char * sub_key, char *device, int device_len, int &width, int &height, int &depth, int &windowed, int &texture_depth)
 {
+#if defined(RENEGADE_LINUX)
+	RegistryClass registry( sub_key, false );
+#else
 	RegistryClass registry( sub_key );
+#endif
 
 	if ( registry.Is_Valid() ) {
 		registry.Get_String( VALUE_NAME_RENDER_DEVICE_NAME,

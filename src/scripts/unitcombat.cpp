@@ -188,7 +188,7 @@ DECLARE_SCRIPT ( Unit_Combat,"Scoreboard_ID=0:int,Controller_ID=0:int,Script_Ove
 		}
 	}
 
-	void Custom ( GameObject * obj, int type, int param, GameObject *sender )
+	void Custom( GameObject * obj, int type, intptr_t param, GameObject *sender )
 	{
 		if ( type == OV_OVERRIDE )
 		{

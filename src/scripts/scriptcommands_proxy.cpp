@@ -198,7 +198,7 @@ void ScriptCommandsProxy::Select_Weapon(GameObject * obj, const char * weapon_na
 	m_p->Select_Weapon(obj, weapon_name);
 }
 
-void ScriptCommandsProxy::Send_Custom_Event(GameObject * from, GameObject * to, int type, int param, float delay)
+void ScriptCommandsProxy::Send_Custom_Event(GameObject * from, GameObject * to, int type, intptr_t param, float delay)
 {
 	if (!m_p) return;
 	m_p->Send_Custom_Event(from, to, type, param, delay);

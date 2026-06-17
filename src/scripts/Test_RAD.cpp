@@ -117,7 +117,7 @@ DECLARE_SCRIPT (MX0_A02_Controller, "")
 		}
 	}
 
-	void Custom (GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		switch (type)
 		{
@@ -1526,7 +1526,7 @@ DECLARE_SCRIPT (MX0_A02_ACTOR, "ActorID=0:int")
 		}
 	}
 
-	void Custom (GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (active_actor)
 		{
@@ -2953,7 +2953,7 @@ DECLARE_SCRIPT (MX0_A02_GDI_MEDTANK, "")
 		Commands->Set_Health (obj, Commands->Get_Max_Health (obj));
 	}
 
-	void Custom (GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if ((type == CUSTOM_EVENT_VEHICLE_ENTERED) && (!entered))
 		{
@@ -2997,7 +2997,7 @@ DECLARE_SCRIPT (MX0_A02_GDI_APC, "")
 		Commands->Action_Attack (obj, params);
 	}
 
-	void Custom (GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		if (type == MX0_A02_CUSTOM_TYPE_DESTROY_APC)
 		{
@@ -3180,7 +3180,7 @@ DECLARE_SCRIPT (M03_A05_Evac_Zone, "")
 		}
 	}
 
-	void Custom (GameObject * obj, int type, int param, GameObject * sender)
+	void Custom(GameObject * obj, int type, intptr_t param, GameObject * sender)
 	{
 		Vector3 spawn_set_location;
 

@@ -123,6 +123,8 @@ public:
 	void				Set_Snap_Shot_Mode( bool mode )		{ SnapShotMode = mode ? SNAPSHOT_ON : SNAPSHOT_OFF; }
 	bool				Is_Snap_Shot_Mode( void )				{ return SnapShotMode == SNAPSHOT_ON; }
 
+	void				Sync_Device_Aspect_Ratio( void );
+
 protected:
 	
 	// Camera Host Model

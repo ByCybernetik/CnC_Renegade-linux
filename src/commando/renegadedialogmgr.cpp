@@ -38,6 +38,7 @@
 #include "renegadedialogmgr.h"
 #include <stdio.h>
 #include "dialogmgr.h"
+#include "menuviewport.h"
 #include "dialogbase.h"
 #include "dialogtests.h"
 #include "dialogresource.h"
@@ -190,6 +191,7 @@ class RenegadeUIInputClass : public WWUIInputClass
 	Get_Mouse_Pos (void) const
 	{
 		DirectInput::Get_Cursor_Pos (&MousePos);
+		MenuViewportClass::Transform_Mouse_Pos (MousePos);
 		return MousePos;
 	}
 
@@ -197,7 +199,8 @@ class RenegadeUIInputClass : public WWUIInputClass
 	Set_Mouse_Pos (const Vector3 &pos)
 	{
 		MousePos = pos;
-		DirectInput::Reset_Cursor_Pos (Vector2 (pos.X, pos.Y));
+		MenuViewportClass::Untransform_Mouse_Pos (MousePos);
+		DirectInput::Reset_Cursor_Pos (Vector2 (MousePos.X, MousePos.Y));
 		return ;
 	}
 

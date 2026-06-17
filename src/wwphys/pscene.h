@@ -1264,6 +1264,7 @@ private:
 	bool							Linux_Intersect_Static_In_AABox ( const AABoxClass &query_bounds, int collision_group, PhysAABoxIntersectionTestClass &boxtest );
 	bool							Linux_Intersect_Static_In_AABox ( const AABoxClass &query_bounds, int collision_group, PhysOBBoxIntersectionTestClass &boxtest );
 	void							Linux_Collect_Static_In_AABox ( const AABoxClass &query_bounds, int collision_group, NonRefPhysListClass *list );
+	void							Linux_Collect_Static_In_AABox_All ( const AABoxClass &query_bounds, NonRefPhysListClass *list );
 #endif
 	
 	/*
