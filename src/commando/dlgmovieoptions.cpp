@@ -77,6 +77,27 @@ static bool MovieOptions_Paths_Equal(const char *a, const char *b)
 #endif
 }
 
+static bool MovieOptions_Filenames_Equal(const char *a, const char *b)
+{
+	return MovieOptions_Paths_Equal(a, b);
+}
+
+static const char *MovieOptions_Get_Filename(const char *path)
+{
+	const char *filename;
+
+	if (path == NULL) {
+		return NULL;
+	}
+
+	filename = ::strrchr(path, '\\');
+	if (filename == NULL) {
+		filename = ::strrchr(path, '/');
+	}
+
+	return (filename != NULL) ? filename + 1 : path;
+}
+
 static bool MovieOptions_List_Has_Path(
 	ListCtrlClass *list_ctrl, DynamicVectorClass<StringClass> *paths, const char *path)
 {
@@ -117,13 +138,61 @@ static void MovieOptions_Add_Movie_Entry(
 
 static const WCHAR *MovieOptions_Lookup_Known_Label(const char *path)
 {
-	if (MovieOptions_Paths_Equal(path, "DATA\\MOVIES\\R_INTRO.BIK")) {
-		return TRANSLATE(IDS_INTRO_MOVIE);
+	const char *filename = MovieOptions_Get_Filename(path);
+	struct MovieLabelMap {
+		const char *filename;
+		uint32 string_id;
+	};
+	static const MovieLabelMap known_movies[] = {
+		{ "R_INTRO.BIK", IDS_INTRO_MOVIE },
+		{ "R_FINALE.BIK", IDS_FINALE_MOVIE },
+		{ "R_L00.BIK", IDS_Enc_Miss_Title_M00_01 },
+		{ "R_L01.BIK", IDS_Enc_Miss_Title_M01_01 },
+		{ "R_L02.BIK", IDS_Enc_Miss_Title_M02_01 },
+		{ "R_L03.BIK", IDS_Enc_Miss_Title_M03_01 },
+		{ "R_L04.BIK", IDS_Enc_Miss_Title_M04_01 },
+		{ "R_L05.BIK", IDS_Enc_Miss_Title_M05_01 },
+		{ "R_L06.BIK", IDS_Enc_Miss_Title_M06_01 },
+		{ "R_L07.BIK", IDS_Enc_Miss_Title_M07_01 },
+		{ "R_L08.BIK", IDS_Enc_Miss_Title_M08_01 },
+		{ "R_L09.BIK", IDS_Enc_Miss_Title_M09_01 },
+		{ "R_L10.BIK", IDS_Enc_Miss_Title_M10_01 },
+		{ "R_L11.BIK", IDS_Enc_Miss_Title_M11_01 },
+		{ NULL, 0 }
+	};
+
+	if (filename == NULL) {
+		return NULL;
 	}
-	if (MovieOptions_Paths_Equal(path, "DATA\\MOVIES\\R_FINALE.BIK")) {
+
+	for (int index = 0; known_movies[index].filename != NULL; ++index) {
+		if (MovieOptions_Filenames_Equal(filename, known_movies[index].filename)) {
+			return TRANSLATE(known_movies[index].string_id);
+		}
+	}
+
+	return NULL;
+}
+
+static const WCHAR *MovieOptions_Resolve_Label(const char *path, const char *string_id_desc)
+{
+	const WCHAR *label = MovieOptions_Lookup_Known_Label(path);
+	if (label != NULL) {
+		return label;
+	}
+
+	if (string_id_desc == NULL || string_id_desc[0] == '\0') {
+		return NULL;
+	}
+
+	//
+	// campaign.ini stores this alias, but Russian Strings.tdb only has IDS_FINALE_MOVIE.
+	//
+	if (MovieOptions_Filenames_Equal(string_id_desc, "IDS_Finale_Movie")) {
 		return TRANSLATE(IDS_FINALE_MOVIE);
 	}
-	return NULL;
+
+	return TRANSLATE_BY_DESC(string_id_desc);
 }
 
 #if defined(RENEGADE_LINUX)
@@ -166,7 +235,7 @@ static void MovieOptions_Scan_Disk_Movies(
 				continue;
 			}
 
-			label.Format(L"%hs", find_data.cFileName);
+			label.Convert_From(find_data.cFileName);
 			MovieOptions_Add_Movie_Entry(list_ctrl, paths, label, path.Peek_Buffer());
 		} while (FindNextFileA(find_handle, &find_data));
 
@@ -226,8 +295,10 @@ MovieOptionsMenuClass::On_Init_Dialog (void)
 				const WCHAR *wide_desc;
 
 				registry.Get_String(list[index], string_id_des);
-				wide_desc = TRANSLATE_BY_DESC(string_id_des);
-				MovieOptions_Add_Movie_Entry(list_ctrl, &MoviePaths, wide_desc, list[index]);
+				wide_desc = MovieOptions_Resolve_Label(list[index], string_id_des);
+				if (wide_desc != NULL) {
+					MovieOptions_Add_Movie_Entry(list_ctrl, &MoviePaths, wide_desc, list[index]);
+				}
 			}
 		}
 

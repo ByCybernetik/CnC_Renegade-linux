@@ -628,9 +628,15 @@ bool RestartNeeded = true;
 void Get_Version_Number(unsigned long *major, unsigned long *minor)
 {
 	// Version info removed per Legal review requirements. LFeenanEA - 8th February 2025
-	
 	unsigned long version_major = 0;
 	unsigned long version_minor = 0;
+
+	if (major != NULL) {
+		*major = version_major;
+	}
+	if (minor != NULL) {
+		*minor = version_minor;
+	}
 }
 
 

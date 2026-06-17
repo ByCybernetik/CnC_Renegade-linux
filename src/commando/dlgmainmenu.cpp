@@ -486,22 +486,25 @@ void
 MainMenuDialogClass::Update_Version_Number (void)
 {
 	//
-	// Version 1.0 by default
+	// Shipping builds use the localized version string from Strings.tdb.
+	// Build stamp fields are MSVC-only placeholders and are not stamped in this port.
 	//
-	unsigned long version_major = 1;
-	unsigned long version_minor = 0;
-	Get_Version_Number(&version_major, &version_minor);
+	const WCHAR *version_text = TRANSLATE(IDS_MENU_TEXT514);
+	if (version_text == NULL || version_text[0] == L'\0') {
+		unsigned long version_major = 1;
+		unsigned long version_minor = 0;
+		Get_Version_Number(&version_major, &version_minor);
 
-	//
-	// Put the version string into the dialog
-	//
-	WideStringClass version_string;
-	// Add build number temporarily. Will probably be removed for shipping.
-	WideStringClass build_number(BuildInfoClass::Get_Build_Number_String(), true);
-	WideStringClass build_initials(BuildInfoClass::Get_Builder_Initials(), true);
-	WideStringClass build_date(BuildInfoClass::Get_Build_Date_String(), true);
-	version_string.Format (L"v%d.%.3d %s-%s %s", (version_major >> 16), (version_major & 0xFFFF), build_initials, build_number, build_date);
-	Set_Dlg_Item_Text (IDC_VERSION_STATIC, version_string);
+		WideStringClass version_string;
+		version_string.Format(
+			L"v%d.%.3d",
+			(int)(version_major >> 16),
+			(int)(version_major & 0xFFFF));
+		Set_Dlg_Item_Text(IDC_VERSION_STATIC, version_string);
+		return;
+	}
+
+	Set_Dlg_Item_Text(IDC_VERSION_STATIC, version_text);
 }
 
 

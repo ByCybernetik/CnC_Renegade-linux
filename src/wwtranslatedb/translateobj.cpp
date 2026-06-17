@@ -411,7 +411,7 @@ TDBObjClass::Get_Display_String (void) const
 const WideStringClass &
 TDBObjClass::Get_String (void)
 {
-	return Get_String (TranslateDBClass::Get_Current_Language ());
+	return Get_Display_String ();
 }
 
 
