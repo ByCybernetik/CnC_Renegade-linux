@@ -60,6 +60,7 @@
 #include "stripoptimizer.h"
 #include "meshgeometry.h"
 #include "hashtemplate.h"
+#include <string.h>
 
 
 /*
@@ -1761,11 +1762,17 @@ void DX8TextureCategoryClass::Render(void)
 			/*
 			** Render mesh using either sorting or immediate pipeline
 			*/
+#if defined(RENEGADE_VULKAN)
+			ww3d_vulkan::Set_Current_Draw_Mesh_Name(mesh->Get_Name());
+#endif
 			if ((!!mesh->Peek_Model()->Get_Flag(MeshGeometryClass::SORT)) && WW3D::Is_Sorting_Enabled()) {
 				renderer->Render_Sorted(mesh->Get_Base_Vertex_Offset(),mesh->Get_Bounding_Sphere());
 			} else {
 				renderer->Render(mesh->Get_Base_Vertex_Offset());
 			}
+#if defined(RENEGADE_VULKAN)
+			ww3d_vulkan::Set_Current_Draw_Mesh_Name(nullptr);
+#endif
 		}
 
 		/*

@@ -75,11 +75,22 @@ static void Extract_Tex_Mat(const Matrix4 &tex_mat, float out[4])
 	out[0] = tex_mat[0][0];
 	out[1] = tex_mat[1][1];
 	/*
-	 * TextureMatrices[] stores Transpose(mapper_matrix). LinearOffset mappers put
-	 * UV translation in [0][2]/[1][2] before transpose -> [2][0]/[2][1] after.
+	 * TextureMatrices[] stores Transpose(mapper_matrix).
+	 * LinearOffset mappers put UV translation in [0][2]/[1][2] before transpose
+	 * -> [2][0]/[2][1] after.
+	 * ClassicEnvironmentMapper puts translation in row0/row1 W before transpose
+	 * -> [3][0]/[3][1] after.
 	 */
 	out[2] = tex_mat[2][0];
 	out[3] = tex_mat[2][1];
+	if (out[2] == 0.0f && out[3] == 0.0f) {
+		const float row3_u = tex_mat[3][0];
+		const float row3_v = tex_mat[3][1];
+		if (row3_u != 0.0f || row3_v != 0.0f) {
+			out[2] = row3_u;
+			out[3] = row3_v;
+		}
+	}
 }
 
 static bool Is_Valid_Ttf(unsigned ttf)

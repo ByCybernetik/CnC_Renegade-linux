@@ -13,7 +13,9 @@
 #include "../ww3d2/dx8indexbuffer.h"
 #include "../ww3d2/dx8fvf.h"
 #include "../ww3d2/shader.h"
+#include "../ww3d2/ww3d.h"
 #include "../ww3d2/texture.h"
+#include <cstdio>
 #include "../wwmath/matrix4.h"
 #include <cstdint>
 #include <cstring>
@@ -282,6 +284,16 @@ MeshPipelineKey Pipeline_Key_From_Shader(const ShaderClass &shader, unsigned fvf
 		key.two_sided = true;
 	} else {
 		key.depth_test = shader.Get_Depth_Compare() != ShaderClass::PASS_NEVER;
+	}
+	if (Is_Menu_Screen_Blend_Mesh(Get_Current_Draw_Mesh_Name()) &&
+			shader.Get_Src_Blend_Func() == ShaderClass::SRCBLEND_ONE &&
+			shader.Get_Dst_Blend_Func() == ShaderClass::DSTBLEND_ONE_MINUS_SRC_COLOR)
+	{
+		/* Menu screen-blend glow only — gameplay particles use the same blend mode. */
+		key.two_sided = true;
+		if (shader.Get_Depth_Mask() == ShaderClass::DEPTH_WRITE_DISABLE) {
+			key.depth_test = false;
+		}
 	}
 	key.alpha_test = shader.Get_Alpha_Test() == ShaderClass::ALPHATEST_ENABLE;
 	return key;

@@ -1019,6 +1019,26 @@ Vector2	WeaponChartBase( 0.11f, 0.05f );
 Vector2	WeaponChartSpacing( 0.075f, 0.05f );
 float		WeaponChartIconScale = 0.45f / 640.0f;
 
+#if defined(RENEGADE_VULKAN)
+#include "dx8wrapper.h"
+#include "../ww3d2_vulkan/vk_dx8_texture.h"
+
+static bool Weapon_Chart_Icons_Need_Vulkan_Textures(void)
+{
+	for (int i = 0; i < WeaponChartIcons.Count(); ++i) {
+		Render2DClass *renderer = WeaponChartIcons[i];
+		if (renderer == nullptr) {
+			continue;
+		}
+		TextureClass *tex = renderer->Peek_Texture();
+		if (tex != nullptr && tex->Peek_Vulkan_Texture() == nullptr) {
+			return true;
+		}
+	}
+	return false;
+}
+#endif
+
 static	void	Clear_Weapon_Chart_Icons( void )
 {
 	if ( WeaponChartIcons.Count() != 0 ) {
@@ -1052,6 +1072,7 @@ static int Count_Weapon_Chart_Icon_Slots( WeaponBagClass *weapon_bag )
 	return slots;
 }
 
+static bool ForceChartRebuild = false;
 
 static	void	Build_Weapon_Chart_Icons( void )
 {
@@ -1059,6 +1080,7 @@ static	void	Build_Weapon_Chart_Icons( void )
 
 	Clear_Weapon_Chart_Icons();
 
+	bool chart_textures_pending = false;
 	float screen_scale = Render2DClass::Get_Screen_Resolution().Width();
 	Vector2	pos = WeaponChartBase * screen_scale;
 
@@ -1111,16 +1133,23 @@ static	void	Build_Weapon_Chart_Icons( void )
 				StringClass new_name(true);
 				Strip_Path_From_Filename( new_name, filename );
 				renderer->Set_Texture( new_name );
-				if ( renderer->Peek_Texture() != NULL ) {
-//					SurfaceClass::SurfaceDescription surface_desc;
-//					renderer->Peek_Texture()->Get_Level_Description( surface_desc );
-//					float size = surface_desc.Width;		// Assume square
-					float size = renderer->Peek_Texture()->Get_Width(); // Assume square
+				bool icon_ready = true;
+				TextureClass *tex = renderer->Peek_Texture();
+				if ( tex != NULL ) {
+					float size = tex->Get_Width();
 					if ( size > 0 ) {
 						uv.Scale( Vector2( 1/size, 1/size ) );
+					} else {
+						icon_ready = false;
 					}
+				} else {
+					icon_ready = false;
 				}
-				renderer->Add_Quad( icon_box, uv );
+				if ( icon_ready ) {
+					renderer->Add_Quad( icon_box, uv );
+				} else {
+					chart_textures_pending = true;
+				}
 			}
 		}
 
@@ -1129,9 +1158,12 @@ static	void	Build_Weapon_Chart_Icons( void )
 		pos.X += WeaponChartSpacing.X * screen_scale;
 	}
 
+#if defined(RENEGADE_VULKAN)
+	if (chart_textures_pending) {
+		ForceChartRebuild = true;
+	}
+#endif
 }
-
-bool	ForceChartRebuild = false;
 
 void	HUDClass::Force_Weapon_Chart_Update( void )
 {
@@ -1162,6 +1194,12 @@ static	void	Weapon_Chart_Update( void )
 	if ( WeaponChartTimer <= 0 ) {
 		return;
 	}
+
+#if defined(RENEGADE_VULKAN)
+	if (Weapon_Chart_Icons_Need_Vulkan_Textures()) {
+		Build_Weapon_Chart_Icons();
+	}
+#endif
 
 	// Rebuild when the bag changed or icon slot count does not match the chart layout
 	if ( ForceChartRebuild ||

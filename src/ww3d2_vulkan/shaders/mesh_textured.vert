@@ -94,7 +94,7 @@ vec2 Transform_Tex_UV(vec2 uv, vec4 mat)
 	return vec2(uv.x * mat.x + mat.z, uv.y * mat.y + mat.w);
 }
 
-vec2 Compute_Stage_UV(int stage, vec2 uv0, vec2 uv1, vec3 normal_ws, vec3 world_pos)
+vec2 Compute_Stage_UV(int stage, vec2 uv0, vec2 uv1, vec3 normal_ws, vec3 normal_cs, vec3 world_pos)
 {
 	float tci = (stage == 0) ? ubo.tex_tci[0] : ubo.tex_tci[1];
 	float uv_index = (stage == 0) ? ubo.tex_uv_index[0] : ubo.tex_uv_index[1];
@@ -105,15 +105,13 @@ vec2 Compute_Stage_UV(int stage, vec2 uv0, vec2 uv1, vec3 normal_ws, vec3 world_
 		return Transform_Tex_UV(base_uv, mat);
 	}
 
-	vec3 normal_cs = normalize(mat3(ubo.view) * normal_ws);
-
 	if (tci < 1.5) {
 		return Transform_Tex_UV(normal_cs.xy, mat);
 	}
 
 	vec3 view_dir_ws = normalize(world_pos - (ubo.view * vec4(0.0, 0.0, 0.0, 1.0)).xyz);
 	vec3 reflect_ws = reflect(-view_dir_ws, normal_ws);
-	vec3 reflect_cs = normalize(mat3(ubo.view) * reflect_ws);
+	vec3 reflect_cs = normalize((vec4(reflect_ws, 0.0) * ubo.view).xyz);
 	if (tci < 2.5) {
 		return Transform_Tex_UV(reflect_cs.xy, mat);
 	}
@@ -137,14 +135,16 @@ void main()
 
 	uint flags = uint(ubo.flags);
 	vec3 world_pos = (pos * ubo.world).xyz;
-	mat3 normal_matrix = mat3(ubo.world);
 	vec3 normal_ws;
+	vec3 normal_cs;
 	if (HAS_NORMAL != 0u) {
-		normal_ws = normalize(normal_matrix * in_normal);
+		normal_ws = normalize((vec4(in_normal, 0.0) * ubo.world).xyz);
+		normal_cs = normalize((vec4(in_normal, 0.0) * ubo.world * ubo.view).xyz);
 	} else {
-		normal_ws = normalize(normal_matrix * vec3(0.0, 0.0, 1.0));
+		normal_ws = normalize((vec4(0.0, 0.0, 1.0, 0.0) * ubo.world).xyz);
+		normal_cs = normalize((vec4(0.0, 0.0, 1.0, 0.0) * ubo.world * ubo.view).xyz);
 	}
-	v_normal_cs = normalize(mat3(ubo.view) * normal_ws);
+	v_normal_cs = normal_cs;
 
 	if ((flags & FLAG_LIGHTING) != 0u) {
 		vec3 lighting = Evaluate_Lighting(normal_ws, world_pos);
@@ -164,8 +164,8 @@ void main()
 
 	vec2 uv1 = in_uv;
 	vec2 uv2 = (TEX_LAYER_COUNT >= 2u) ? in_uv2 : in_uv;
-	v_uv = Compute_Stage_UV(0, uv1, uv2, normal_ws, world_pos);
-	v_uv2 = Compute_Stage_UV(1, uv1, uv2, normal_ws, world_pos);
+	v_uv = Compute_Stage_UV(0, uv1, uv2, normal_ws, normal_cs, world_pos);
+	v_uv2 = Compute_Stage_UV(1, uv1, uv2, normal_ws, normal_cs, world_pos);
 
 	v_fog_factor = 1.0;
 	if ((flags & FLAG_FOG) != 0u && ubo.fog_end > ubo.fog_start) {

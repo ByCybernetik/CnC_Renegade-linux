@@ -1,0 +1,4 @@
+# Supplemental GCC specs: static winpthread in the *lib sequence (after libgcc/libstdc++).
+# Use -Bstatic/-Bdynamic (not -Wl,...) — *lib tokens go to collect2/ld directly.
+*lib:
+%{pg:-lgmon} %{!no-pthread:-Bstatic -lpthread -Bdynamic} %{pthread: } %{mwindows:-lgdi32 -lcomdlg32} %{fvtable-verify=preinit:-lvtv -lpsapi;         fvtable-verify=std:-lvtv -lpsapi} -ladvapi32 -lshell32 -luser32 -lkernel32

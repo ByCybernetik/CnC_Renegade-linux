@@ -87,6 +87,8 @@ public:
 	//
 	static void							Display (void);
 	static MainMenuDialogClass *	Get_Instance (void)	{ return _TheInstance; }
+	void			Update_Main_Menu_Title_Model (void);
+	void			Update_Gizmo_Model (float title_trans_frame = 65.0f);
 
 protected:
 
@@ -94,9 +96,11 @@ protected:
 	//	Protected methods
 	////////////////////////////////////////////////////////////////
 	void			On_Init_Dialog (void);
+	void			On_Frame_Update (void);
 	void			On_Menu_Activate (bool onoff);
 	void			Update_Version_Number (void);
 	StringClass	Choose_Skirmish_Map (void);
+	void			Add_Main_Menu_Title_Model_To_Scene (bool apply_idle_pose = true);
 
 private:
 

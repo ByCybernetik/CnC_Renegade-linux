@@ -18,8 +18,10 @@ _is_linux = get_option('platform') == 'linux'
 _scripts_win_link = _is_linux ? [] : [
   '-lkernel32', '-luser32', '-lgdi32', '-lwinmm', '-lws2_32',
 ]
-_scripts_link_tail = _is_linux ? [] : (renegade_exe_link_tail + ['-Wl,--enable-stdcall-fixup'])
-# Static winpthread (same as renegade.exe) — avoid libwinpthread-1.dll beside scripts.dll.
+_scripts_link_tail = _is_linux ? [] : [
+  '-Wl,--enable-stdcall-fixup',
+  '-Wl,--defsym=__ms_vsnprintf=___ms_vsnprintf',
+]
 _link = renegade_link_args + _scripts_win_link + _scripts_link_tail
 
 _scripts_extra_sources = _is_linux ? files('linux_dll_stubs.cpp') : []

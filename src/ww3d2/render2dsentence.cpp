@@ -44,9 +44,6 @@
 #include "ww3d2_gdi_stubs.h"
 #endif
 #include <stdio.h>
-#if defined(RENEGADE_LINUX)
-#include <time.h>
-#endif
 
 const int CHAR_TEXTURE_SIZE	= 256;
 const int CHAR_BUFFER_LEN		= 32768;
@@ -224,12 +221,32 @@ Render2DSentenceClass::Render (void)
 	//
 	Build_Textures ();
 
+#if defined(RENEGADE_VULKAN)
+	const bool menu_glow_draw =
+		DX8Wrapper::Vulkan_Device_Active() &&
+		Shader.Get_Src_Blend_Func() == ShaderClass::SRCBLEND_ONE &&
+		Shader.Get_Dst_Blend_Func() == ShaderClass::DSTBLEND_ONE &&
+		Shader.Get_Primary_Gradient() == ShaderClass::GRADIENT_MODULATE &&
+		Shader.Get_Texturing() == ShaderClass::TEXTURING_ENABLE &&
+		Shader.Get_Depth_Compare() == ShaderClass::PASS_ALWAYS &&
+		Shader.Get_Depth_Mask() == ShaderClass::DEPTH_WRITE_DISABLE;
+	if (menu_glow_draw) {
+		DX8Wrapper::Set_Vulkan_Menu_Glow_Draw(true);
+	}
+#endif
+
 	//
 	//	Ask each renderer to draw its contents
 	//
 	for (int i = 0; i < Renderers.Count (); i ++) {
 		Renderers[i].Renderer->Render ();
 	}
+
+#if defined(RENEGADE_VULKAN)
+	if (menu_glow_draw) {
+		DX8Wrapper::Set_Vulkan_Menu_Glow_Draw(false);
+	}
+#endif
 
 	return ;
 }

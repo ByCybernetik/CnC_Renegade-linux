@@ -198,6 +198,9 @@ struct RenderStateStruct
 namespace ww3d_vulkan {
 struct VulkanDrawState;
 void Fill_Vulkan_Draw_State(VulkanDrawState *state);
+void Set_Current_Draw_Mesh_Name(const char *name);
+const char *Get_Current_Draw_Mesh_Name(void);
+bool Is_Menu_Screen_Blend_Mesh(const char *name);
 }
 #endif
 
@@ -453,6 +456,8 @@ public:
 
 #if defined(RENEGADE_VULKAN)
 	static bool Vulkan_Device_Active();
+	static void Set_Vulkan_Menu_Glow_Draw(bool enable);
+	static bool Vulkan_Menu_Glow_Draw_Active();
 	static void Notify_Window_Resized(int width, int height);
 	static void Vulkan_Bind_Texture_Stages(TextureClass *const *textures, unsigned count);
 	static void Record_Texture_Stage_State(unsigned stage, unsigned tss, unsigned value);

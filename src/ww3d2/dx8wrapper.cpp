@@ -88,9 +88,12 @@
 #include "vk_dx8_texture.h"
 #include "vk_dx8_state.h"
 #include "vk_native_render_state.h"
+#include "vk_renderer.h"
 #include "dx8vertexbuffer.h"
 #include "dx8indexbuffer.h"
+
 static bool g_VulkanDeviceActive = false;
+static bool g_Vulkan_Menu_Glow_Draw = false;
 
 static void Vulkan_Window_Resize_Handler(int width, int height)
 {
@@ -208,6 +211,16 @@ void DX8Wrapper::Enumerate_Vulkan_Devices(void)
 bool DX8Wrapper::Vulkan_Device_Active()
 {
 	return g_VulkanDeviceActive;
+}
+
+void DX8Wrapper::Set_Vulkan_Menu_Glow_Draw(bool enable)
+{
+	g_Vulkan_Menu_Glow_Draw = enable;
+}
+
+bool DX8Wrapper::Vulkan_Menu_Glow_Draw_Active()
+{
+	return g_Vulkan_Menu_Glow_Draw;
 }
 #endif
 
@@ -4168,6 +4181,36 @@ static void D3d_Color_To_Float4(const D3DCOLORVALUE &c, float out[4])
 
 namespace ww3d_vulkan {
 
+static const char *g_Current_Draw_Mesh_Name = nullptr;
+
+void Set_Current_Draw_Mesh_Name(const char *name)
+{
+	g_Current_Draw_Mesh_Name = name;
+}
+
+const char *Get_Current_Draw_Mesh_Name(void)
+{
+	return g_Current_Draw_Mesh_Name;
+}
+
+bool Is_Menu_Screen_Blend_Mesh(const char *name)
+{
+	if (name == nullptr) {
+		return false;
+	}
+	if (strstr(name, "IF_TITLETRANS.") != nullptr) {
+		return true;
+	}
+	if (strstr(name, "IF_EVAGIZMO") != nullptr) {
+		return true;
+	}
+	if (strstr(name, "IF_BACK") != nullptr &&
+			(strstr(name, "IF_CIRCLE") != nullptr || strstr(name, "IF_SCANLINE") != nullptr)) {
+		return true;
+	}
+	return false;
+}
+
 void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 {
 	if (state == nullptr || !DX8Wrapper::Vulkan_Device_Active()) {
@@ -4176,6 +4219,7 @@ void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 
 	RenderStateStruct rs;
 	DX8Wrapper::Get_Render_State(rs);
+
 	bool draw_use_lighting = false;
 	Matrix4 view_m;
 	DX8Wrapper::Get_Transform(D3DTS_VIEW, view_m);
@@ -4249,7 +4293,18 @@ void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 
 	Color_To_Float4(DX8Wrapper::Get_Scene_Ambient_Color(), state->scene_ambient);
 
+	const bool screen_blend_draw =
+		shader.Get_Src_Blend_Func() == ShaderClass::SRCBLEND_ONE &&
+		shader.Get_Dst_Blend_Func() == ShaderClass::DSTBLEND_ONE_MINUS_SRC_COLOR;
+
 	if (shader.Get_Texturing() == ShaderClass::TEXTURING_ENABLE) {
+		state->flags |= (uint32_t)FrameUBO::FLAG_TEXTURING;
+	} else if (screen_blend_draw && rs.Textures[0] != nullptr &&
+			Is_Menu_Screen_Blend_Mesh(g_Current_Draw_Mesh_Name)) {
+		/*
+		 * IF_TITLETRANS stripes (IF_MMTF*, IF_ARC) use screen blend with
+		 * TEXTURING_DISABLE in the W3D shader bits but still bind stage-0.
+		 */
 		state->flags |= (uint32_t)FrameUBO::FLAG_TEXTURING;
 	}
 	state->specular_enable =
@@ -4277,6 +4332,74 @@ void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 			Vector3 white(1.0f, 1.0f, 1.0f);
 			Vector3_To_Float4(white, 1.0f, state->material_diffuse);
 			Vector3_To_Float4(white, 1.0f, state->material_ambient);
+		}
+	}
+
+	const bool screen_blend_sprite =
+		screen_blend_draw && Is_Menu_Screen_Blend_Mesh(g_Current_Draw_Mesh_Name);
+	const bool ui_overlay =
+		shader.Get_Depth_Mask() == ShaderClass::DEPTH_WRITE_DISABLE &&
+		shader.Get_Depth_Compare() == ShaderClass::PASS_ALWAYS;
+	if (DX8Wrapper::Vulkan_Menu_Glow_Draw_Active() && ui_overlay) {
+		state->tex_stage1_color_mode = 0.0f;
+		state->tex_stage1_alpha_mode = 0.0f;
+	}
+	float md_max = 0.0f;
+	if (screen_blend_sprite && material != nullptr) {
+		/*
+		 * Flat menu glow (IF_CIRCLE / IF_SCANLINE / IF_ARC / IF_MMTF*): low diffuse
+		 * (~50/255), unlit + material scale at end of the shader.
+		 * EVA gizmo (IF_EVALOGO): env-map texture × lit material diffuse per face.
+		 */
+		md_max = state->material_diffuse[0];
+		if (state->material_diffuse[1] > md_max) {
+			md_max = state->material_diffuse[1];
+		}
+		if (state->material_diffuse[2] > md_max) {
+			md_max = state->material_diffuse[2];
+		}
+		if (md_max <= 0.25f) {
+			draw_use_lighting = false;
+			state->flags |= (uint32_t)FrameUBO::FLAG_SCREEN_BLEND_UNLIT;
+		} else {
+			draw_use_lighting = true;
+			state->flags |= (uint32_t)FrameUBO::FLAG_SCREEN_BLEND_LIT;
+			const float dr = state->material_diffuse[0];
+			const float dg = state->material_diffuse[1];
+			const float db = state->material_diffuse[2];
+			const bool gizmo_dim =
+				g_Current_Draw_Mesh_Name != nullptr &&
+				strstr(g_Current_Draw_Mesh_Name, "IF_EVAGIZMO") != nullptr &&
+				strstr(g_Current_Draw_Mesh_Name, "EVALOGO") == nullptr;
+			const float amb_mix = gizmo_dim ? 0.22f : 0.55f;
+			if (state->material_ambient[0] < dr * amb_mix) {
+				state->material_ambient[0] = dr * amb_mix;
+			}
+			if (state->material_ambient[1] < dg * amb_mix) {
+				state->material_ambient[1] = dg * amb_mix;
+			}
+			if (state->material_ambient[2] < db * amb_mix) {
+				state->material_ambient[2] = db * amb_mix;
+			}
+			if (g_Current_Draw_Mesh_Name != nullptr &&
+					strstr(g_Current_Draw_Mesh_Name, "EVALOGO") != nullptr) {
+				state->flags |= (uint32_t)FrameUBO::FLAG_SCREEN_BLEND_EVALOGO;
+				const float logo_amb = 0.75f;
+				if (state->material_ambient[0] < dr * logo_amb) {
+					state->material_ambient[0] = dr * logo_amb;
+				}
+				if (state->material_ambient[1] < dg * logo_amb) {
+					state->material_ambient[1] = dg * logo_amb;
+				}
+				if (state->material_ambient[2] < db * logo_amb) {
+					state->material_ambient[2] = db * logo_amb;
+				}
+			}
+		}
+		if (g_Current_Draw_Mesh_Name != nullptr &&
+				strstr(g_Current_Draw_Mesh_Name, "IF_EVAGIZMO") != nullptr &&
+				strstr(g_Current_Draw_Mesh_Name, "EVALOGO") == nullptr) {
+			state->flags |= (uint32_t)FrameUBO::FLAG_SCREEN_BLEND_GIZMO_DIM;
 		}
 	}
 
@@ -4337,6 +4460,7 @@ void Fill_Vulkan_Draw_State(VulkanDrawState *state)
 			}
 		}
 	}
+	ww3d_vulkan::Apply_Native_Texture_State(state);
 }
 
 } /* namespace ww3d_vulkan */

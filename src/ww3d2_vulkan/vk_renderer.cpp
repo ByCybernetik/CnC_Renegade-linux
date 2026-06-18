@@ -5,6 +5,7 @@
 #include "vk_dx8_bridge.h"
 #include "vk_dx8_texture.h"
 #include "../ww3d2/dx8wrapper.h"
+#include "../ww3d2/shader.h"
 
 #include <d3d8.h>
 #include <algorithm>
@@ -27,6 +28,32 @@ static void Apply_Dx8_Depth_Bias(VkCommandBuffer cmd)
 {
 	Apply_Depth_Bias_For_ZBias(cmd, DX8Wrapper::Get_Effective_ZBias());
 }
+
+#if defined(RENEGADE_VULKAN)
+static void Apply_Menu_Glow_Draw_State(MeshPipelineKey &key, FrameUBO &ubo)
+{
+	if (!DX8Wrapper::Vulkan_Menu_Glow_Draw_Active()) {
+		return;
+	}
+
+	/*
+	 * Original D3D8 (Code/ww3d2/render2dsentence.cpp Make_Additive):
+	 * SRCBLEND_ONE + DSTBLEND_ONE + GRADIENT_MODULATE, no special shader flag.
+	 * StyleMgrClass::Render_Glow blits font quads ~28x with dark vertex color.
+	 */
+	uint32_t flags = (uint32_t)ubo.flags;
+	flags |= (uint32_t)FrameUBO::FLAG_TEXTURING |
+		(uint32_t)FrameUBO::FLAG_DIFFUSE_FROM_VERTEX;
+	ubo.flags = (float)flags;
+	ubo.tex_stage0_mode = 1.0f;
+	ubo.tex_stage1_color_mode = 0.0f;
+	ubo.tex_stage1_alpha_mode = 0.0f;
+
+	key.src_blend = (uint8_t)ShaderClass::SRCBLEND_ONE;
+	key.dst_blend = (uint8_t)ShaderClass::DSTBLEND_ONE;
+	key.alpha_blend = true;
+}
+#endif
 
 static int Compare_Pipeline_Key(const MeshPipelineKey &a, const MeshPipelineKey &b)
 {
@@ -764,7 +791,13 @@ void VkRenderer::Draw_Indexed(
 	VkPipelineCache &pipe_cache =
 		offscreen_target_ != nullptr ? pipelines_offscreen_ : pipelines_;
 
-	VkPipeline pipeline = pipe_cache.Get(key);
+	MeshPipelineKey draw_key = key;
+	FrameUBO draw_ubo = frame_ubo_;
+#if defined(RENEGADE_VULKAN)
+	Apply_Menu_Glow_Draw_State(draw_key, draw_ubo);
+#endif
+
+	VkPipeline pipeline = pipe_cache.Get(draw_key);
 	if (pipeline == VK_NULL_HANDLE) {
 		return;
 	}
@@ -773,9 +806,14 @@ void VkRenderer::Draw_Indexed(
 		return;
 	}
 
-	/* Screen-space 2D (XYRHW): flush queued work, then draw immediately. */
+	/*
+	 * Screen-space 2D (XYRHW) and menu font glow: flush queued work, then draw
+	 * immediately (matches D3D8 immediate DrawIndexedPrimitive ordering).
+	 */
+	const bool immediate_menu_glow = DX8Wrapper::Vulkan_Menu_Glow_Draw_Active();
 	const bool immediate_2d =
-		(key.fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW;
+		((key.fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW) ||
+		immediate_menu_glow;
 	if (immediate_2d) {
 		FrameSync &frame = frames_[current_frame_];
 		VkCommandBuffer cmd = frame.command_buffer;
@@ -794,7 +832,7 @@ void VkRenderer::Draw_Indexed(
 		}
 
 		const VkDeviceSize ubo_offset = (VkDeviceSize)frame_ubo_draw_count_ * aligned_ubo_size;
-		frame_ubo_ring_[current_frame_].Upload(&frame_ubo_, sizeof(frame_ubo_), ubo_offset);
+		frame_ubo_ring_[current_frame_].Upload(&draw_ubo, sizeof(draw_ubo), ubo_offset);
 		++frame_ubo_draw_count_;
 
 		Flush_Push_Descriptors(cmd, pipe_cache.Layout(), ubo_offset);
@@ -808,14 +846,14 @@ void VkRenderer::Draw_Indexed(
 	}
 
 	PendingDraw draw;
-	draw.key = key;
+	draw.key = draw_key;
 	draw.vertex_buffer = vertex_buffer;
 	draw.index_buffer = index_buffer;
 	draw.index_count = index_count;
 	draw.first_index = first_index;
 	draw.vertex_offset = vertex_offset;
 	draw.depth_bias = DX8Wrapper::Get_Effective_ZBias();
-	draw.ubo = frame_ubo_;
+	draw.ubo = draw_ubo;
 	draw.textures[0] = Resolve_Draw_Texture(bound_textures_[0], &default_texture_);
 	draw.textures[1] = Resolve_Draw_Texture(bound_textures_[1], &default_texture_);
 

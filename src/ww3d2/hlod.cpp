@@ -3531,6 +3531,8 @@ void HLodClass::Get_Snap_Point(int index,Vector3 * set)
  *=============================================================================================*/
 void HLodClass::Update_Sub_Object_Transforms(void)
 {
+	const bool hierarchy_was_invalid = !Is_Hierarchy_Valid ();
+
 	/*
 	** Update the animation transforms, recurse up to the
 	** top of the tree...
@@ -3542,7 +3544,7 @@ void HLodClass::Update_Sub_Object_Transforms(void)
 	** Optimization: only update the currently selected LOD plus additional models.
 	** Other LODs are updated on-demand by Update_All_Sub_Object_Transforms (collisions, shadows).
 	*/
-	if (!CurLodTransformsValid) {
+	if (!CurLodTransformsValid || hierarchy_was_invalid) {
 		Update_Sub_Object_Transforms_For_Lod(CurLod);
 	}
 

@@ -298,8 +298,16 @@ static bool Is_Ui_Dynamic_Draw(const RenderStateStruct &rs)
 		return false;
 	}
 	const unsigned fvf = rs.vertex_buffer->FVF_Info().Get_FVF();
-	/* Screen-space 2D (Render2D); not terrain/sky/haze which use XYZ + normals. */
-	return (fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW;
+	if ((fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW) {
+		return true;
+	}
+	/* Render2D menu/HUD (XYZ+NORMAL+TEX2+DIFFUSE, depth-less overlay). */
+	if (fvf == dynamic_fvf_type &&
+			rs.shader.Get_Depth_Compare() == ShaderClass::PASS_ALWAYS &&
+			rs.shader.Get_Depth_Mask() == ShaderClass::DEPTH_WRITE_DISABLE) {
+		return true;
+	}
+	return false;
 }
 
 static void Fixup_Vertex_Count(
@@ -474,6 +482,14 @@ bool VulkanRenderDevice::Draw_Indexed(const DrawIndexedDesc &desc)
 		desc.vertex_buffer,
 		desc.index_buffer,
 		desc.fvf);
+}
+
+void VulkanRenderDevice::Flush_Pending_Draws()
+{
+	if (!Is_Active()) {
+		return;
+	}
+	WW3DVulkan::Get().Renderer().Flush_Pending_Draws();
 }
 
 } /* namespace ww3d_vulkan */

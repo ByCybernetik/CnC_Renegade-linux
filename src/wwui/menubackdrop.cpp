@@ -351,10 +351,7 @@ MenuBackDropClass::Render (void)
 	//
 	//	Simple render the scene
 	//
-	bool old_static_sort = WW3D::Are_Static_Sort_Lists_Enabled();
-	WW3D::Enable_Static_Sort_Lists(false);
 	WW3D::Render (Scene, Camera, ClearScreen, ClearScreen);
-	WW3D::Enable_Static_Sort_Lists(old_static_sort);
 	return ;
 }
 

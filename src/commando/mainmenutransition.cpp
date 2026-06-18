@@ -47,6 +47,7 @@
 #include "dialogcontrol.h"
 #include "dialogbase.h"
 #include "resource.h"
+#include "dlgmainmenu.h"
 #include "wwaudio.h"
 #include <stdio.h>
 
@@ -190,7 +191,17 @@ MainMenuTransitionClass::On_Frame_Update (void)
 			if (CurrentFrame >= TargetFrame && Type == SCREEN_OUT) {
 				Model->Remove ();
 			}
-		}	
+		}
+
+		MainMenuDialogClass *main_menu = NULL;
+		if (Dialog != NULL) {
+			main_menu = (MainMenuDialogClass *)Dialog;
+		} else {
+			main_menu = MainMenuDialogClass::Get_Instance ();
+		}
+		if (main_menu != NULL) {
+			main_menu->Update_Gizmo_Model (CurrentFrame);
+		}
 	}
 
 	DialogTransitionClass::On_Frame_Update ();

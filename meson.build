@@ -37,7 +37,6 @@ if _is_linux
     language : 'cpp',
   )
   renegade_link_args = []
-  renegade_exe_link_tail = []
   renegade_wwlib_cpp_args = renegade_cpp_args + [
     '-DREGEX_MALLOC',
     '-DSTDC_HEADERS',
@@ -70,13 +69,13 @@ else
     '-DPTW32_STATIC_LIB',
     '-DRENEGADE_PORT_COLLISION_FIX',
   ]
+  _mingw_pthread_specs = meson.project_source_root() / 'src/wwlib/mingw-static-pthread.specs'
   renegade_link_args = [
     '-mcrtdll=msvcrt-os',
     '-static-libgcc',
     '-static-libstdc++',
+    '-specs=' + _mingw_pthread_specs,
   ]
-  # Static winpthread: Code/wwlib/mingw-g++-static.sh (-L mingw-lib + mingw-pthread-static.specs).
-  renegade_exe_link_tail = []
   renegade_wwlib_cpp_args = renegade_cpp_args + [
     '-DREGEX_MALLOC',
     '-DSTDC_HEADERS',

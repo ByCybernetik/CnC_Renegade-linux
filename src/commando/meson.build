@@ -360,7 +360,7 @@ if not _is_linux
     _renegade_deps += dependency('libmpg123', required : true)
   endif
 endif
-_renegade_link = _is_linux ? (_link + linux_link_args) : (_link + ['-mwindows'] + win_link_args + renegade_exe_link_tail)
+_renegade_link = _is_linux ? (_link + linux_link_args) : (_link + ['-mwindows'] + win_link_args)
 
 renegade_exe = executable(
   'renegade',

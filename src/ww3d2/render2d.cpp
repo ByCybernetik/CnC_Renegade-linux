@@ -52,6 +52,7 @@
 #include "assetmgr.h"
 #if defined(RENEGADE_VULKAN)
 #include "vulkan_render_device.h"
+#include "../ww3d2_vulkan/vk_dx8_texture.h"
 #endif
 
 #if defined(__GNUC__) && defined(_WIN32)
@@ -138,12 +139,22 @@ void	Render2DClass::Reset(void)
 
 void Render2DClass::Set_Texture(TextureClass* tex)
 {
+#if defined(RENEGADE_VULKAN)
+	if (tex != nullptr && DX8Wrapper::Vulkan_Device_Active()) {
+		ww3d_vulkan::Apply_Loaded_Texture(tex, true);
+	}
+#endif
 	REF_PTR_SET(Texture,tex);	
 }
 
 void Render2DClass::Set_Texture( const char * filename)
 {
 	TextureClass * tex = WW3DAssetManager::Get_Instance()->Get_Texture( filename, TextureClass::MIP_LEVELS_1 );
+#if defined(RENEGADE_VULKAN)
+	if (tex != nullptr && DX8Wrapper::Vulkan_Device_Active()) {
+		ww3d_vulkan::Apply_Loaded_Texture(tex, true);
+	}
+#endif
 	Set_Texture( tex );
 	if ( tex != NULL ) {
 		SET_REF_OWNER( tex );
@@ -652,13 +663,6 @@ void Render2DClass::Render(void)
 	DX8Wrapper::Set_World_Identity();
 	DX8Wrapper::Set_View_Identity();
 	DX8Wrapper::Set_Transform(D3DTS_PROJECTION,identity);
-
-#if defined(RENEGADE_VULKAN)
-	if (DX8Wrapper::Vulkan_Device_Active()) {
-		ww3d_vulkan::VulkanRenderDevice::Get().Reset_Ui_Texture_Stages(false);
-		DX8Wrapper::Set_Texture(1, NULL);
-	}
-#endif
 
 	DynamicVBAccessClass vb(BUFFER_TYPE_DYNAMIC_DX8,dynamic_fvf_type,Vertices.Count());
 	{

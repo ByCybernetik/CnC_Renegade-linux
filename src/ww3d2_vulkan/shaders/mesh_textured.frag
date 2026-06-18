@@ -18,6 +18,10 @@ layout(location = 0) out vec4 out_color;
 const uint FLAG_TEXTURING = 4u;
 const uint FLAG_COLOR1_UNLIT_MODULATE = 8u;
 const uint FLAG_FOG = 16u;
+const uint FLAG_SCREEN_BLEND_UNLIT = 32u;
+const uint FLAG_SCREEN_BLEND_LIT = 64u;
+const uint FLAG_SCREEN_BLEND_EVALOGO = 128u;
+const uint FLAG_SCREEN_BLEND_GIZMO_DIM = 256u;
 
 vec2 Apply_Bump_Offset(vec2 uv, vec4 bump_texel)
 {
@@ -119,6 +123,29 @@ void main()
 		vec4 detail = texture(detail_tex, v_uv2);
 		color = Apply_Stage1Color(color, detail);
 		color.a = Apply_Stage1Alpha(color.a, detail.a);
+	}
+
+	if ((flags & FLAG_SCREEN_BLEND_UNLIT) != 0u) {
+		color.rgb *= ubo.material_diffuse.rgb;
+	}
+
+	if ((flags & FLAG_SCREEN_BLEND_LIT) != 0u) {
+		bool is_evalogo = (flags & FLAG_SCREEN_BLEND_EVALOGO) != 0u;
+		bool is_gizmo_dim = (flags & FLAG_SCREEN_BLEND_GIZMO_DIM) != 0u;
+		float mod_max = max(max(color.r, color.g), color.b);
+		float dark_thresh = is_evalogo ? 0.12 : 0.06;
+		float dark_scale = is_evalogo ? 0.55 : 0.45;
+		if (mod_max < dark_thresh) {
+			color.rgb = max(color.rgb, v_color.rgb * dark_scale);
+		}
+		float md = max(max(ubo.material_diffuse.r, ubo.material_diffuse.g), ubo.material_diffuse.b);
+		float gain_scale = is_evalogo ? 1.0 : (is_gizmo_dim ? 0.15 : 0.5);
+		float gain = 1.0 + gain_scale * max(0.0, 1.0 - md);
+		color.rgb = min(color.rgb * gain, vec3(1.0));
+	}
+
+	if ((flags & FLAG_SCREEN_BLEND_GIZMO_DIM) != 0u) {
+		color.rgb *= 0.45;
 	}
 
 	if ((flags & FLAG_FOG) != 0u) {

@@ -45,6 +45,7 @@
 #if defined(RENEGADE_VULKAN)
 #include "dx8wrapper.h"
 #include "vulkan_render_device.h"
+
 #endif
 
 
@@ -145,7 +146,15 @@ MenuDialogClass::Render (void)
 
 #if defined(RENEGADE_VULKAN)
 		if (DX8Wrapper::Vulkan_Device_Active()) {
-			ww3d_vulkan::VulkanRenderDevice::Get().Reset_Ui_Texture_Stages(false);
+			ww3d_vulkan::VulkanRenderDevice &vk_dev =
+				ww3d_vulkan::VulkanRenderDevice::Get();
+			/*
+			 * 3D menu backdrop includes screen-blend passes (ONE + ONE_MINUS_SRC_COLOR)
+			 * that sort after UI glow in the pending-draw queue. Flush here
+			 * so menu glow bars and controls composite on top of the backdrop.
+			 */
+			vk_dev.Flush_Pending_Draws();
+			vk_dev.Reset_Ui_Texture_Stages(false);
 		}
 #endif
 

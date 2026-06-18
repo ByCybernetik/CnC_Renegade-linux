@@ -39,6 +39,7 @@
 #include "assetmgr.h"
 #include "rendobj.h"
 #include "hanim.h"
+#include "htree.h"
 #include "gameinitmgr.h"
 #include "mainmenutransition.h"
 #include "menubackdrop.h"
@@ -65,6 +66,110 @@
 #include "translatedb.h"
 #include "string_ids.h"
 #include "gamespyadmin.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <string.h>
+
+namespace
+{
+static const float MAIN_MENU_TITLE_IDLE_FRAME = 65.0f;
+static const float MAIN_MENU_TITLE_OUT_START_FRAME = 66.0f;
+static const char *MAIN_MENU_TITLE_ANIM = "IF_TITLETRANS.IF_TITLETRANS";
+static const char *MAIN_MENU_GIZMO_ANIM = "IF_EVAGIZMO.IF_EVAGIZMO";
+static const char *MAIN_MENU_GIZMO_BONE = "IF_GIZMOBONE";
+
+static void Preload_Menu_Model_W3d (const char *basename)
+{
+	WW3DAssetManager *asset_mgr = WW3DAssetManager::Get_Instance ();
+	if (asset_mgr == NULL || basename == NULL || basename[ 0 ] == '\0') {
+		return;
+	}
+
+	char filename[ MAX_PATH ];
+	snprintf (filename, sizeof (filename), "%s.w3d", basename);
+	if (asset_mgr->Load_3D_Assets (filename)) {
+		return;
+	}
+
+	char lower[ MAX_PATH ];
+	strncpy (lower, filename, sizeof (lower) - 1);
+	lower[ sizeof (lower) - 1 ] = '\0';
+
+	bool differs = false;
+	for (char *p = lower; *p != '\0'; ++p) {
+		const char c = (char)tolower ((unsigned char)*p);
+		differs = differs || (c != *p);
+		*p = c;
+	}
+
+	if (differs) {
+		asset_mgr->Load_3D_Assets (lower);
+	}
+}
+
+static HAnimClass *Get_Menu_HAnim (const char *anim_name)
+{
+	WW3DAssetManager *asset_mgr = WW3DAssetManager::Get_Instance ();
+	if (asset_mgr == NULL || anim_name == NULL || anim_name[ 0 ] == '\0') {
+		return NULL;
+	}
+
+	HAnimClass *anim = asset_mgr->Get_HAnim (anim_name);
+	if (anim != NULL && anim->Get_Num_Frames () >= 2) {
+		return anim;
+	}
+
+	if (anim != NULL) {
+		anim->Release_Ref ();
+	}
+
+	return NULL;
+}
+
+static bool Get_Main_Menu_Gizmo_State (
+	RenderObjClass *title_model,
+	Matrix3D *out_tm)
+{
+	if (title_model == NULL || out_tm == NULL) {
+		return false;
+	}
+
+	const int bone_index = title_model->Get_Bone_Index (MAIN_MENU_GIZMO_BONE);
+	const HTreeClass *htree = title_model->Get_HTree ();
+	HAnimClass *title_anim = Get_Menu_HAnim (MAIN_MENU_TITLE_ANIM);
+
+	if (bone_index >= 0 && htree != NULL && title_anim != NULL) {
+		htree->Simple_Evaluate_Pivot (
+			title_anim,
+			bone_index,
+			MAIN_MENU_TITLE_IDLE_FRAME,
+			title_model->Get_Transform (),
+			out_tm);
+	} else {
+		*out_tm = title_model->Get_Bone_Transform (MAIN_MENU_GIZMO_BONE);
+	}
+
+	if (title_anim != NULL) {
+		REF_PTR_RELEASE (title_anim);
+	}
+
+	return true;
+}
+
+static void Ensure_Gizmo_Loop_Animation (RenderObjClass *gizmo_model)
+{
+	if (gizmo_model == NULL) {
+		return;
+	}
+
+	HAnimClass *gizmo_anim = Get_Menu_HAnim (MAIN_MENU_GIZMO_ANIM);
+	if (gizmo_anim != NULL) {
+		gizmo_model->Set_Animation (gizmo_anim, 0.0F, RenderObjClass::ANIM_MODE_LOOP);
+		REF_PTR_RELEASE (gizmo_anim);
+	}
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////
 //	Static member initialization
@@ -84,6 +189,10 @@ MainMenuDialogClass::MainMenuDialogClass (void)	:
 	GizmoModel (NULL),
 	IsStartingPractice (false)
 {
+	Preload_Menu_Model_W3d ("IF_TITLETRANS");
+	Preload_Menu_Model_W3d ("IF_EVAGIZMO");
+	Preload_Menu_Model_W3d ("IF_RENLOGO");
+
 	LogoModel			= WW3DAssetManager::Get_Instance ()->Create_Render_Obj ("IF_RENLOGO");
 	TitleTransModel	= WW3DAssetManager::Get_Instance ()->Create_Render_Obj ("IF_TITLETRANS");
 	GizmoModel			= WW3DAssetManager::Get_Instance ()->Create_Render_Obj ("IF_EVAGIZMO");
@@ -93,26 +202,129 @@ MainMenuDialogClass::MainMenuDialogClass (void)	:
 		Animated = false;
 	}
 
-
-	if (TitleTransModel != NULL && GizmoModel != NULL && Animated) {
-
-		//
-		//	Play the gizmo animation
-		//
-		HAnimClass *gizmo_anim = WW3DAssetManager::Get_Instance ()->Get_HAnim ("IF_EVAGIZMO.IF_EVAGIZMO");
-		if (gizmo_anim != NULL) {
-			GizmoModel->Set_Animation (gizmo_anim, 0.0F, RenderObjClass::ANIM_MODE_LOOP);
-			REF_PTR_RELEASE (gizmo_anim);
-		}
-
-		//
-		//	Add the gizmo to the transition model
-		//
-		TitleTransModel->Add_Sub_Object_To_Bone (GizmoModel, "IF_GIZMOBONE");
-	}
-
+	_TheInstance = this;
 
 	return ;
+}
+
+
+////////////////////////////////////////////////////////////////
+//
+//	Update_Main_Menu_Title_Model
+//
+////////////////////////////////////////////////////////////////
+void
+MainMenuDialogClass::Update_Main_Menu_Title_Model (void)
+{
+	if (!Animated || TitleTransModel == NULL) {
+		return;
+	}
+
+	HAnimClass *title_anim = Get_Menu_HAnim (MAIN_MENU_TITLE_ANIM);
+	if (title_anim != NULL) {
+		TitleTransModel->Set_Animation (
+			title_anim,
+			MAIN_MENU_TITLE_IDLE_FRAME,
+			RenderObjClass::ANIM_MODE_MANUAL);
+		REF_PTR_RELEASE (title_anim);
+	}
+}
+
+
+////////////////////////////////////////////////////////////////
+//
+//	Update_Gizmo_Model
+//
+////////////////////////////////////////////////////////////////
+void
+MainMenuDialogClass::Update_Gizmo_Model (float title_trans_frame)
+{
+	if (!Animated || GizmoModel == NULL || TitleTransModel == NULL || Get_BackDrop () == NULL) {
+		return;
+	}
+
+	SimpleSceneClass *scene = Get_BackDrop ()->Peek_Scene ();
+	if (scene == NULL) {
+		return;
+	}
+
+	if (TitleTransModel->Peek_Scene () == NULL) {
+		if (GizmoModel->Get_Container () != NULL) {
+			TitleTransModel->Remove_Sub_Object (GizmoModel);
+		}
+		if (GizmoModel->Peek_Scene () != NULL) {
+			GizmoModel->Remove ();
+		}
+		return;
+	}
+
+	const bool out_transition = (title_trans_frame >= MAIN_MENU_TITLE_OUT_START_FRAME);
+	const bool attached_to_title = (GizmoModel->Get_Container () == TitleTransModel);
+
+	if (out_transition) {
+		if (!attached_to_title) {
+			if (GizmoModel->Peek_Scene () != NULL) {
+				GizmoModel->Remove ();
+			}
+			TitleTransModel->Add_Sub_Object_To_Bone (GizmoModel, MAIN_MENU_GIZMO_BONE);
+			Ensure_Gizmo_Loop_Animation (GizmoModel);
+		}
+		return;
+	}
+
+	if (attached_to_title) {
+		TitleTransModel->Remove_Sub_Object (GizmoModel);
+	}
+
+	if (GizmoModel->Peek_Scene () == NULL) {
+		scene->Add_Render_Object (GizmoModel);
+		Ensure_Gizmo_Loop_Animation (GizmoModel);
+	}
+
+	Matrix3D gizmo_tm;
+	Get_Main_Menu_Gizmo_State (TitleTransModel, &gizmo_tm);
+	GizmoModel->Set_Transform (gizmo_tm);
+	GizmoModel->Set_Animation_Hidden (false);
+	GizmoModel->Set_Hidden (false);
+
+}
+
+////////////////////////////////////////////////////////////////
+//
+//	On_Frame_Update
+//
+////////////////////////////////////////////////////////////////
+void
+MainMenuDialogClass::On_Frame_Update (void)
+{
+	MenuDialogClass::On_Frame_Update ();
+	if (DialogMgrClass::Peek_Transitioning_Dialog () == NULL) {
+		Update_Gizmo_Model ();
+	}
+}
+
+
+////////////////////////////////////////////////////////////////
+//
+//	Add_Main_Menu_Title_Model_To_Scene
+//
+////////////////////////////////////////////////////////////////
+void
+MainMenuDialogClass::Add_Main_Menu_Title_Model_To_Scene (bool apply_idle_pose)
+{
+	if (!Animated || TitleTransModel == NULL || Get_BackDrop () == NULL) {
+		return;
+	}
+
+	if (apply_idle_pose) {
+		Update_Main_Menu_Title_Model ();
+	}
+
+	if (TitleTransModel->Peek_Scene () == NULL) {
+		Get_BackDrop ()->Peek_Scene ()->Add_Render_Object (TitleTransModel);
+	}
+
+	Update_Gizmo_Model ();
 }
 
 
@@ -127,6 +339,10 @@ MainMenuDialogClass::~MainMenuDialogClass (void)
 		TitleTransModel->Remove ();
 	}
 
+	if (GizmoModel != NULL) {
+		GizmoModel->Remove ();
+	}
+
 	if (LogoModel != NULL) {
 		LogoModel->Remove ();
 	}
@@ -134,6 +350,11 @@ MainMenuDialogClass::~MainMenuDialogClass (void)
 	REF_PTR_RELEASE (LogoModel);
 	REF_PTR_RELEASE (TitleTransModel);
 	REF_PTR_RELEASE (GizmoModel);
+
+	if (_TheInstance == this) {
+		_TheInstance = NULL;
+	}
+
 	return ;
 }
 
@@ -146,32 +367,30 @@ MainMenuDialogClass::~MainMenuDialogClass (void)
 void
 MainMenuDialogClass::On_Menu_Activate (bool onoff)
 {
-	if (TitleTransModel != NULL) {
+	if (onoff) {
+		Add_Main_Menu_Title_Model_To_Scene ();
+
+		if (LogoModel != NULL && LogoModel->Peek_Scene () == NULL) {
+			Get_BackDrop ()->Peek_Scene ()->Add_Render_Object (LogoModel);
+		}
 
 		//
-		//	Either add or remove the logo from the scene
+		//	Force-shutdown any interfaces that are running... (this could
+		// happen if the user navigates through the multiplay menus and then
+		// returns to the main menu).
 		//
-		if (onoff) {
+		GameInitMgrClass::Shutdown ();
+	} else {
+		if (LogoModel != NULL) {
+			LogoModel->Remove ();
+		}
 
-			// Put the logo pack into the scene when reactivated.
-			if (LogoModel && LogoModel->Peek_Scene() == NULL) {
-				Get_BackDrop()->Peek_Scene()->Add_Render_Object(LogoModel);
-			}
+		if (TitleTransModel != NULL) {
+			TitleTransModel->Remove ();
+		}
 
-			//
-			//	Force-shutdown any interfaces that are running... (this could
-			// happen if the user navigates through the multiplay menus and then
-			// returns to the main menu).
-			//
-			GameInitMgrClass::Shutdown ();
-		} else {
-
-			//
-			//	Remove the logo from the screen
-			//
-			if (LogoModel != NULL) {
-				LogoModel->Remove ();
-			}
+		if (GizmoModel != NULL) {
+			GizmoModel->Remove ();
 		}
 	}
 
@@ -223,9 +442,7 @@ MainMenuDialogClass::Get_Transition_In (DialogBaseClass *prev_dlg)
 	//
 	//	Add the transition model to the scene
 	//
-	if (TitleTransModel != NULL && TitleTransModel->Peek_Scene () == NULL) {
-		Get_BackDrop ()->Peek_Scene ()->Add_Render_Object (TitleTransModel);
-	}
+	Add_Main_Menu_Title_Model_To_Scene (false);
 
 	//
 	//	Add the logo to the screen

@@ -106,6 +106,8 @@
 #include "rddesc.h"
 #include "vector3i.h"
 #include <cstdio>
+#include <ctime>
+#include <cstring>
 #include "dx8wrapper.h"
 #if defined(RENEGADE_VULKAN)
 #include "vulkan_render_device.h"

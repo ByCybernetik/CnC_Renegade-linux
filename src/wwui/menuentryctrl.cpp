@@ -624,7 +624,8 @@ MenuEntryCtrlClass::Create_Glow (int radiusx, int radiusy, int color)
 	//
 	StyleMgrClass::Render_Glow (Title, &GlowRenderer, Rect, radiusx, radiusy,
 							color, justification);
-	return ;
+
+	return;
 }
 
 

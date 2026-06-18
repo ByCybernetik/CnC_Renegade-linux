@@ -11,7 +11,7 @@
 namespace ww3d_vulkan {
 
 constexpr uint32_t kMaxFramesInFlight = 2;
-constexpr uint32_t kUboDrawsPerFrame = 4096;
+constexpr uint32_t kUboDrawsPerFrame = 8192;
 
 struct FrameSync {
 	VkSemaphore image_available = VK_NULL_HANDLE;

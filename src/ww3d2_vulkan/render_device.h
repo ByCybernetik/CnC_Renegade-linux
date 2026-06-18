@@ -143,6 +143,9 @@ public:
 		unsigned short min_vertex_index,
 		unsigned short vertex_count);
 
+	/* Flush queued draws (e.g. after 3D menu backdrop before 2D UI). */
+	void Flush_Pending_Draws();
+
 private:
 	VulkanRenderDevice() = default;
 };

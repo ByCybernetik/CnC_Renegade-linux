@@ -20,6 +20,10 @@ struct FrameUBO {
 		FLAG_TEXTURING = 1u << 2,
 		FLAG_COLOR1_UNLIT_MODULATE = 1u << 3,
 		FLAG_FOG = 1u << 4,
+		FLAG_SCREEN_BLEND_UNLIT = 1u << 5,
+		FLAG_SCREEN_BLEND_LIT = 1u << 6,
+		FLAG_SCREEN_BLEND_EVALOGO = 1u << 7,
+		FLAG_SCREEN_BLEND_GIZMO_DIM = 1u << 8,
 	};
 
 	enum {
@@ -128,6 +132,8 @@ public:
 		uint32_t vertex_offset,
 		const MeshPipelineKey &key);
 
+	void Flush_Pending_Draws();
+
 	VkExtent2D Extent() const { return swapchain_.Extent(); }
 	VkPipelineLayout Pipeline_Layout() const { return pipelines_.Layout(); }
 	VkDescriptorSetLayout Descriptor_Set_Layout() const { return pipelines_.Descriptor_Set_Layout(); }
@@ -151,7 +157,6 @@ private:
 	bool Load_Shaders();
 	bool Create_Default_Texture();
 
-	void Flush_Pending_Draws();
 	void Flush_Push_Descriptors(VkCommandBuffer cmd, VkPipelineLayout layout, VkDeviceSize ubo_offset);
 	void Apply_Viewport(VkCommandBuffer cmd, VkExtent2D extent);
 	void Recreate_Swapchain_Resources();
