@@ -431,7 +431,7 @@ bool	WeaponClass::Load( ChunkLoadClass &cload )
 						}
 #endif
 
-						READ_MICRO_CHUNK( cload, MICROCHUNKID_MODEL_PTR, Model );
+						READ_MICRO_CHUNK_WIRE_POINTER( cload, MICROCHUNKID_MODEL_PTR, Model );
 
 						default:
 							Debug_Say(("Unhandled Micro Chunk:%d File:%s Line:%d\r\n",cload.Cur_Micro_Chunk_ID(),__FILE__,__LINE__));
@@ -689,6 +689,9 @@ void	WeaponClass::Fire_C4( const AmmoDefinitionClass *ammo_def )
 	// C4 special case
 	C4GameObj *c4 = (C4GameObj *)ObjectLibraryManager::Create_Object( C4_OBJECT_NAME );
 	if ( c4 ) {
+		Renegade_Gameplay_Log("[C4] Fire ammo=%s owner=%d\n",
+							  ammo_def->Get_Name(),
+							  Get_Owner() ? Get_Owner()->Get_ID() : -1);
 		c4->Init_C4( ammo_def, Get_Owner()->As_SoldierGameObj(), C4DetonationMode, Get_Muzzle() );
 	}
 
@@ -968,6 +971,14 @@ void	WeaponClass::Fire_Bullet( const AmmoDefinitionClass *ammo_def, bool primary
 		}
 
 		// Create a bullet
+		Renegade_Gameplay_Log("[BULLET] Fire ammo=%s pos=(%1.2f,%1.2f,%1.2f) vel=(%1.2f,%1.2f,%1.2f) owner=%d target=(%1.2f,%1.2f,%1.2f) gravity=%1.2f range=%1.2f velocity=%1.2f maxbounces=%d time_act=%d terrain_act=%d safety=%1.3f\n",
+							  ammo_def->Get_Name(), position.X, position.Y, position.Z,
+							  velocity.X, velocity.Y, velocity.Z,
+							  bullet_owner ? bullet_owner->Get_ID() : -1,
+							  bullet_target.X, bullet_target.Y, bullet_target.Z,
+							  ammo_def->Gravity, ammo_def->Range, ammo_def->Velocity, ammo_def->MaxBounces,
+							  ammo_def->TimeActivated ? 1 : 0, ammo_def->TerrainActivated ? 1 : 0,
+							  ammo_def->GrenadeSafetyTime);
 		BulletManager::Create_Bullet( ammo_def, position, velocity, bullet_owner, bump_time, bullet_target, target_obj );
 	}
 

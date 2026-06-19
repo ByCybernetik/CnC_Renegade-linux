@@ -191,7 +191,7 @@ bool cPlayer::Load(ChunkLoadClass &cload)
 						READ_SAFE_MICRO_CHUNK(cload, MICROCHUNK_KILLS, Kills,int);
 						READ_SAFE_MICRO_CHUNK(cload, MICROCHUNK_DEATHS, Deaths, int);
 						READ_SAFE_MICRO_CHUNK(cload, MICROCHUNK_TEAMNUMBER, PlayerType, int);
-						READ_MICRO_CHUNK(cload, MICROCHUNK_REMAP_POINTER, old_ptr);
+						READ_MICRO_CHUNK_WIRE_POINTER(cload, MICROCHUNK_REMAP_POINTER, old_ptr);
 
 						default:
 							Debug_Say(( "Unrecognized cPlayer Variable chunkID\n" ));

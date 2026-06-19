@@ -51,6 +51,7 @@
 /*
 ** W3D on-disk layouts match Win32 #pragma pack(1).  Without this, GCC inserts
 ** padding before float fields (e.g. W3dAnimChannelStruct) and corrupts loaders.
+** LP64 Linux only — MinGW i686 matches reserve without forced packing.
 */
 #if defined(RENEGADE_LINUX)
 #pragma pack(push, 1)

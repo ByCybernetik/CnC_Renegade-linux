@@ -47,6 +47,23 @@
 #include "light.h"
 #include "persistfactory.h"
 #include "wwmemlog.h"
+#include "rendobj.h"
+#include "physlist.h"
+#include <stdarg.h>
+#include <stdio.h>
+
+static void WWPhys_Load_Log(const char *fmt, ...)
+{
+	FILE *f = fopen("/tmp/renegade_load.log", "a");
+	if (f != NULL) {
+		va_list args;
+		va_start(args, fmt);
+		vfprintf(f, fmt, args);
+		va_end(args);
+		fflush(f);
+		fclose(f);
+	}
+}
 
  
 /*
@@ -293,6 +310,32 @@ void PhysicsSceneClass::Load_Level_Static_Objects(ChunkLoadClass & cload)
 	}
 }
 
+void PhysicsSceneClass::Log_Load_Stats(void)
+{
+	int static_count = StaticObjList.Count();
+	int light_count = StaticLightList.Count();
+	int dynamic_count = ObjList.Count();
+
+	int terrain_count = 0;
+	RefPhysListIterator it(&StaticObjList);
+	for (it.First(); !it.Is_Done(); it.Next()) {
+		PhysClass *obj = it.Peek_Obj();
+		if (obj != NULL && obj->Peek_Model() != NULL &&
+		    obj->Peek_Model()->Class_ID() == RenderObjClass::CLASSID_RENEGADE_TERRAIN) {
+			terrain_count++;
+		}
+	}
+
+	Vector3 wmin;
+	Vector3 wmax;
+	Get_Level_Extents(wmin, wmax);
+
+	WWPhys_Load_Log("[LOAD] Physics stats: static=%d lights=%d dynamic=%d terrain_patches=%d\n",
+	                static_count, light_count, dynamic_count, terrain_count);
+	WWPhys_Load_Log("[LOAD] World extents: min=(%1.1f,%1.1f,%1.1f) max=(%1.1f,%1.1f,%1.1f)\n",
+	                wmin.X, wmin.Y, wmin.Z, wmax.X, wmax.Y, wmax.Z);
+}
+
 void PhysicsSceneClass::Post_Load_Level_Static_Objects(void)
 {
 #if defined(RENEGADE_COLLISION_FIX)
@@ -307,6 +350,15 @@ void PhysicsSceneClass::Post_Load_Level_Static_Objects(void)
 			StaticPhysClass *obj = it.Peek_Obj()->As_StaticPhysClass();
 			if (obj == NULL) {
 				continue;
+			}
+			// Ensure each object's cull box reflects its real model bounds before
+			// rebuilding the static AAB-tree.  On_Post_Load() runs after this
+			// callback (callbacks are LIFO), so the cull boxes would otherwise be
+			// empty/default at rebuild time and large sector meshes far from the
+			// origin would be culled away.  This caused M02 soldiers/player to
+			// fall through the ground.
+			if (obj->Peek_Model() != NULL) {
+				obj->Update_Cull_Box();
 			}
 			if (obj->Get_Culling_System() != NULL) {
 				StaticCullingSystem->Remove_Object(obj);

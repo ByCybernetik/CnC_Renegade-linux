@@ -366,7 +366,7 @@ bool	SmartGameObj::Load( ChunkLoadClass &cload )
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_CONTROL_ENABLED, ControlEnabled );
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_CONTROL_OWNER, new_control_owner );
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_IS_ENEMY_SEEN_ENABLED, IsEnemySeenEnabled );
-						READ_MICRO_CHUNK( cload, MICROCHUNKID_CONTROLLER_PTR,        old_controller_ptr );				
+						READ_MICRO_CHUNK_WIRE_POINTER( cload, MICROCHUNKID_CONTROLLER_PTR, old_controller_ptr );				
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_MOVING_SOUND_TIMER, MovingSoundTimer ); 
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_PLAYER_DATA, PlayerData ); 
 

@@ -1535,20 +1535,17 @@ void HLodClass::Get_Obj_Space_Bounding_Sphere(SphereClass & sphere) const
 const SphereClass &HLodClass::Get_Bounding_Sphere(void) const
 {
 	if (BoundingBoxIndex >= 0) {
-		if (!(Bits & BOUNDING_VOLUMES_VALID)) {
-			//
-			//	Get the bounding sphere in local coordinates
-			//
-			SphereClass sphere;
-			Get_Obj_Space_Bounding_Sphere (sphere);
+		//
+		//	Get the bounding sphere in local coordinates
+		//
+		SphereClass sphere;
+		Get_Obj_Space_Bounding_Sphere (sphere);
 
-			//
-			//	Transform the sphere into world coords and return the sphere
-			//
-			CachedBoundingSphere.Center = Get_Transform () * sphere.Center;
-			CachedBoundingSphere.Radius = sphere.Radius;
-			Validate_Cached_Bounding_Volumes ();
-		}
+		//
+		//	Transform the sphere into world coords and return the sphere
+		//
+		CachedBoundingSphere.Center = Get_Transform () * sphere.Center;
+		CachedBoundingSphere.Radius = sphere.Radius;
 	} else {
 		return Animatable3DObjClass::Get_Bounding_Sphere ();
 	}
@@ -1572,22 +1569,19 @@ const SphereClass &HLodClass::Get_Bounding_Sphere(void) const
 const AABoxClass &HLodClass::Get_Bounding_Box(void) const
 {
 	if (BoundingBoxIndex >= 0) {
-		if (!(Bits & BOUNDING_VOLUMES_VALID)) {
-			//
-			//	Get the bounding box in local coordinates
-			//
-			AABoxClass box;
-			Get_Obj_Space_Bounding_Box (box);
+		//
+		//	Get the bounding box in local coordinates
+		//
+		AABoxClass box;
+		Get_Obj_Space_Bounding_Box (box);
 
-			//
-			//	Transform the bounding box to world coordinates
-			//
-			Get_Transform().Transform_Center_Extent_AABox(	box.Center,
-																			box.Extent,
-																			&CachedBoundingBox.Center,
-																			&CachedBoundingBox.Extent	);
-			Validate_Cached_Bounding_Volumes ();
-		}
+		//
+		//	Transform the bounding box to world coordinates
+		//
+		Get_Transform().Transform_Center_Extent_AABox(	box.Center,
+																		box.Extent,
+																		&CachedBoundingBox.Center,
+																		&CachedBoundingBox.Extent	);
 	} else {
 		return Animatable3DObjClass::Get_Bounding_Box ();
 	}
@@ -3531,8 +3525,6 @@ void HLodClass::Get_Snap_Point(int index,Vector3 * set)
  *=============================================================================================*/
 void HLodClass::Update_Sub_Object_Transforms(void)
 {
-	const bool hierarchy_was_invalid = !Is_Hierarchy_Valid ();
-
 	/*
 	** Update the animation transforms, recurse up to the
 	** top of the tree...
@@ -3541,16 +3533,34 @@ void HLodClass::Update_Sub_Object_Transforms(void)
 
 	/*
 	** Put the computed transforms into our sub objects.
-	** Optimization: only update the currently selected LOD plus additional models.
-	** Other LODs are updated on-demand by Update_All_Sub_Object_Transforms (collisions, shadows).
 	*/
-	if (!CurLodTransformsValid || hierarchy_was_invalid) {
-		Update_Sub_Object_Transforms_For_Lod(CurLod);
+	int lod,model;
+	
+	for (lod = 0; lod < LodCount; lod++) {
+		for (model = 0; model < Lod[lod].Count(); model++) {
+
+			RenderObjClass * robj = Lod[lod][model].Model;
+			int bone = Lod[lod][model].BoneIndex;
+
+			robj->Set_Transform(HTree->Get_Transform(bone)); 
+			robj->Set_Animation_Hidden(!HTree->Get_Visibility(bone));
+			robj->Update_Sub_Object_Transforms();
+		}
+	}
+
+	for (model = 0; model < AdditionalModels.Count(); model++) {
+
+		RenderObjClass * robj = AdditionalModels[model].Model;
+		int bone = AdditionalModels[model].BoneIndex;
+
+		robj->Set_Transform(HTree->Get_Transform(bone)); 
+		robj->Set_Animation_Hidden(!HTree->Get_Visibility(bone));
+		robj->Update_Sub_Object_Transforms();
 	}
 
 	Set_Sub_Object_Transforms_Dirty(false);
 	CurLodTransformsValid = true;
-	AllLodTransformsValid = false;
+	AllLodTransformsValid = true;
 }
 
 

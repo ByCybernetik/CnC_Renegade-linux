@@ -64,6 +64,7 @@ else
     '-D_WINDOWS',
     '-DWIN32_LEAN_AND_MEAN',
     '-DNDEBUG',
+    '-DRENEGADE_DEV_CONSOLE',
     '-fpermissive',
     '-D_int64=long long',
     '-DPTW32_STATIC_LIB',

@@ -90,7 +90,7 @@ bool	PersistentGameObjObserverClass::Load( ChunkLoadClass &cload )
 			case CHUNKID_VARIABLES:
 				while (cload.Open_Micro_Chunk()) {
 					switch(cload.Cur_Micro_Chunk_ID()) {
-						READ_MICRO_CHUNK( cload, MICROCHUNKID_OBSERVER_PTR, old_observer_ptr );
+						READ_MICRO_CHUNK_WIRE_POINTER( cload, MICROCHUNKID_OBSERVER_PTR, old_observer_ptr );
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_OBSERVER_ID, ID );
 						default:
 							Debug_Say(( "Unrecognized PersistentGameObjObserverClass Variable chunkID\n" ));

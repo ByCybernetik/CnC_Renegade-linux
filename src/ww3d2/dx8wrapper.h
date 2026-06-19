@@ -1311,12 +1311,13 @@ WWINLINE void DX8Wrapper::Set_Render_State(const RenderStateStruct& state)
 
 	render_state=state;
 	render_state_changed=0xffffffff;
+#if defined(RENEGADE_VULKAN)
 	/*
 	 * Do not inherit spurious identity flags: sorting flush restores render_state
-	 * from a snapshot that stores real world/view matrices. Treating them as
-	 * identity (via VIEW_IDENTITY|WORLD_IDENTITY) breaks Vulkan matrix sync.
+	 * from a snapshot that stores real world/view matrices.
 	 */
 	render_state_changed&=~((unsigned)WORLD_IDENTITY|(unsigned)VIEW_IDENTITY);
+#endif
 
 	if (render_state.index_buffer) {
 		render_state.index_buffer->Add_Engine_Ref();

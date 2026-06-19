@@ -35,6 +35,7 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "debug.h"
+#include <stdarg.h>
 #include "input.h"
 #include "ww3dtrig.h"
 #include "wwphystrig.h"
@@ -73,6 +74,37 @@ LPSTR DebugManager::LOGFILE = DEFAULT_LOGFILE_NAME;
 char DebugManager::LogfileNameBuffer[256];
 
 MonoClass			ScrollingScreen;
+
+FILE *RenegadeLoadLog = NULL;
+FILE *RenegadeGameplayLog = NULL;
+
+void Renegade_Load_Log(const char *fmt, ...)
+{
+	if (RenegadeLoadLog == NULL) {
+		RenegadeLoadLog = fopen("/tmp/renegade_load.log", "w");
+	}
+	if (RenegadeLoadLog != NULL) {
+		va_list args;
+		va_start(args, fmt);
+		vfprintf(RenegadeLoadLog, fmt, args);
+		va_end(args);
+		fflush(RenegadeLoadLog);
+	}
+}
+
+void Renegade_Gameplay_Log(const char *fmt, ...)
+{
+	if (RenegadeGameplayLog == NULL) {
+		RenegadeGameplayLog = fopen("/tmp/renegade_gameplay.log", "w");
+	}
+	if (RenegadeGameplayLog != NULL) {
+		va_list args;
+		va_start(args, fmt);
+		vfprintf(RenegadeGameplayLog, fmt, args);
+		va_end(args);
+		fflush(RenegadeGameplayLog);
+	}
+}
 
 /*
 ** local prototypes

@@ -59,6 +59,7 @@
 #include "timeddecophys.h"
 #include "simplegameobj.h"
 #include "c4.h"
+#include "physicalgameobj.h"
 
 
 /*
@@ -317,6 +318,10 @@ CollisionReactionType BulletDataClass::Bullet_Collision_Occurred( const Collisio
 	// Ignore backfaces (after shattering for windows)
 	float dot = Vector3::Dot_Product( event.CollisionResult->Normal, Velocity );
 	if ( dot > 0 ) {
+		Renegade_Gameplay_Log("[BULLET] Collision backface ammo=%s pos=(%1.2f,%1.2f,%1.2f) normal=(%1.2f,%1.2f,%1.2f)\n",
+							  AmmoDefinition->Get_Name(),
+							  collision_point.X, collision_point.Y, collision_point.Z,
+							  collision_normal.X, collision_normal.Y, collision_normal.Z);
 		return COLLISION_REACTION_NO_BOUNCE;
 	}
 
@@ -373,6 +378,14 @@ CollisionReactionType BulletDataClass::Bullet_Collision_Occurred( const Collisio
 					ExplosionManager::Create_Explosion_At( AmmoDefinition->ExplosionDefID, collision_point, Get_Owner(), -collision_normal, other );
 				}
 
+				Renegade_Gameplay_Log("[BULLET] Collision object ammo=%s other_id=%d other_type=%s soft=%d pierce=%d/%d pos=(%1.2f,%1.2f,%1.2f) destroy=1\n",
+									  AmmoDefinition->Get_Name(),
+									  other ? other->Get_ID() : -1,
+									  other ? (other->As_SoldierGameObj() ? "soldier" : (other->As_VehicleGameObj() ? "vehicle" : "other")) : "none",
+									  other ? (other->Is_Soft() ? 1 : 0) : -1,
+									  SoftPierceCount, AmmoDefinition->SoftPierceLimit,
+									  collision_point.X, collision_point.Y, collision_point.Z);
+
 				Destroy = true;
 				return_value = COLLISION_REACTION_STOP_MOTION;
 			} else {
@@ -417,6 +430,13 @@ CollisionReactionType BulletDataClass::Bullet_Collision_Occurred( const Collisio
 						DidExplode = true;
 					}
 
+					Renegade_Gameplay_Log("[BULLET] Collision terrain ammo=%s surface=%d pos=(%1.2f,%1.2f,%1.2f) normal=(%1.2f,%1.2f,%1.2f) explode=%d destroy=1\n",
+										  AmmoDefinition->Get_Name(),
+										  event.CollisionResult->SurfaceType,
+										  collision_point.X, collision_point.Y, collision_point.Z,
+										  collision_normal.X, collision_normal.Y, collision_normal.Z,
+										  DidExplode ? 1 : 0);
+
 					Destroy = true;
 					return_value = COLLISION_REACTION_STOP_MOTION;
 				}
@@ -443,6 +463,13 @@ ExpirationReactionType	BulletDataClass::Bullet_Expired( void )
 {
 
 	Destroy = true;
+
+	Renegade_Gameplay_Log("[BULLET] Expired ammo=%s pos=(%1.2f,%1.2f,%1.2f) time_act=%d explode=%d did_explode=%d\n",
+						  AmmoDefinition->Get_Name(),
+						  Position.X, Position.Y, Position.Z,
+						  AmmoDefinition->TimeActivated ? 1 : 0,
+						  AmmoDefinition->ExplosionDefID,
+						  DidExplode ? 1 : 0);
 
 	if ( AmmoDefinition->TimeActivated && AmmoDefinition->ExplosionDefID && !DidExplode ) {
 		ExplosionManager::Create_Explosion_At( AmmoDefinition->ExplosionDefID, Position, Get_Owner() );
@@ -587,6 +614,19 @@ void BulletClass::Init( const BulletDataClass & data, float progress_time, const
 	Projectile->Set_Position( data.Position );
 	WWASSERT(data.Velocity.Is_Valid());
 	Projectile->Set_Velocity( data.Velocity );
+
+	Vector3 init_pos;
+	Projectile->Get_Position(&init_pos);
+	Vector3 init_vel;
+	Projectile->Get_Velocity(&init_vel);
+	Renegade_Gameplay_Log("[BULLET] Init ammo=%s pos=(%1.2f,%1.2f,%1.2f) vel=(%1.2f,%1.2f,%1.2f) lifetime=%1.3f gravity=%1.2f bounce=%d safety=%1.3f\n",
+						  BulletData.AmmoDefinition->Get_Name(),
+						  init_pos.X, init_pos.Y, init_pos.Z,
+						  init_vel.X, init_vel.Y, init_vel.Z,
+						  Projectile->Get_Lifetime(),
+						  Projectile->Get_Gravity_Multiplier(),
+						  Projectile->Get_Bounce_Count(),
+						  BulletData.GrenadeSafetyTimer);
 
 	// If there are any emitters in this model, reset them for our new position
 	RenderObjClass * model = Projectile->Peek_Model();

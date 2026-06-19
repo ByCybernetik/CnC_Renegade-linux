@@ -40,6 +40,8 @@ unsigned int MenuViewportClass::Get_Hud_Resolution_Revision(void)
 	return HudResolutionRevision;
 }
 
+#if defined(RENEGADE_LINUX)
+
 void MenuViewportClass::Activate(void)
 {
 	int width = 0;
@@ -180,3 +182,16 @@ void MenuViewportClass::End_Hud_Render(void)
 		}
 	}
 }
+
+#else /* !RENEGADE_LINUX — reserve MinGW path: no letterbox viewport */
+
+void MenuViewportClass::Activate(void) {}
+void MenuViewportClass::Deactivate(void) {}
+void MenuViewportClass::Transform_Mouse_Pos(Vector3 &) {}
+void MenuViewportClass::Transform_Mouse_Pos(Vector2 &) {}
+void MenuViewportClass::Untransform_Mouse_Pos(Vector3 &) {}
+void MenuViewportClass::Apply_To_Camera(CameraClass *) {}
+void MenuViewportClass::Begin_Hud_Render(void) {}
+void MenuViewportClass::End_Hud_Render(void) {}
+
+#endif

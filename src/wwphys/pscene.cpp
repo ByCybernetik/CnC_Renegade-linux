@@ -1154,6 +1154,14 @@ void PhysicsSceneClass::Pre_Render_Processing(CameraClass & camera)
 				VisibleStaticObjectList,
 				VisibleWSMeshList);
 		}
+		/* Stale PVS after load can cull all dynamics while static fallback already ran. */
+		if (pvs != nullptr && VisibleDynamicObjectList.Count() == 0) {
+			VisibleDynamicObjectList.Reset_List();
+			DynamicCullingSystem->Collect_Visible_Objects(
+				camera.Get_Frustum(),
+				nullptr,
+				VisibleDynamicObjectList);
+		}
 #endif
 
 		// LOD processing

@@ -56,6 +56,7 @@
 #include <stdio.h>
 
 #include "renegade_collision_fix.h"
+#include "chunkio.h"
 
 
 DECLARE_FORCE_LINK(rbody);
@@ -2136,7 +2137,7 @@ bool RigidBodyClass::Load (ChunkLoadClass &cload)
 			
 				while (cload.Open_Micro_Chunk()) {
 					switch(cload.Cur_Micro_Chunk_ID()) {
-						READ_MICRO_CHUNK(cload,RBODY_VARIABLE_ODESYSTEM_PTR,odesys);
+						READ_MICRO_CHUNK_WIRE_POINTER(cload, RBODY_VARIABLE_ODESYSTEM_PTR, odesys);
 						READ_MICRO_CHUNK(cload,RBODY_VARIABLE_IBODY,IBody);
 						READ_MICRO_CHUNK(cload,RBODY_VARIABLE_IBODYINV,IBodyInv);
 						READ_MICRO_CHUNK(cload,RBODY_VARIABLE_STATE_POSITION,State.Position);

@@ -62,6 +62,7 @@
 #include "translatedb.h"
 #include "vehicle.h"
 #include "combatchunkid.h"
+#include "chunkio.h"
 #include "logicalsound.h"
 #include "soldierobserver.h"
 #include "cinematicgameobj.h"
@@ -1629,7 +1630,12 @@ void	Save_Data( ScriptSaver & saver, int id, int size, void * data )
 void Save_Pointer(ScriptSaver& saver, int id, void* pointer)
 {
 	SCRIPT_PTR_CHECK(pointer);
+#if defined(RENEGADE_LINUX)
+	uint32 wire_ptr = (uint32)(uintptr_t)pointer;
+	Save_Data(saver, id, sizeof(wire_ptr), &wire_ptr);
+#else
 	Save_Data(saver, id, sizeof(pointer), pointer);
+#endif
 }
 
 
@@ -1656,7 +1662,13 @@ void	Load_Data( ScriptLoader & loader, int size, void * data )
 void Load_Pointer(ScriptLoader& loader, void** pointer)
 {
 	SCRIPT_PTR_CHECK(pointer);
+#if defined(RENEGADE_LINUX)
+	uint32 wire_ptr = 0;
+	Load_Data(loader, sizeof(wire_ptr), &wire_ptr);
+	*pointer = (void *)(uintptr_t)wire_ptr;
+#else
 	Load_Data(loader, sizeof(void*), pointer);
+#endif
 	REQUEST_POINTER_REMAP(pointer);
 }
 

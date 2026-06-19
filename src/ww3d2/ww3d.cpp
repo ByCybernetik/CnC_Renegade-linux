@@ -1053,11 +1053,13 @@ void WW3D::Flush(RenderInfoClass & rinfo)
 {
 	TheDX8MeshRenderer.Flush();
 	WW3D::Render_And_Clear_Static_Sort_Lists(rinfo);
+#if defined(RENEGADE_VULKAN) || defined(RENEGADE_LINUX)
 	/*
 	 * Sorting flush restores world/view from per-draw snapshots but not projection.
-	 * Re-apply the scene camera before sorting (same as static sort mesh batches).
+	 * Re-apply the scene camera before sorting (Vulkan / Linux dxvk).
 	 */
 	rinfo.Camera.Apply();
+#endif
 	SortingRendererClass::Flush();
 	TheDX8MeshRenderer.Clear_Pending_Delete_Lists();
 }
@@ -1919,9 +1921,9 @@ void WW3D::Render_And_Clear_Static_Sort_Lists(RenderInfoClass & rinfo)
 			render=true;
 		}
 		if (render) {
-			/* Menu backdrop (IF_BACK01) defers meshes to static sort lists; mesh flush
-			 * can disturb projection — re-apply camera before each flush batch. */
+#if defined(RENEGADE_VULKAN) || defined(RENEGADE_LINUX)
 			rinfo.Camera.Apply();
+#endif
 			TheDX8MeshRenderer.Flush();
 		}
 	}

@@ -346,7 +346,9 @@ MenuBackDropClass::~MenuBackDropClass (void)
 void
 MenuBackDropClass::Render (void)
 {
+#if defined(RENEGADE_LINUX)
 	MenuViewportClass::Apply_To_Camera(Camera);
+#endif
 
 	//
 	//	Simple render the scene
@@ -372,6 +374,7 @@ MenuBackDropClass::Set_Model (const char *name)
 	//
 	WW3DAssetManager *asset_mgr = WW3DAssetManager::Get_Instance();
 
+#if defined(RENEGADE_LINUX)
 	char w3d_filename[ MAX_PATH ];
 	bool preload_ok = false;
 	if ( name != NULL && name[ 0 ] != '\0' ) {
@@ -381,6 +384,9 @@ MenuBackDropClass::Set_Model (const char *name)
 			preload_ok = backdrop_try_load_w3d_file( asset_mgr, name );
 		}
 	}
+#else
+	backdrop_preload_model_w3d( name );
+#endif
 	Model = asset_mgr->Create_Render_Obj( name );
 
 	if (Model != NULL) {

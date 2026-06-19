@@ -207,6 +207,14 @@ private:
 
 };
 
+// Load-level debug log (always-on, writes to /tmp/renegade_load.log)
+extern FILE *RenegadeLoadLog;
+void Renegade_Load_Log(const char *fmt, ...);
+
+// Gameplay debug log (always-on, writes to /tmp/renegade_gameplay.log)
+extern FILE *RenegadeGameplayLog;
+void Renegade_Gameplay_Log(const char *fmt, ...);
+
 // macro to print
 #define	Debug_Say			         WWDEBUG_SAY
 #define	Debug_Warning		         WWDEBUG_WARNING

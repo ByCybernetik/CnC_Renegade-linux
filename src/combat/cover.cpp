@@ -249,7 +249,7 @@ bool	CoverEntryClass::Load( ChunkLoadClass & cload )
 							break;
 						}
 
-						READ_MICRO_CHUNK( cload, MICROCHUNKID_REMAP_PTR,     old_me );				
+						READ_MICRO_CHUNK_WIRE_POINTER( cload, MICROCHUNKID_REMAP_PTR, old_me );				
 
 						default:
 							Debug_Say(( "Unrecognized CoverEntry Variable chunkID %d\n", cload.Cur_Micro_Chunk_ID() ));

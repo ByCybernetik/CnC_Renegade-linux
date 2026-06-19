@@ -36,6 +36,7 @@
 
 #include "combatsaveload.h"
 #include "chunkio.h"
+#include <stdio.h>
 #include "gameobjmanager.h"
 #include "combat.h"
 #include "debug.h"
@@ -158,74 +159,110 @@ bool	CombatSaveLoadClass::Load( ChunkLoadClass &cload )
 	WWMEMLOG(MEM_GAMEDATA);
 
 	while (cload.Open_Chunk()) {
-		switch(cload.Cur_Chunk_ID()) {
+		unsigned int chunk_id = cload.Cur_Chunk_ID();
+		switch(chunk_id) {
 
 			case CHUNKID_GAMEOBJMANAGER:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering GameObjManager::Load\n");
 				GameObjManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving GameObjManager::Load\n");
 				break;
 
 			case CHUNKID_COMBAT_GAME_MODE:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering CombatManager::Load\n");
 				CombatManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving CombatManager::Load\n");
 				break;
 
 			case CHUNKID_SPAWNERS:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering SpawnManager::Load\n");
 				SpawnManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving SpawnManager::Load\n");
 				break;
 
 			case CHUNKID_SCRIPTS:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering ScriptManager::Load\n");
 				ScriptManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving ScriptManager::Load\n");
 				break;
 
 			case CHUNKID_PERSISTENT_GAME_OBJ_OBSERVERS:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering PersistentGameObjObserverManager::Load\n");
 				PersistentGameObjObserverManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving PersistentGameObjObserverManager::Load\n");
 				break;
 
 			case CHUNKID_COVER:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering CoverManager::Load\n");
 				CoverManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving CoverManager::Load\n");
 				break;
 
 			case CHUNKID_OBJECTIVES:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering ObjectiveManager::Load\n");
 				ObjectiveManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving ObjectiveManager::Load\n");
 				break;
 
 			case CHUNKID_RADAR:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering RadarManager::Load\n");
 				RadarManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving RadarManager::Load\n");
 				break;
 			
 			case CHUNKID_GAME_OBJ_OBSERVERS:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering GameObjObserverManager::Load\n");
 				GameObjObserverManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving GameObjObserverManager::Load\n");
 				break;
 
 			case CHUNKID_BULLETS:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering BulletManager::Load\n");
 				BulletManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving BulletManager::Load\n");
 				break;
 
 			case CHUNKID_WEAPON_VIEW:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering WeaponViewClass::Load\n");
 				WeaponViewClass::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving WeaponViewClass::Load\n");
 				break;
 
 			case CHUNKID_DYNAMIC_BACKGROUND:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering BackgroundMgrClass::Load_Dynamic\n");
 				BackgroundMgrClass::Load_Dynamic( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving BackgroundMgrClass::Load_Dynamic\n");
 				break;
 
 			case CHUNKID_DYNAMIC_WEATHER:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering WeatherMgrClass::Load_Dynamic\n");
 				WeatherMgrClass::Load_Dynamic( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving WeatherMgrClass::Load_Dynamic\n");
 				break;
 
 			case CHUNKID_HUD:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering HUDClass::Load\n");
 				HUDClass::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving HUDClass::Load\n");
 				break;
 
 			case CHUNKID_SCREEN_FADE:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad entering ScreenFadeManager::Load\n");
 				ScreenFadeManager::Load( cload );
+				Renegade_Load_Log("[LOAD] CombatSaveLoad leaving ScreenFadeManager::Load\n");
 				break;
 
 			default:
+				Renegade_Load_Log("[LOAD] CombatSaveLoad unrecognized chunk id 0x%08X\n", chunk_id);
 				Debug_Say(( "Unrecognized CombatSaveLoad chunkID\n" ));
 				break;
 
 		}
 		cload.Close_Chunk();
+	}
+
+	if (COMBAT_SCENE != NULL) {
+		COMBAT_SCENE->Log_Load_Stats();
 	}
 
 	SaveLoadSystemClass::Register_Post_Load_Callback(this);

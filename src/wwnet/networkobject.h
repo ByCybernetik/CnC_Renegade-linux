@@ -137,6 +137,7 @@ public:
 	//
 	bool					Is_Delete_Pending (void)	{ return IsDeletePending; }
 	virtual void		Set_Delete_Pending (void);
+	void					Clear_Delete_Pending (void)	{ IsDeletePending = false; }
 	virtual void		Delete (void) = 0;
 
 	//

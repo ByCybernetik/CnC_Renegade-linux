@@ -512,20 +512,23 @@ static void Apply_Render_State(RenderStateStruct& render_state)
 
 	/*
 	 * sorting_state stores DX8 internal matrices for world/view (same layout as render_state).
-	 * projection is stored in logical form (as returned by Get_Transform).
-	 * Set_Transform expects the logical matrix and transposes into render_state.
+	 * Native D3D8: push matrices directly to the device (reserve behavior).
+	 * Vulkan: deferred Set_Transform + Apply_Render_State_Changes.
 	 */
-	DX8Wrapper::Set_Transform(D3DTS_PROJECTION, render_state.projection);
-	Matrix4 world_mtx = render_state.world.Transpose();
-	Matrix4 view_mtx = render_state.view.Transpose();
-	DX8Wrapper::Set_Transform(D3DTS_WORLD, world_mtx);
-	DX8Wrapper::Set_Transform(D3DTS_VIEW, view_mtx);
-
 #if defined(RENEGADE_VULKAN)
 	if (DX8Wrapper::Vulkan_Device_Active()) {
+		DX8Wrapper::Set_Transform(D3DTS_PROJECTION, render_state.projection);
+		Matrix4 world_mtx = render_state.world.Transpose();
+		Matrix4 view_mtx = render_state.view.Transpose();
+		DX8Wrapper::Set_Transform(D3DTS_WORLD, world_mtx);
+		DX8Wrapper::Set_Transform(D3DTS_VIEW, view_mtx);
 		DX8Wrapper::Apply_Render_State_Changes();
-	}
+	} else
 #endif
+	{
+		DX8Wrapper::_Set_DX8_Transform(D3DTS_WORLD, render_state.world);
+		DX8Wrapper::_Set_DX8_Transform(D3DTS_VIEW, render_state.view);
+	}
 }
 
 // ----------------------------------------------------------------------------

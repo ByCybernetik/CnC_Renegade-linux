@@ -570,6 +570,9 @@ public:
 	RefPhysListIterator	Get_Static_Anim_Object_Iterator(void);
 	RefPhysListIterator	Get_Static_Light_Iterator(void);
 
+	// Debug helper for level-load comparison (M01 vs M02)
+	void					Log_Load_Stats(void);
+
 	TexProjListIterator	Get_Static_Projector_Iterator(void);
 	TexProjListIterator	Get_Dynamic_Projector_Iterator(void);
 

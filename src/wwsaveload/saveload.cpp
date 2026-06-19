@@ -80,8 +80,9 @@ bool SaveLoadSystemClass::Load (ChunkLoadClass &cload,bool auto_post_load)
 
 	// Load each chunk we encounter and link the manager into the PostLoad list
 	while (cload.Open_Chunk ()) {
+		unsigned int chunk_id = cload.Cur_Chunk_ID();
 		SaveLoadStatus::Inc_Status_Count();		// Count the sub systems loaded
-		SaveLoadSubSystemClass *sys = Find_Sub_System(cload.Cur_Chunk_ID ());
+		SaveLoadSubSystemClass *sys = Find_Sub_System(chunk_id);
 		WWLOG_INTERMEDIATE("Find_Sub_System");
 		if (sys != NULL) {
 //WWRELEASE_SAY(("			Name: %s\n",sys->Name()));

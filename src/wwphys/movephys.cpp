@@ -462,8 +462,13 @@ bool MoveablePhysClass::Load(ChunkLoadClass &cload)
 						READ_MICRO_CHUNK(cload,MOVEABLE_VARIABLE_MASS,Mass);
 						READ_MICRO_CHUNK(cload,MOVEABLE_VARIABLE_GRAVSCALE,GravScale);
 						READ_MICRO_CHUNK(cload,MOVEABLE_VARIABLE_ELASTICITY,Elasticity);
+#if defined(RENEGADE_LINUX)
+						READ_MICRO_CHUNK_WIRE_POINTER(cload,MOVEABLE_VARIABLE_CONTROLLER,Controller);
+						READ_MICRO_CHUNK_WIRE_POINTER(cload,MOVEABLE_VARIABLE_CARRIER,Carrier);
+#else
 						READ_MICRO_CHUNK(cload,MOVEABLE_VARIABLE_CONTROLLER,Controller);
 						READ_MICRO_CHUNK(cload,MOVEABLE_VARIABLE_CARRIER,Carrier);
+#endif
 					}
 					cload.Close_Micro_Chunk();	
 				}
