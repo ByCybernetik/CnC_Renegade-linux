@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 namespace ww3d_vulkan {
 

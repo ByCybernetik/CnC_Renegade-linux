@@ -134,6 +134,7 @@
 #include "predlod.h"
 #include "rinfo.h"
 #include <string.h>
+#include <math.h>
 #include <win.h>
 #include "sphere.h"
 #include "boxrobj.h"
@@ -944,7 +945,9 @@ HLodClass::HLodClass(void) :
 	ProxyArray(NULL),
 	LODBias(1.0f),
 	CurLodTransformsValid(false),
-	AllLodTransformsValid(false)
+	AllLodTransformsValid(false),
+	BatchLODBase(0),
+	BatchLODDirty(false)
 {
 }
 
@@ -975,7 +978,9 @@ HLodClass::HLodClass(const HLodClass & src) :
 	ProxyArray(NULL),
 	LODBias(1.0f),
 	CurLodTransformsValid(false),
-	AllLodTransformsValid(false)
+	AllLodTransformsValid(false),
+	BatchLODBase(0),
+	BatchLODDirty(false)
 {
 	*this = src;
 }
@@ -1010,7 +1015,9 @@ HLodClass::HLodClass(const char * name,RenderObjClass ** lods,int count) :
 	ProxyArray(NULL),
 	LODBias(1.0f),
 	CurLodTransformsValid(false),
-	AllLodTransformsValid(false)
+	AllLodTransformsValid(false),
+	BatchLODBase(0),
+	BatchLODDirty(false)
 {
 	// enforce parameters
 	WWASSERT(name != NULL);
@@ -1115,7 +1122,9 @@ HLodClass::HLodClass(const HLodDefClass & def) :
 	ProxyArray(NULL),
 	LODBias(1.0f),
 	CurLodTransformsValid(false),
-	AllLodTransformsValid(false)
+	AllLodTransformsValid(false),
+	BatchLODBase(0),
+	BatchLODDirty(false)
 {
 	// Set the name
 	Set_Name(def.Get_Name());
@@ -1206,7 +1215,9 @@ HLodClass::HLodClass(const HModelDefClass & def) :
 	ProxyArray(NULL),
 	LODBias(1.0f),
 	CurLodTransformsValid(false),
-	AllLodTransformsValid(false)
+	AllLodTransformsValid(false),
+	BatchLODBase(0),
+	BatchLODDirty(false)
 {
 	// Set the name
 	Set_Name(def.Get_Name());
@@ -3137,6 +3148,17 @@ void HLodClass::Increment_LOD(void)
 {
 	if (CurLod >= (LodCount-1)) return;
 
+	if (PredictiveLODOptimizerClass::Is_Batch_LOD_Active()) {
+		if (!BatchLODDirty) {
+			BatchLODBase = CurLod;
+			BatchLODDirty = true;
+		}
+		CurLod++;
+		CurLodTransformsValid = false;
+		AllLodTransformsValid = false;
+		return;
+	}
+
 	if (Is_In_Scene()) {
 		int model_count = Lod[CurLod].Count();
 		for (int i = 0; i < model_count; i++) {
@@ -3173,6 +3195,17 @@ void HLodClass::Decrement_LOD(void)
 {
 	if (CurLod < 1) return;
 
+	if (PredictiveLODOptimizerClass::Is_Batch_LOD_Active()) {
+		if (!BatchLODDirty) {
+			BatchLODBase = CurLod;
+			BatchLODDirty = true;
+		}
+		CurLod--;
+		CurLodTransformsValid = false;
+		AllLodTransformsValid = false;
+		return;
+	}
+
 	if (Is_In_Scene()) {
 		int model_count = Lod[CurLod].Count();
 		for (int i = 0; i < model_count; i++) {
@@ -3194,6 +3227,37 @@ void HLodClass::Decrement_LOD(void)
 
 
 /***********************************************************************************************
+ * HLodClass::Finalize_Batch_LOD_Update -- sync scene after batched LOD changes                *
+ *=============================================================================================*/
+void HLodClass::Finalize_Batch_LOD_Update(void)
+{
+	if (!BatchLODDirty) {
+		return;
+	}
+
+	const int start_lod = BatchLODBase;
+	BatchLODDirty = false;
+	BatchLODBase = CurLod;
+
+	if (start_lod == CurLod || !Is_In_Scene()) {
+		return;
+	}
+
+	int model_count = Lod[start_lod].Count();
+	for (int i = 0; i < model_count; i++) {
+		Lod[start_lod][i].Model->Notify_Removed(Scene);
+	}
+
+	Invalidate_Cached_Bounding_Volumes();
+
+	model_count = Lod[CurLod].Count();
+	for (int i = 0; i < model_count; i++) {
+		Lod[CurLod][i].Model->Notify_Added(Scene);
+	}
+}
+
+
+/***********************************************************************************************
  * HLodClass::Get_Cost -- returns the cost of this LOD                                         *
  *                                                                                             *
  * INPUT:                                                                                      *
@@ -3207,7 +3271,15 @@ void HLodClass::Decrement_LOD(void)
  *=============================================================================================*/
 float HLodClass::Get_Cost(void) const
 {
-	return(Cost[CurLod]);
+	if (CurLod < 0 || CurLod >= LodCount) {
+		return 0.0f;
+	}
+
+	const float cost = Cost[CurLod];
+	if (!isfinite(cost) || cost < 0.0f || cost >= 1.0e6f) {
+		return 0.0f;
+	}
+	return cost;
 }
 
 

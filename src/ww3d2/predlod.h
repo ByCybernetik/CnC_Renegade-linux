@@ -68,6 +68,7 @@ class PredictiveLODOptimizerClass {
 		static void		Optimize_LODs(float max_cost);
 		static float	Get_Total_Cost(void)								{ return TotalCost; }
 		static void		Free(void);	// frees all memory
+		static bool		Is_Batch_LOD_Active(void)						{ return BatchLODActive; }
 
 	private:
 		static void		AllocVisibleObjArrays(int num_objects);
@@ -80,6 +81,7 @@ class PredictiveLODOptimizerClass {
 		static LODHeapNode *VisibleObjArray1;
 		static LODHeapNode *VisibleObjArray2;
 		static int VisibleObjArraySize;
+		static bool BatchLODActive;
 
 };
 

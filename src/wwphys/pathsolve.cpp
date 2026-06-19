@@ -39,7 +39,7 @@
 
 #include <windows.h>
 
-#if defined(__GNUC__) && defined(_WIN32)
+#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
 
 static bool path_node_ptr_ok(const PathNodeClass *node)
 {
@@ -334,7 +334,7 @@ PathSolveClass::Unlink_Pathfind_Hooks (void)
 	}
 
 	for (int index = 0; index < node_count; index ++) {
-#if defined(__GNUC__) && defined(_WIN32)
+#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
 		if (!path_node_ptr_ok(m_NodeList[index])) {
 			continue;
 		}
@@ -524,11 +524,16 @@ PathSolveClass::Process_Initial_Sector (void)
 			//
 			//	Sumbit a node for this portal
 			//
+			PathfindSectorClass *dest_sector = portal->Peek_Dest_Sector (m_StartSector);
+			if (dest_sector == NULL) {
+				continue;
+			}
+
 			if (Does_Object_Have_Access_To_Portal (portal)) {
 				Submit_Node (	0,
 									NULL,
 									portal,
-									portal->Peek_Dest_Sector (m_StartSector),
+									dest_sector,
 									Matrix3D (m_StartPos),
 									ending_tm);
 			}
@@ -1160,6 +1165,10 @@ PathSolveClass::Submit_Node
 	const Matrix3D &			ending_tm
 )
 {
+	if (portal == NULL || dest_sector == NULL) {
+		return;
+	}
+
 	const Vector3 &current_pos = current_tm.Get_Translation ();
 	const Vector3 &dest_pos		= ending_tm.Get_Translation ();
 
@@ -1191,13 +1200,17 @@ PathSolveClass::Submit_Node
 	//	Is this sector already in the open list?
 	//
 	int open_index = portal->Get_Heap_Location ();
+	PathNodeClass *open_version = NULL;
 	if (open_index > 0) {
-		PathNodeClass *open_version = (PathNodeClass *)m_BinaryHeap.Peek_Node (open_index);
+		open_version = (PathNodeClass *)m_BinaryHeap.Peek_Node (open_index);
+		if (open_version == NULL) {
+			portal->Set_Heap_Location (0);
+			open_index = 0;
+		}
+	}
 
-		//
-		//	If the traversal cost is lower from our current 'path', then
-		// remove the old path and re-insert the new path.
-		//
+	if (open_index > 0 && open_version != NULL) {
+
 		if (current_traversal_cost < open_version->Get_Traversal_Cost ()) {
 
 			open_version->Set_Sector (dest_sector);
@@ -1216,11 +1229,11 @@ PathSolveClass::Submit_Node
 		//
 		if (portal->m_ClosedListPtr != NULL) {
 			PathNodeClass *closed_version	= portal->m_ClosedListPtr;
-
-			//
-			//	If the traversal cost is lower from our current 'path', then
-			// remove the old path and re-insert the new path.
-			//
+#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
+			if (!path_node_ptr_ok(closed_version)) {
+				portal->m_ClosedListPtr = NULL;
+			} else
+#endif
 			if (current_traversal_cost < closed_version->Get_Traversal_Cost ()) {
 
 				portal->m_ClosedListPtr = NULL;
@@ -1299,12 +1312,7 @@ PathSolveClass::Reset_Lists (void)
 {
 	Purge_Corrupt_Internal_State();
 
-	//
-	//	Ensure we unlink our data before we destroy it...
-	//
-	if (PathMgrClass::Peek_Active_Path () == this) {
-		Unlink_Pathfind_Hooks ();
-	}
+	Unlink_Pathfind_Hooks ();
 
 	REF_PTR_RELEASE (m_CompletedNode);
 
@@ -1315,7 +1323,7 @@ PathSolveClass::Reset_Lists (void)
 	if (node_count > 0 && node_count <= 10000) {
 		for (int index = 0; index < node_count; index ++) {
 			PathNodeClass *node = m_NodeList[index];
-#if defined(__GNUC__) && defined(_WIN32)
+#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
 			if (!path_node_ptr_ok(node)) {
 				continue;
 			}

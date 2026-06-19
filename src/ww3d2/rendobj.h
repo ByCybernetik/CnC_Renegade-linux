@@ -339,6 +339,7 @@ public:
    virtual void   Recalculate_Static_LOD_Factors(void)													{ }
 	virtual void	Increment_LOD(void)																			{ }
 	virtual void	Decrement_LOD(void)																			{ }
+	virtual void	Finalize_Batch_LOD_Update(void)															{ }
 	virtual float	Get_Cost(void) const;
 	virtual float	Get_Value(void) const																		{ return AT_MIN_LOD; }
 	virtual float	Get_Post_Increment_Value(void) const													{ return AT_MAX_LOD; }

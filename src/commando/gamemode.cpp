@@ -35,6 +35,8 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "gamemode.h"
+#include <stdio.h>
+#include "debug.h"
 #include "wwprofile.h"
 #include "ww3d.h"
 #include "wwdebug.h"
@@ -43,7 +45,6 @@
 //#include "menu.h"
 #include "textdisplay.h"
 #include "thread.h"
-#include <stdio.h>
 #include "backgroundmgr.h"
 #include "render2d.h"
 #include "dazzle.h"
@@ -181,9 +182,6 @@ void	GameModeManager::Think( void )
 		//	  mode->Get_State() != GAME_MODE_INACTIVE_PENDING ) {
 		//if ( mode->Get_State() != GAME_MODE_INACTIVE &&
 		if ( !mode->Is_Inactive() ) {
-
-//			char name[80];
-//			sprintf( name, "Think - %s", mode->Name() );
 			mode->Think();
 		}
 

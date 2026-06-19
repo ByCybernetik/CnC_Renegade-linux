@@ -40,7 +40,7 @@
 
 #include "predlod.h"
 #include <memory.h>
-
+#include <math.h>
 /* NOTE: The LODHeapNode and LODHeap classes are defined here for use in the
  * Optimize_LODs() member function. */
 
@@ -112,17 +112,22 @@ class LODHeap {
 			Downheap(1);
 		}
 
+		void Change_Key_At(int heap_index, float new_key) {
+			if (heap_index < 1 || heap_index > Num) {
+				return;
+			}
+			float old_key = Nodes[heap_index].Get_Key();
+			Nodes[heap_index].Set_Key(new_key);
+			if (new_key < old_key) Downheap(heap_index);
+			else Upheap(heap_index);
+		}
+
 		// This searches for an entry which has a certain Item value, and
 		// changes its key to a new one. The heap is then adjusted accordingly.
 		void Change_Key(RenderObjClass *item, float new_key) {
 			for (int i=1; i <= Num; i++) {
 				if (Nodes[i].Get_Item() == item) {
-					float old_key = Nodes[i].Get_Key();
-					Nodes[i].Set_Key(new_key);
-					// If the key has been decreased, adjust the node downwards.
-					// Otherwise, adjust it upwards.
-					if (new_key < old_key) Downheap(i);
-					else Upheap(i);
+					Change_Key_At(i, new_key);
 					break;
 				}
 			}
@@ -180,6 +185,7 @@ float					PredictiveLODOptimizerClass::TotalCost = 0.0f;
 LODHeapNode *		PredictiveLODOptimizerClass::VisibleObjArray1;
 LODHeapNode	*		PredictiveLODOptimizerClass::VisibleObjArray2;
 int					PredictiveLODOptimizerClass::VisibleObjArraySize;
+bool					PredictiveLODOptimizerClass::BatchLODActive = false;
 
 
 /************************************************************************** 
@@ -246,9 +252,9 @@ void PredictiveLODOptimizerClass::Add_Object(RenderObjClass *robj)
 	NumObjects++;
 
 	float cost = robj->Get_Cost();
-	// Some sanity checking so one object doesn't mess up the entire scene
-	WWASSERT (cost >= 0.0f);
-	WWASSERT (cost < 1.0e6);
+	if (!isfinite(cost) || cost < 0.0f || cost >= 1.0e6f) {
+		cost = 0.0f;
+	}
 	TotalCost += cost;
 }
 
@@ -278,7 +284,53 @@ void PredictiveLODOptimizerClass::Optimize_LODs(float max_cost)
 {
 	if (!ObjectArray || NumObjects == 0) return;
 
+	if (!isfinite(TotalCost) || TotalCost < 0.0f) {
+		TotalCost = 0.0f;
+		for (int i = 0; i < NumObjects; i++) {
+			float cost = ObjectArray[i]->Get_Cost();
+			if (!isfinite(cost) || cost < 0.0f || cost >= 1.0e6f) {
+				cost = 0.0f;
+			}
+			TotalCost += cost;
+		}
+	}
+
 	AllocVisibleObjArrays(NumObjects);
+	BatchLODActive = true;
+
+	// Large visible sets blowing the budget: clamp with a bounded pass instead of
+	// the full predictive heap (which is O(iterations * NumObjects) on Change_Key).
+	if (NumObjects > 256 && TotalCost > max_cost) {
+		int steps = 0;
+		while (TotalCost > max_cost && steps < 256) {
+			int best_i = 0;
+			float best_cost = -1.0f;
+			for (int i = 0; i < NumObjects; i++) {
+				const float c = ObjectArray[i]->Get_Cost();
+				if (c > best_cost) {
+					best_cost = c;
+					best_i = i;
+				}
+			}
+
+			const float prev_cost = best_cost;
+			ObjectArray[best_i]->Decrement_LOD();
+			const float new_cost = ObjectArray[best_i]->Get_Cost();
+			TotalCost += (new_cost - prev_cost);
+
+			if (new_cost >= prev_cost - 1e-6f) {
+				break;
+			}
+			++steps;
+		}
+
+		for (int i = 0; i < NumObjects; i++) {
+			ObjectArray[i]->Finalize_Batch_LOD_Update();
+		}
+		BatchLODActive = false;
+		Clear();
+		return;
+	}
 
 	// Allocate and fill arrays. (one extra entry since the zeroth entry is not used).
 //	LODHeapNode *visible_obj_array1 = new LODHeapNode[NumObjects + 1];
@@ -302,8 +354,13 @@ void PredictiveLODOptimizerClass::Optimize_LODs(float max_cost)
 	// Main loop: iteratively increment/decrement tuples.
 	bool done = false;
 	RenderObjClass *max_data, *min_data;
+	int iterations = 0;
+	const int max_iterations = (NumObjects > 256) ? 256 : (NumObjects + 16);
 
 	while (!done) {
+		if (++iterations > max_iterations) {
+			break;
+		}
 		// Initialize max_data and min_data so comparison at end of loop uses correct values.
 		max_data = NULL;
 		min_data = NULL;
@@ -321,9 +378,16 @@ void PredictiveLODOptimizerClass::Optimize_LODs(float max_cost)
 		 	max_data = max_post_increment_value_queue.Top()->Get_Item();
 
 			// Increment tuple (and update TotalCost accordingly).
-			TotalCost -= max_data->Get_Cost();
+			float prev_cost = max_data->Get_Cost();
+			TotalCost -= prev_cost;
 			max_data->Increment_LOD();
-			TotalCost += max_data->Get_Cost();
+			float new_cost = max_data->Get_Cost();
+			TotalCost += new_cost;
+
+			if (new_cost <= prev_cost + 1e-6f) {
+				done = true;
+				break;
+			}
 
 			// Update priority queues with incremented tuple.
 			max_post_increment_value_queue.Change_Key_Top(max_data->Get_Post_Increment_Value());
@@ -344,9 +408,16 @@ void PredictiveLODOptimizerClass::Optimize_LODs(float max_cost)
 		 	min_data = min_current_value_queue.Top()->Get_Item();
 
 			// Decrement tuple (and update TotalCost accordingly).
-			TotalCost -= min_data->Get_Cost();
+			float prev_cost = min_data->Get_Cost();
+			TotalCost -= prev_cost;
 			min_data->Decrement_LOD();
-			TotalCost += min_data->Get_Cost();
+			float new_cost = min_data->Get_Cost();
+			TotalCost += new_cost;
+
+			if (new_cost >= prev_cost - 1e-6f) {
+				done = true;
+				break;
+			}
 
 			// Update priority queues with incremented tuple.
 			min_current_value_queue.Change_Key_Top(-(min_data->Get_Value()));
@@ -358,6 +429,11 @@ void PredictiveLODOptimizerClass::Optimize_LODs(float max_cost)
 				break;
 			}
 		}
+	}
+
+	BatchLODActive = false;
+	for (int i = 0; i < NumObjects; i++) {
+		ObjectArray[i]->Finalize_Batch_LOD_Update();
 	}
 
 	// Clear optimizer:

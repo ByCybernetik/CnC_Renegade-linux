@@ -44,6 +44,8 @@
 #include "mono.h"
 #include "registry.h"
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
 #include "wwaudio.h"
 #include "combat.h"
 #include "wwmemlog.h"

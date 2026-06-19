@@ -69,6 +69,13 @@ DEFINE_AUTO_POOL(WeatherSystemClass::ParticleStruct, WeatherSystemClass::GROWTH_
 Random2Class									 WeatherSystemClass::_RandomNumber (0x60486223);
 unsigned											 WeatherSystemClass::_GlobalParticleCount = 0;
 
+#if defined(RENEGADE_LINUX)
+// Linux raycasts are slower than Win32; keep per-frame Cast_Ray budget bounded but
+// allow enough spawn columns so snow does not appear as a sparse vertical grid.
+static const unsigned WEATHER_LINUX_MAX_RAYS = 96u;
+static const unsigned WEATHER_LINUX_RAYCAST_BUDGET_PER_FRAME = 32u;
+#endif
+
 SoundEnvironmentClass						*WeatherMgrClass::_SoundEnvironment;
 WeatherParameterClass						 WeatherMgrClass::_Parameters [PARAMETER_COUNT];
 bool												 WeatherMgrClass::_Prime;
@@ -405,10 +412,8 @@ void WeatherSystemClass::Set_Density (float density)
 	ParticleDensity = density;
 	raycount			 = Spawn_Count (1.0f) / (ParticlesPerUnitLength * ParticleSpeed);
 #if defined(RENEGADE_LINUX)
-	// Precipitation update raycasts terrain every frame; Linux scene queries are
-	// much slower than Win32, so cap the ray grid to keep WeatherMgr::Update in budget.
-	if (raycount > 24u) {
-		raycount = 24u;
+	if (raycount > WEATHER_LINUX_MAX_RAYS) {
+		raycount = WEATHER_LINUX_MAX_RAYS;
 	}
 #endif
 
@@ -481,8 +486,8 @@ bool WeatherSystemClass::Update (WindClass *wind, const Vector3 &cameraposition)
 	const unsigned rayupdatecount = MAX (RayCount * 0.018f, 1);
 #if defined(RENEGADE_LINUX)
 	unsigned raycast_budget = RayCount;
-	if (raycast_budget > 24u) {
-		raycast_budget = 24u;
+	if (raycast_budget > WEATHER_LINUX_RAYCAST_BUDGET_PER_FRAME) {
+		raycast_budget = WEATHER_LINUX_RAYCAST_BUDGET_PER_FRAME;
 	}
 #endif
 
@@ -906,6 +911,9 @@ bool WeatherSystemClass::Spawn (RayStruct *suppliedrayptr)
 			const float		oorandomness  = 1.0f / randomness;
 			const float		ooz			  = 1.0f / rayptr->ParticleVelocity.Z;
 			const float		collisiontime = (rayptr->EndPosition.Z - EmitterPosition.Z) * ooz;
+			const float		jitter_span	  = HalfParticleWidth * 1.5f;
+			const float		spawn_jx		  = (_RandomNumber (0, randomness) * oorandomness - 0.5f) * 2.0f * jitter_span;
+			const float		spawn_jy		  = (_RandomNumber (0, randomness) * oorandomness - 0.5f) * 2.0f * jitter_span;
 
 			ParticleStruct *particleptr;
 
@@ -944,7 +952,7 @@ bool WeatherSystemClass::Spawn (RayStruct *suppliedrayptr)
 				// Start particle at emitter.
 				particleptr->ElapsedTime	  = 0.0f;
 				particleptr->Velocity		  = rayptr->ParticleVelocity;
-				particleptr->CurrentPosition = Vector3 (rayptr->StartPosition.X, rayptr->StartPosition.Y, EmitterPosition.Z);
+				particleptr->CurrentPosition = Vector3 (rayptr->StartPosition.X + spawn_jx, rayptr->StartPosition.Y + spawn_jy, EmitterPosition.Z);
 				particleptr->Page				  = _RandomNumber (0, PageCount - (StaticPageExists) ? 2 : 1);
 				particleptr->RenderMode		  = RenderMode;
 
@@ -968,7 +976,7 @@ bool WeatherSystemClass::Spawn (RayStruct *suppliedrayptr)
 
 				} else {
 					particleptr->Velocity		  = rayptr->ParticleVelocity;
-					particleptr->CurrentPosition = Vector3 (rayptr->StartPosition.X, rayptr->StartPosition.Y, EmitterPosition.Z) + (particleptr->Velocity * particleptr->ElapsedTime);
+					particleptr->CurrentPosition = Vector3 (rayptr->StartPosition.X + spawn_jx, rayptr->StartPosition.Y + spawn_jy, EmitterPosition.Z) + (particleptr->Velocity * particleptr->ElapsedTime);
 					particleptr->Page				  = _RandomNumber (0, PageCount - (StaticPageExists) ? 2 : 1);
 					particleptr->RenderMode		  = RenderMode;
 				}
@@ -1195,32 +1203,20 @@ void WeatherSystemClass::Render (RenderInfoClass &rinfo)
 						}
 						DX8Wrapper::Set_Alpha (alpha, dxcolor);
 
-						// Vertex 0 of triangle.
-						vertex->x		 = position.X + offset [0].X;
-						vertex->y		 = position.Y + offset [0].Y;
-						vertex->z		 = position.Z + offset [0].Z;
-						vertex->diffuse = dxcolor;
-						vertex->u1		 = TextureArray [base].U;
-						vertex->v1		 = TextureArray [base].V;
-						vertex++;
-
-						// Vertex 1 of triangle.
-						vertex->x		 = position.X + offset [1].X;
-						vertex->y		 = position.Y + offset [1].Y;
-						vertex->z		 = position.Z + offset [1].Z;
-						vertex->diffuse = dxcolor;
-						vertex->u1		 = TextureArray [base + 1].U;
-						vertex->v1		 = TextureArray [base + 1].V;
-						vertex++;
-
-						// Vertex 2 of triangle.
-						vertex->x		 = position.X + offset [2].X;
-						vertex->y		 = position.Y + offset [2].Y;
-						vertex->z		 = position.Z + offset [2].Z;
-						vertex->diffuse = dxcolor;
-						vertex->u1		 = TextureArray [base + 2].U;
-						vertex->v1		 = TextureArray [base + 2].V;
-						vertex++;
+						for (unsigned vi = 0; vi < VERTICES_PER_TRIANGLE; vi++) {
+							vertex->x		 = position.X + offset [vi].X;
+							vertex->y		 = position.Y + offset [vi].Y;
+							vertex->z		 = position.Z + offset [vi].Z;
+							vertex->nx		 = 0.0f;
+							vertex->ny		 = 0.0f;
+							vertex->nz		 = 1.0f;
+							vertex->diffuse = dxcolor;
+							vertex->u1		 = TextureArray [base + vi].U;
+							vertex->v1		 = TextureArray [base + vi].V;
+							vertex->u2		 = 0.0f;
+							vertex->v2		 = 0.0f;
+							vertex++;
+						}
 
 						submittedparticlecount++;
 					}

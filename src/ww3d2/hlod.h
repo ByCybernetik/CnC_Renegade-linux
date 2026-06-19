@@ -189,6 +189,7 @@ public:
 	virtual void					Set_LOD_Bias(float bias);
 	virtual int						Calculate_Cost_Value_Arrays(float screen_area, float *values, float *costs) const;
 	virtual RenderObjClass *	Get_Current_LOD(void);
+	virtual void					Finalize_Batch_LOD_Update(void);
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Render Object Interface - Bounding Volumes
@@ -286,6 +287,9 @@ protected:
 	// Cached transform validity flags (optimize Update_Sub_Object_Transforms to only update CurLod)
 	bool								CurLodTransformsValid;
 	bool								AllLodTransformsValid;
+
+	int								BatchLODBase;
+	bool								BatchLODDirty;
 };
 
 
