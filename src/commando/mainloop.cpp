@@ -125,16 +125,16 @@ void _Game_Main_Loop_Loop(void)
 	}
 #endif
 
+{	WWPROFILE( "Think" );
+   GameModeManager::Think();
+	GameInitMgrClass::Think();
+}
+
 {	WWPROFILE( "Pathfind Evaluate" );
    if (COMBAT_CAMERA != NULL) {
 		Vector3 camera_pos = COMBAT_CAMERA->Get_Position();
 		PathMgrClass::Resolve_Paths( camera_pos );
    }
-}
-
-{	WWPROFILE( "Think" );
-   GameModeManager::Think();
-	GameInitMgrClass::Think();
 }
 
 {	WWPROFILE( "Dialog Mgr Update" );

@@ -655,6 +655,9 @@ public:
 
 	bool Cast_Ray(PhysRayCollisionTestClass & raytest,bool use_collision_region = false);
 	bool Cast_AABox(PhysAABoxCollisionTestClass & boxtest,bool use_collision_region = false);
+#if defined(RENEGADE_LINUX) && defined(RENEGADE_COLLISION_FIX)
+	bool Linux_Cast_AABox_Unfiltered(PhysAABoxCollisionTestClass & boxtest);
+#endif
 	bool Cast_OBBox(PhysOBBoxCollisionTestClass & boxtest,bool use_collision_region = false);
 	
 	bool Intersection_Test(PhysAABoxIntersectionTestClass & boxtest,bool use_collision_region = false);

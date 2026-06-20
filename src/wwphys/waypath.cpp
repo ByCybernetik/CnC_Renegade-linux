@@ -269,11 +269,11 @@ WaypathClass::Load_Variables (ChunkLoadClass &cload)
 			{
 				//
 				//	Read the old waypoint ptr from the chunk and add it to our
-				// list.  We will remap it later.
+				// list.  We will remap it later.  Level files store 32-bit pointers.
 				//				
-				WaypointClass *waypoint = NULL;
-				cload.Read (&waypoint, sizeof (waypoint));				
-				m_Waypoints.Add (waypoint);				
+				uint32 waypoint_u32 = 0;
+				cload.Read (&waypoint_u32, sizeof (waypoint_u32));
+				m_Waypoints.Add ((WaypointClass *)(uintptr_t)waypoint_u32);
 			}
 			break;
 
@@ -281,11 +281,13 @@ WaypathClass::Load_Variables (ChunkLoadClass &cload)
 			{
 				//
 				//	Read the old pointer from the chunk and submit it
-				// to the remapping system.
+				// to the remapping system.  Level files store 32-bit pointers.
 				//				
-				WaypathClass *old_ptr = NULL;
-				cload.Read (&old_ptr, sizeof (old_ptr));
-				SaveLoadSystemClass::Register_Pointer (old_ptr, this);
+				uint32 old_ptr_u32 = 0;
+				cload.Read (&old_ptr_u32, sizeof (old_ptr_u32));
+				if (old_ptr_u32 != 0) {
+					SaveLoadSystemClass::Register_Pointer ((WaypathClass *)(uintptr_t)old_ptr_u32, this);
+				}
 			}
 			break;
 		}

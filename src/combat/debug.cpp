@@ -44,8 +44,6 @@
 #include "mono.h"
 #include "registry.h"
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
 #include "wwaudio.h"
 #include "combat.h"
 #include "wwmemlog.h"
@@ -97,7 +95,7 @@ void Renegade_Load_Log(const char *fmt, ...)
 void Renegade_Gameplay_Log(const char *fmt, ...)
 {
 	if (RenegadeGameplayLog == NULL) {
-		RenegadeGameplayLog = fopen("/tmp/renegade_gameplay.log", "w");
+		RenegadeGameplayLog = fopen("/tmp/renegade_gameplay.log", "a");
 	}
 	if (RenegadeGameplayLog != NULL) {
 		va_list args;

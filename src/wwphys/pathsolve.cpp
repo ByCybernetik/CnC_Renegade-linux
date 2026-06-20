@@ -38,14 +38,22 @@
 #include "pathsolve.h"
 
 #include <windows.h>
+#include <stdio.h>
+#include <stdarg.h>
 
-#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
-
-static bool path_node_ptr_ok(const PathNodeClass *node)
-{
-	return node != NULL && (unsigned long)node >= 0x00100000UL && (unsigned long)node < 0x7F000000UL;
+static void Pathfind_Log(const char *fmt, ...) {
+	static FILE *fp = NULL;
+	if (fp == NULL) {
+		fp = fopen("/tmp/renegade_gameplay.log", "a");
+	}
+	if (fp != NULL) {
+		va_list args;
+		va_start(args, fmt);
+		vfprintf(fp, fmt, args);
+		va_end(args);
+		fflush(fp);
+	}
 }
-#endif
 #include "Pathfind.h"
 #include "PathfindPortal.h"
 #include "PathNode.h"
@@ -56,6 +64,9 @@ static bool path_node_ptr_ok(const PathNodeClass *node)
 #include "pathmgr.h"
 #include "wwmemlog.h"
 #include "systimer.h"
+
+
+
 ////////////////////////////////////////////////////////////////
 //	Save/Load constants
 ////////////////////////////////////////////////////////////////
@@ -215,7 +226,8 @@ PathSolveClass::PathSolveClass (void)
 		m_State (ERROR_INVALID_START_POS),
 		m_BinaryHeap (10000),
 		m_Priority (0.5F),
-		m_BirthTime (0)
+		m_BirthTime (0),
+		m_InitialSectorProcessed (false)
 {
 	//
 	//	Determine how many performance-counter ticks
@@ -245,7 +257,8 @@ PathSolveClass::PathSolveClass (const Vector3 &start, const Vector3 &dest)
 		m_State (ERROR_INVALID_START_POS),
 		m_BinaryHeap (10000),
 		m_Priority (0.5F),
-		m_BirthTime (0)
+		m_BirthTime (0),
+		m_InitialSectorProcessed (false)
 {
 	//
 	//	Determine how many performance-counter ticks
@@ -324,21 +337,7 @@ PathSolveClass::Begin_Distributed_Solve (void)
 void
 PathSolveClass::Unlink_Pathfind_Hooks (void)
 {
-	if (!m_NodeList.Has_Valid_Storage()) {
-		return;
-	}
-
-	int node_count = m_NodeList.Count();
-	if (node_count < 0 || node_count > 10000) {
-		return;
-	}
-
-	for (int index = 0; index < node_count; index ++) {
-#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
-		if (!path_node_ptr_ok(m_NodeList[index])) {
-			continue;
-		}
-#endif
+	for (int index = 0; index < m_NodeList.Count (); index ++) {
 		m_NodeList[index]->Disconnect_From_Portal ();
 	}
 
@@ -375,6 +374,8 @@ PathSolveClass::Resolve_Path (unsigned int milliseconds)
 		//
 		if (node == NULL) {
 			m_State = ERROR_NO_PATH;
+			Pathfind_Log("[PATH] NO_PATH start=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f) iterations=%d\n",
+				m_StartPos.X, m_StartPos.Y, m_StartPos.Z, m_DestPos.X, m_DestPos.Y, m_DestPos.Z, iterations);
 		} else  if (node->Peek_Sector () == m_DestSector) {
 			m_State = SOLVED_PATH;
 
@@ -431,7 +432,12 @@ PathSolveClass::Timestep (unsigned int milliseconds)
 	//	Spend some time trying to resolve the path
 	//
 	if (m_State == THINKING) {
-		Resolve_Path (milliseconds);
+		if (!m_InitialSectorProcessed && m_StartSector != NULL) {
+			Process_Initial_Sector ();
+		}
+		if (m_State == THINKING) {
+			Resolve_Path (milliseconds);
+		}
 	}
 
 	return m_State;
@@ -449,6 +455,7 @@ PathSolveClass::Initialize (float sector_fudge)
 	m_State				= THINKING;
 	m_CompletedNode	= NULL;
 	m_BirthTime			= TIMEGETTIME ();
+	m_InitialSectorProcessed = false;
 
 	//
 	//	Lookup the start and destination sectors
@@ -462,8 +469,12 @@ PathSolveClass::Initialize (float sector_fudge)
 	//
 	if (m_StartSector == NULL) {
 		m_State = ERROR_INVALID_START_POS;
+		Pathfind_Log("[PATH] INVALID_START_POS pos=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f)\n",
+			m_StartPos.X, m_StartPos.Y, m_StartPos.Z, m_DestPos.X, m_DestPos.Y, m_DestPos.Z);
 	} else if (m_DestSector == NULL) {
 		m_State = ERROR_INVALID_DEST_POS;
+		Pathfind_Log("[PATH] INVALID_DEST_POS pos=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f)\n",
+			m_StartPos.X, m_StartPos.Y, m_StartPos.Z, m_DestPos.X, m_DestPos.Y, m_DestPos.Z);
 	} else {
 
 		//
@@ -474,6 +485,19 @@ PathSolveClass::Initialize (float sector_fudge)
 		::Clip_Point (&m_StartPos, m_StartSector->Get_Bounding_Box ());
 		::Clip_Point (&m_DestPos, m_DestSector->Get_Bounding_Box ());
 		//}
+
+		static uint32 last_init_log = 0;
+		uint32 now = TIMEGETTIME();
+		if (now - last_init_log > 200) {
+			last_init_log = now;
+			Pathfind_Log("[PATH] INIT start=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f) start_sector=%p dest_sector=%p same=%d start_portals=%d dest_portals=%d\n",
+				m_StartPos.X, m_StartPos.Y, m_StartPos.Z,
+				m_DestPos.X, m_DestPos.Y, m_DestPos.Z,
+				m_StartSector, m_DestSector,
+				(m_StartSector == m_DestSector) ? 1 : 0,
+				m_StartSector->Get_Portal_Count(),
+				m_DestSector->Get_Portal_Count());
+		}
 	}
 
 	return ;
@@ -488,9 +512,11 @@ PathSolveClass::Initialize (float sector_fudge)
 void
 PathSolveClass::Process_Initial_Sector (void)
 {
-	if (m_StartSector == NULL) {
+	if (m_StartSector == NULL || m_InitialSectorProcessed) {
 		return ;
 	}
+
+	m_InitialSectorProcessed = true;
 
 	//
 	//	Create a set of path 'nodes' that represent all the portals of the
@@ -524,44 +550,33 @@ PathSolveClass::Process_Initial_Sector (void)
 			//
 			//	Sumbit a node for this portal
 			//
-			PathfindSectorClass *dest_sector = portal->Peek_Dest_Sector (m_StartSector);
-			if (dest_sector == NULL) {
-				continue;
-			}
-
 			if (Does_Object_Have_Access_To_Portal (portal)) {
-				Submit_Node (	0,
-									NULL,
-									portal,
-									dest_sector,
-									Matrix3D (m_StartPos),
-									ending_tm);
+				PathfindSectorClass *dest_sector = portal->Peek_Dest_Sector (m_StartSector);
+				if (dest_sector != NULL) {
+					Submit_Node (	0,
+										NULL,
+										portal,
+										dest_sector,
+										Matrix3D (m_StartPos),
+										ending_tm);
+				}
 			}
 		}
 	}
 
-	{
-		PathfindClass *pathfind = PathfindClass::Get_Instance ();
-		int start_sector = (m_StartSector != NULL)
-			? pathfind->Get_Sector_Index (m_StartSector) : -1;
-		int dest_sector = (m_DestSector != NULL)
-			? pathfind->Get_Sector_Index (m_DestSector) : -1;
-		int same_sector = (m_StartSector == m_DestSector) ? 1 : 0;
+	if (m_StartSector == m_DestSector) {
 
-		if (m_StartSector == m_DestSector) {
+		//
+		//	If the start and destination are the same
+		// sector, then we can just beeline.
+		//
+		m_State = SOLVED_PATH;
+		m_Path.Delete_All ();
+		m_Path.Add (PathDataStruct (NULL, m_StartPos));
+		m_Path.Add (PathDataStruct (NULL, m_DestPos));
 
-			//
-			//	If the start and destination are the same
-			// sector, then we can just beeline.
-			//
-			m_State = SOLVED_PATH;
-			m_Path.Delete_All ();
-			m_Path.Add (PathDataStruct (NULL, m_StartPos));
-			m_Path.Add (PathDataStruct (NULL, m_DestPos));
-
-		} else {
-			m_State = THINKING;
-		}
+	} else {
+		m_State = THINKING;
 	}
 
 	return ;
@@ -1200,17 +1215,13 @@ PathSolveClass::Submit_Node
 	//	Is this sector already in the open list?
 	//
 	int open_index = portal->Get_Heap_Location ();
-	PathNodeClass *open_version = NULL;
 	if (open_index > 0) {
-		open_version = (PathNodeClass *)m_BinaryHeap.Peek_Node (open_index);
-		if (open_version == NULL) {
-			portal->Set_Heap_Location (0);
-			open_index = 0;
-		}
-	}
+		PathNodeClass *open_version = (PathNodeClass *)m_BinaryHeap.Peek_Node (open_index);
 
-	if (open_index > 0 && open_version != NULL) {
-
+		//
+		//	If the traversal cost is lower from our current 'path', then
+		// remove the old path and re-insert the new path.
+		//
 		if (current_traversal_cost < open_version->Get_Traversal_Cost ()) {
 
 			open_version->Set_Sector (dest_sector);
@@ -1229,11 +1240,11 @@ PathSolveClass::Submit_Node
 		//
 		if (portal->m_ClosedListPtr != NULL) {
 			PathNodeClass *closed_version	= portal->m_ClosedListPtr;
-#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
-			if (!path_node_ptr_ok(closed_version)) {
-				portal->m_ClosedListPtr = NULL;
-			} else
-#endif
+
+			//
+			//	If the traversal cost is lower from our current 'path', then
+			// remove the old path and re-insert the new path.
+			//
 			if (current_traversal_cost < closed_version->Get_Traversal_Cost ()) {
 
 				portal->m_ClosedListPtr = NULL;
@@ -1282,58 +1293,31 @@ PathSolveClass::Submit_Node
 
 ///////////////////////////////////////////////////////////////////////////
 //
-//	Purge_Corrupt_Internal_State
-//
-///////////////////////////////////////////////////////////////////////////
-void
-PathSolveClass::Purge_Corrupt_Internal_State (void)
-{
-	bool bad_nodes = !m_NodeList.Has_Valid_Storage();
-	bool bad_heap = !m_BinaryHeap.Has_Valid_Array();
-
-	if (bad_nodes) {
-		m_NodeList.Abandon_Corrupted_Storage();
-	}
-
-	if (bad_heap) {
-		m_BinaryHeap.Abandon_Corrupted_Array();
-		m_BinaryHeap.Resize_Array(10000);
-	}
-}
-
-
-///////////////////////////////////////////////////////////////////////////
-//
 //	Reset_Lists
 //
 ///////////////////////////////////////////////////////////////////////////
 void
 PathSolveClass::Reset_Lists (void)
 {
-	Purge_Corrupt_Internal_State();
-
-	Unlink_Pathfind_Hooks ();
+	//
+	//	Ensure we unlink our data before we destroy it...
+	//
+	if (PathMgrClass::Peek_Active_Path () == this) {
+		Unlink_Pathfind_Hooks ();
+	}
 
 	REF_PTR_RELEASE (m_CompletedNode);
 
 	//
 	//	Free all our nodes
 	//
-	int node_count = m_NodeList.Count();
-	if (node_count > 0 && node_count <= 10000) {
-		for (int index = 0; index < node_count; index ++) {
-			PathNodeClass *node = m_NodeList[index];
-#if defined(__GNUC__) && (defined(_WIN32) || defined(RENEGADE_LINUX))
-			if (!path_node_ptr_ok(node)) {
-				continue;
-			}
-#endif
-			REF_PTR_RELEASE (node);
-		}
+	for (int index = 0; index < m_NodeList.Count (); index ++) {
+		PathNodeClass *node = m_NodeList[index];
+		REF_PTR_RELEASE (node);
 	}
 
-	m_NodeList.Reset_Active ();
 	m_BinaryHeap.Flush_Array ();
+	m_NodeList.Reset_Active ();
 	return ;
 }
 
@@ -1614,8 +1598,7 @@ PathSolveClass::Post_Process_Path (void)
 	PATH_POINT *path_points = new PATH_POINT[count];
 
 	Vector3 next_point = m_DestPos;
-	int index = 0;
-	for (index = m_Path.Count () - 2; index > 0; index --) {
+	for (int index = m_Path.Count () - 2; index > 0; index --) {
 
 		//
 		//	Do we have a portal we can clip the point to?
@@ -1653,7 +1636,7 @@ PathSolveClass::Post_Process_Path (void)
 	}
 
 	next_point = m_StartPos;
-	for (index = 1; index < m_Path.Count () - 1; index ++) {
+	for (int index = 1; index < m_Path.Count () - 1; index ++) {
 
 		//
 		//	Do we have a portal we can clip the point to?
@@ -1693,7 +1676,7 @@ PathSolveClass::Post_Process_Path (void)
 	//
 	//	Now average the points
 	//
-	for (index = 1; index < m_Path.Count () - 1; index ++) {
+	for (int index = 1; index < m_Path.Count () - 1; index ++) {
 		Vector3 avg_point = (path_points[index].forward + path_points[index].backward) * 0.5F;
 		m_Path[index].m_Point = avg_point;
 	}
@@ -1704,7 +1687,7 @@ PathSolveClass::Post_Process_Path (void)
 	//
 	//	Relax the points
 	//
-	for (index = m_Path.Count () - 2; index > 1; index --) {
+	for (int index = m_Path.Count () - 2; index > 1; index --) {
 		Vector3 &prev_point				= m_Path[index + 1].m_Point;
 		Vector3 &next_point				= m_Path[index - 1].m_Point;
 		PathfindPortalClass *portal	= m_Path[index].m_Portal;

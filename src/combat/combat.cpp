@@ -35,7 +35,6 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "combat.h"
-#include "debug.h"
 #include "ccamera.h"
 #include "gameobjmanager.h"
 #include "input.h"
@@ -792,6 +791,7 @@ void CombatManager::Render()
 
 		{
 			WWPROFILE( "Combat Render BG" );
+
 			WW3D::Render (BackgroundScene, MainCamera);
 		}
 

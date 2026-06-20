@@ -756,7 +756,7 @@ PathfindSectorBuilderClass::Compress_Sectors (void)
 	//
 	//	Free the body box culling objects
 	//
-	for (index = 0; index < body_box_list.Count (); index ++) {
+	for (int index = 0; index < body_box_list.Count (); index ++) {
 
 		//
 		//	Remove the body box from the culling system

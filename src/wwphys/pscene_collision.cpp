@@ -516,6 +516,19 @@ bool PhysicsSceneClass::Cast_AABox(PhysAABoxCollisionTestClass & boxtest,bool us
 					}
 				}
 			}
+
+#if defined(RENEGADE_LINUX)
+			/*
+			** Cull-box prefilter can exclude large sector floor meshes.
+			** If the filtered scan missed, try all static objects.
+			*/
+			if (!res && boxtest.Move.Length2() > WWMATH_EPSILON) {
+				res = Linux_Cast_AABox_Unfiltered(boxtest);
+				if (boxtest.Result->StartBad) {
+					return true;
+				}
+			}
+#endif
 #endif
 		}
 		
@@ -527,6 +540,34 @@ bool PhysicsSceneClass::Cast_AABox(PhysAABoxCollisionTestClass & boxtest,bool us
 
 	return res;
 }
+
+#if defined(RENEGADE_LINUX) && defined(RENEGADE_COLLISION_FIX)
+/*
+** Ground probes can miss when cull-box prefilter excludes large sector meshes.
+** Scan all static objects without cull overlap rejection.
+*/
+bool PhysicsSceneClass::Linux_Cast_AABox_Unfiltered(PhysAABoxCollisionTestClass & boxtest)
+{
+	bool res = false;
+
+	if (boxtest.CheckStaticObjs) {
+		RefPhysListIterator it(&StaticObjList);
+		for (it.First(); !it.Is_Done(); it.Next()) {
+			PhysClass *obj = it.Peek_Obj();
+			if (	Do_Groups_Collide(obj->Get_Collision_Group(), boxtest.CollisionGroup) &&
+					!obj->Is_Ignore_Me() )
+			{
+				res |= obj->Cast_AABox(boxtest);
+				if (boxtest.Result->StartBad) {
+					return true;
+				}
+			}
+		}
+	}
+
+	return res;
+}
+#endif
 
 bool PhysicsSceneClass::Cast_OBBox(PhysOBBoxCollisionTestClass & boxtest,bool use_collision_region)
 {

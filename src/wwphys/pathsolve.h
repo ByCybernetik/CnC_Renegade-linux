@@ -112,7 +112,6 @@ public:
 	// Position methods
 	//
 	STATE_DESC			Reset (const Vector3 &start, const Vector3 &end, float sector_fudge = 0);
-	void					Purge_Corrupt_Internal_State (void);
 	const Vector3 &	Get_Start_Pos (void) const;
 	const Vector3 &	Get_Dest_Pos (void) const;
 	STATE_DESC			Get_State (void) const;
@@ -246,6 +245,7 @@ private:
 	PATHPOINT_LIST									m_Path;
 
 	PathObjectClass								m_PathObject;
+	bool												m_InitialSectorProcessed;
 
 	static PATHNODE_LIST							temp_node_list;
 

@@ -52,6 +52,24 @@
 #include "wwmemlog.h"
 #include "heightdb.h"
 #include "colmathaabox.h"
+#include "renegade_collision_fix.h"
+
+#include <stdio.h>
+#include <stdarg.h>
+
+static void Pathfind_Log(const char *fmt, ...) {
+	static FILE *fp = NULL;
+	if (fp == NULL) {
+		fp = fopen("/tmp/renegade_gameplay.log", "a");
+	}
+	if (fp != NULL) {
+		va_list args;
+		va_start(args, fmt);
+		vfprintf(fp, fmt, args);
+		va_end(args);
+		fflush(fp);
+	}
+}
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -520,7 +538,6 @@ PathfindClass::Load (ChunkLoadClass &cload)
 	}
 
 	cload.Close_Chunk ();
-
 	return retval;
 }
 
@@ -818,6 +835,43 @@ PathfindClass::Find_Sector
 		}
 	}	
 		
+#if defined(RENEGADE_LINUX) && defined(RENEGADE_COLLISION_FIX)
+	/*
+	** Saved sector AAB-tree linkage is unreliable on LP64; if the tree
+	** query missed, scan all loaded sectors.
+	*/
+	if (closest_sector == NULL && m_SectorList.Count() > 0) {
+		Pathfind_Log("[PATH] Find_Sector fallback scan pos=(%1.2f,%1.2f,%1.2f) fudge=%1.2f sectors=%d\n",
+			position.X, position.Y, position.Z, sector_fudge, m_SectorList.Count());
+		for (int index = 0; index < m_SectorList.Count(); index++) {
+			PathfindSectorClass *sector = m_SectorList[index];
+			if (sector == exclude_sector) {
+				continue;
+			}
+
+			const AABoxClass &box = sector->Get_Bounding_Box();
+			if (box.Extent.X <= 0.325F || box.Extent.Y <= 0.325F || box.Extent.Z <= WWMATH_EPSILON) {
+				continue;
+			}
+
+			if (CollisionMath::Overlap_Test(box, sphere) == CollisionMath::OUTSIDE) {
+				continue;
+			}
+
+			Vector3 clipped_pos = position;
+			::Clip_Point(&clipped_pos, box);
+
+			float dist = (clipped_pos - position).Length();
+			if (dist < closest) {
+				closest = dist;
+				closest_sector = sector;
+			}
+		}
+		Pathfind_Log("[PATH] Find_Sector fallback result pos=(%1.2f,%1.2f,%1.2f) sector=%p\n",
+			position.X, position.Y, position.Z, closest_sector);
+	}
+#endif
+
 	//
 	//	Return the first (and hopefully only) sector
 	//
@@ -1273,7 +1327,7 @@ PathfindClass::Re_Partition_Sector_Tree (void)
 }
 
 
-///////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 //
 // Peek_Portal
 //

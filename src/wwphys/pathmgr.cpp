@@ -194,7 +194,6 @@ PathMgrClass::Request_Path_Object (void)
 	//	Add this object to the used path list
 	//
 	if (path_object != NULL) {
-		path_object->Purge_Corrupt_Internal_State();
 		UsedPathList.Add (path_object);
 	}
 

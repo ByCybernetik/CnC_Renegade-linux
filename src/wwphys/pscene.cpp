@@ -90,6 +90,9 @@
 #include "wwhack.h"
 #include "wwprofile.h"
 #include "wwmemlog.h"
+#if defined(RENEGADE_LINUX)
+#include "systimer.h"
+#endif
 #include "physgridcull.h"
 #include "staticaabtreecull.h"
 #include "dynamicaabtreecull.h"
@@ -212,13 +215,7 @@ PhysicsSceneClass::PhysicsSceneClass(void) :
 	Pathfinder(NULL),
 	CameraShakeSystem(NULL),
 	HighlightMaterialPass(NULL),
-	UpdateOnlyVisibleObjects(
-#if defined(RENEGADE_LINUX)
-		true
-#else
-		false
-#endif
-	),
+	UpdateOnlyVisibleObjects(false),
 	CurrentFrameNumber(0)
 {
 	WWASSERT_PRINT(TheScene == NULL,"Only one instance of the PhysicsSceneClass is allowed.\r\n");
@@ -343,13 +340,6 @@ void PhysicsSceneClass::Update(float dt,int frameid)
 	if (dt == 0.0f) {
 		return;
 	}
-
-#if defined(RENEGADE_LINUX)
-	// Avoid physics death-spiral: large frame dt causes multiple substeps.
-	if (dt > MAX_TIMESTEP * 2.0f) {
-		dt = MAX_TIMESTEP * 2.0f;
-	}
-#endif
 
 	/*
 	** Timestep all of the physics objects
@@ -1111,7 +1101,8 @@ void PhysicsSceneClass::Pre_Render_Processing(CameraClass & camera)
 	RefRenderObjListIterator rit(&UpdateList);
 	for (rit.First(); !rit.Is_Done(); rit.Next()) {
 		rit.Peek_Obj()->On_Frame_Update();
-	}
+	}	
+
 	// Update culling info for all of the objects in the "dirty cull" list (these are
 	// objects which were added to the scene as pure render objects so I don't assume
 	// that the I have control over when their transform or bounding box is changed...)  
@@ -1129,6 +1120,7 @@ void PhysicsSceneClass::Pre_Render_Processing(CameraClass & camera)
 			}
 		}
 	}
+
 	// Get the pvs
 	VisTableClass * pvs = Get_Vis_Table_For_Rendering(camera);
 
@@ -1144,6 +1136,7 @@ void PhysicsSceneClass::Pre_Render_Processing(CameraClass & camera)
 			WWPROFILE( "Collect Static Objs" );
 			StaticCullingSystem->Collect_Visible_Objects(camera.Get_Frustum(),pvs,VisibleStaticObjectList,VisibleWSMeshList);
 		}
+
 		// Collect list of the visible dynamic objects
 		{
 			WWPROFILE( "Collect Dynamic Objs" );
@@ -1161,6 +1154,7 @@ void PhysicsSceneClass::Pre_Render_Processing(CameraClass & camera)
 				VisibleStaticObjectList,
 				VisibleWSMeshList);
 		}
+		/* Stale PVS after load can cull all dynamics while static fallback already ran. */
 		if (pvs != nullptr && VisibleDynamicObjectList.Count() == 0) {
 			VisibleDynamicObjectList.Reset_List();
 			DynamicCullingSystem->Collect_Visible_Objects(

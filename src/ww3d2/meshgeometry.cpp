@@ -910,7 +910,15 @@ bool MeshGeometryClass::cast_aabox_identity(AABoxCollisionTestClass & boxtest, c
 
 	// cast the box against the mesh
 	if (CullTree) {
+#if defined(RENEGADE_COLLISION_FIX)
+		bool hit = CullTree->Cast_AABox(newbox);
+		if (!hit) {
+			hit = cast_aabox_brute_force(newbox);
+		}
+		return hit;
+#else
 		return CullTree->Cast_AABox(newbox);
+#endif
 	} else {
 		return cast_aabox_brute_force(newbox);
 	}
@@ -939,7 +947,14 @@ bool MeshGeometryClass::cast_aabox_z90(AABoxCollisionTestClass & boxtest, const 
 	// cast the box against the mesh, using culling if possible
 	bool hit;
 	if (CullTree) {
+#if defined(RENEGADE_COLLISION_FIX)
 		hit = CullTree->Cast_AABox(newbox);
+		if (!hit) {
+			hit = cast_aabox_brute_force(newbox);
+		}
+#else
+		hit = CullTree->Cast_AABox(newbox);
+#endif
 	} else {
 		hit = cast_aabox_brute_force(newbox);
 	}
@@ -978,7 +993,14 @@ bool MeshGeometryClass::cast_aabox_z180(AABoxCollisionTestClass & boxtest, const
 	// cast the box against the mesh, using culling if possible
 	bool hit;
 	if (CullTree) {
+#if defined(RENEGADE_COLLISION_FIX)
 		hit = CullTree->Cast_AABox(newbox);
+		if (!hit) {
+			hit = cast_aabox_brute_force(newbox);
+		}
+#else
+		hit = CullTree->Cast_AABox(newbox);
+#endif
 	} else {
 		hit = cast_aabox_brute_force(newbox);
 	}
@@ -1016,7 +1038,14 @@ bool MeshGeometryClass::cast_aabox_z270(AABoxCollisionTestClass & boxtest, const
 	// cast the box against the mesh, using culling if possible
 	bool hit;
 	if (CullTree) {
+#if defined(RENEGADE_COLLISION_FIX)
 		hit = CullTree->Cast_AABox(newbox);
+		if (!hit) {
+			hit = cast_aabox_brute_force(newbox);
+		}
+#else
+		hit = CullTree->Cast_AABox(newbox);
+#endif
 	} else {
 		hit = cast_aabox_brute_force(newbox);
 	}

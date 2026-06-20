@@ -101,7 +101,13 @@ bool PhysStaticDataSaveSystemClass::Load(ChunkLoadClass &cload)
 void PhysStaticDataSaveSystemClass::On_Post_Load(void)
 {
 	PhysicsSceneClass::Get_Instance()->Post_Load_Level_Static_Data();
-	//PathfindClass::Get_Instance()->On_Post_Load();
+#if defined(RENEGADE_LINUX) && defined(RENEGADE_COLLISION_FIX)
+	// On LP64 the loaded AAB-tree linkage is unreliable because the saved
+	// node indices do not match the in-memory tree after pointer remap.
+	// Re-partitioning rebuilds the sector tree from the sector bounding boxes,
+	// which is what the MinGW build does every level load.
+	PathfindClass::Get_Instance()->Re_Partition_Sector_Tree();
+#endif
 }
 
 

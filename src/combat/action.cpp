@@ -1371,7 +1371,16 @@ Clip_Point (Vector3 *point, const AABoxClass &box)
 		switch( result ) {
 
 			case PathSolveClass::THINKING:
-				is_finished	= false;
+				//
+				// Only tick the solver once PathMgr has activated it and seeded
+				// the open list with the starting sector's portals. Otherwise we
+				// would get NO_PATH immediately and never give the manager a
+				// chance to initialize the search.
+				//
+				if (PathMgrClass::Peek_Active_Path() == PathSolver) {
+					PathSolver->Timestep(20);
+				}
+				is_finished = (PathSolver->Get_State() != PathSolveClass::THINKING);
 				break;
 
 			case PathSolveClass::SOLVED_PATH:
@@ -1393,7 +1402,17 @@ Clip_Point (Vector3 *point, const AABoxClass &box)
 			case PathSolveClass::ERROR_INVALID_START_POS:
 			case PathSolveClass::ERROR_INVALID_DEST_POS:
 			case PathSolveClass::ERROR_NO_PATH:
+			{
+				SmartGameObj *obj = Action->Get_Action_Obj();
+				Vector3 pos(0,0,0);
+				if (obj != NULL) obj->Get_Position(&pos);
+				Renegade_Gameplay_Log("[PATH] SOLVE_ERROR state=%d obj=%d pos=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f)\n",
+					result,
+					obj ? obj->Get_ID() : 0,
+					pos.X, pos.Y, pos.Z,
+					Action->Get_Parameters().MoveLocation.X, Action->Get_Parameters().MoveLocation.Y, Action->Get_Parameters().MoveLocation.Z);
 				break;
+			}
 		}
 
 		//
@@ -1448,10 +1467,29 @@ Clip_Point (Vector3 *point, const AABoxClass &box)
 						//
 						//	Kill the action
 						//
+						SmartGameObj *obj = Action->Get_Action_Obj();
+						Vector3 pos(0,0,0);
+						if (obj != NULL) obj->Get_Position(&pos);
+						Renegade_Gameplay_Log("[PATH] BAD_DEST obj=%d pos=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f)\n",
+							obj ? obj->Get_ID() : 0,
+							pos.X, pos.Y, pos.Z,
+							Action->Get_Parameters().MoveLocation.X, Action->Get_Parameters().MoveLocation.Y, Action->Get_Parameters().MoveLocation.Z);
 						Action->Done( ACTION_COMPLETE_PATH_BAD_DEST );
 						act_result = ACTION_DONE;
 
 					} else {
+						SmartGameObj *obj = Action->Get_Action_Obj();
+						Vector3 pos(0,0,0);
+						if (obj != NULL) obj->Get_Position(&pos);
+						static uint32 last_beeline_log = 0;
+						uint32 now = TIMEGETTIME();
+						if (now - last_beeline_log > 5000) {
+							last_beeline_log = now;
+							Renegade_Gameplay_Log("[PATH] BEELINE (no pathfind data) obj=%d pos=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f)\n",
+								obj ? obj->Get_ID() : 0,
+								pos.X, pos.Y, pos.Z,
+								Action->Get_Parameters().MoveLocation.X, Action->Get_Parameters().MoveLocation.Y, Action->Get_Parameters().MoveLocation.Z);
+						}
 						act_result = Beeline ();
 					}
 				}

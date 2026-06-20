@@ -200,9 +200,7 @@ MenuGameModeClass2::Think (void)
 		if (MenuMusicSuppressed) {
 			audio->Stop_Menu_Music ();
 		} else if (Is_Active ()) {
-			// Do not start menu music during gameplay: Play_Menu_Music reads the
-			// entire track synchronously and shares the music bus with level music.
-			if (GameInitMgrClass::Is_Game_In_Progress () == false) {
+			if (IS_SOLOPLAY || GameInitMgrClass::Is_Game_In_Progress () == false) {
 				if (!audio->Is_Menu_Music_Active ()) {
 					audio->Play_Menu_Music (MENU_MUSIC_FILENAME);
 				}
