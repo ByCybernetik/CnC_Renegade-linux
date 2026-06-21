@@ -809,9 +809,6 @@ void PhysicalGameObj::Post_Think( void )
 			if (model != NULL && model->Get_Name() != NULL) {
 				model_name = model->Get_Name();
 			}
-			Renegade_Gameplay_Log("[FALL] %s id=%d model=%s going to hell at (%1.2f,%1.2f,%1.2f) level_min=%1.2f%s\n",
-			                      type_name, Get_ID(), model_name, pos.X, pos.Y, pos.Z, min.Z,
-			                      is_mission_player ? " (player spared)" : " (deleted)");
 			Debug_Say(( "Object %d is going to hell at (%1.1f, %1.1f, %1.1f).  Die!\n", Get_ID(), pos.X, pos.Y, pos.Z ));
 			if ( !is_mission_player ) {
 				Set_Delete_Pending();

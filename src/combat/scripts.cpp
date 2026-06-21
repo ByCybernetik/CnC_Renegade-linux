@@ -532,7 +532,6 @@ bool ScriptManager::Save(ChunkSaveClass& csave)
 
 bool	ScriptManager::Load( ChunkLoadClass & cload )
 {
-	Renegade_Load_Log("[LOAD] ScriptManager::Load started\n");
 	WWASSERT( ActiveScriptList.Count() == 0 );
 
 	while (cload.Open_Chunk()) {
@@ -560,7 +559,6 @@ bool	ScriptManager::Load( ChunkLoadClass & cload )
 					LOAD_MICRO_CHUNK_WWSTRING( cload, name );
 					WWASSERT( script == NULL );
 					script = Create_Script( name );
-					Renegade_Load_Log("[LOAD] ScriptManager Create_Script name=%s result=%p\n", (const char*)name, script);
 					if ( script == NULL ) {
 						Debug_Say(( "Script %s not found \n", name ));
 					}
@@ -628,7 +626,6 @@ bool	ScriptManager::Load( ChunkLoadClass & cload )
 
 		cload.Close_Chunk();
 	}
-	Renegade_Load_Log("[LOAD] ScriptManager::Load done, active=%d\n", ActiveScriptList.Count());
 	return true;
 }
 

@@ -794,7 +794,6 @@ bool	SpawnManager::Save( ChunkSaveClass &csave )
 
 bool	SpawnManager::Load( ChunkLoadClass &cload )
 {
-	Renegade_Load_Log("[LOAD] SpawnManager::Load started\n");
    Remove_All_Spawners();
 
 	while (cload.Open_Chunk()) {
@@ -816,7 +815,6 @@ bool	SpawnManager::Load( ChunkLoadClass &cload )
 
 			case CHUNKID_SPAWNER_DATA:
 			{
-				static int spawner_count = 0; Renegade_Load_Log("[LOAD] SpawnManager loading spawner %d\n", ++spawner_count);
 			}
 			{
 				SpawnerClass * spawner = new SpawnerClass();
@@ -832,7 +830,6 @@ bool	SpawnManager::Load( ChunkLoadClass &cload )
 		cload.Close_Chunk();
 	}
 
-	Renegade_Load_Log("[LOAD] SpawnManager::Load done, spawners=%d\n", SpawnerList.Count());
    return true;
 }
 

@@ -607,7 +607,7 @@ bool PhysicsSceneClass::Cast_OBBox(PhysOBBoxCollisionTestClass & boxtest,bool us
 		** Collision-region casts can miss statics on LP64; fall back to the
 		** full static list sweep (same as the non-region path).
 		*/
-		if ( boxtest.CheckStaticObjs && boxtest.Move.Length2 () > WWMATH_EPSILON ) {
+		if ( boxtest.CheckStaticObjs ) {
 			AABoxClass sweep_bounds;
 			sweep_bounds.Init_Min_Max ( boxtest.SweepMin, boxtest.SweepMax );
 
@@ -644,23 +644,23 @@ bool PhysicsSceneClass::Cast_OBBox(PhysOBBoxCollisionTestClass & boxtest,bool us
 			//
 			//	The tree may have missed a closer obstacle even when it
 			//	returned a hit (res == true).  Always run the linear scan
-			//	so the nearest fraction wins.
+			//	so the nearest fraction wins.  On LP64 also run it when
+			//	Move is near-zero so static intersection is detected
+			//	(e.g. third-person camera against a wall).
 			//
-			if ( boxtest.Move.Length2 () > WWMATH_EPSILON ) {
-				AABoxClass sweep_bounds;
-				sweep_bounds.Init_Min_Max ( boxtest.SweepMin, boxtest.SweepMax );
+			AABoxClass sweep_bounds;
+			sweep_bounds.Init_Min_Max ( boxtest.SweepMin, boxtest.SweepMax );
 
-				RefPhysListIterator it ( &StaticObjList );
-				for ( it.First (); !it.Is_Done (); it.Next () ) {
-					PhysClass *obj = it.Peek_Obj ();
-					if (	Do_Groups_Collide ( obj->Get_Collision_Group (), boxtest.CollisionGroup ) &&
-							!obj->Is_Ignore_Me () &&
-							CollisionMath::Overlap_Test ( sweep_bounds, obj->Get_Cull_Box () ) != CollisionMath::OUTSIDE )
-					{
-						res |= obj->Cast_OBBox ( boxtest );
-						if ( boxtest.Result->StartBad ) {
-							return true;
-						}
+			RefPhysListIterator it ( &StaticObjList );
+			for ( it.First (); !it.Is_Done (); it.Next () ) {
+				PhysClass *obj = it.Peek_Obj ();
+				if (	Do_Groups_Collide ( obj->Get_Collision_Group (), boxtest.CollisionGroup ) &&
+						!obj->Is_Ignore_Me () &&
+						CollisionMath::Overlap_Test ( sweep_bounds, obj->Get_Cull_Box () ) != CollisionMath::OUTSIDE )
+				{
+					res |= obj->Cast_OBBox ( boxtest );
+					if ( boxtest.Result->StartBad ) {
+						return true;
 					}
 				}
 			}

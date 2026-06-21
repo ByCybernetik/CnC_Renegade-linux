@@ -39,21 +39,7 @@
 
 #include <windows.h>
 #include <stdio.h>
-#include <stdarg.h>
 
-static void Pathfind_Log(const char *fmt, ...) {
-	static FILE *fp = NULL;
-	if (fp == NULL) {
-		fp = fopen("/tmp/renegade_gameplay.log", "a");
-	}
-	if (fp != NULL) {
-		va_list args;
-		va_start(args, fmt);
-		vfprintf(fp, fmt, args);
-		va_end(args);
-		fflush(fp);
-	}
-}
 #include "Pathfind.h"
 #include "PathfindPortal.h"
 #include "PathNode.h"
@@ -374,8 +360,6 @@ PathSolveClass::Resolve_Path (unsigned int milliseconds)
 		//
 		if (node == NULL) {
 			m_State = ERROR_NO_PATH;
-			Pathfind_Log("[PATH] NO_PATH start=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f) iterations=%d\n",
-				m_StartPos.X, m_StartPos.Y, m_StartPos.Z, m_DestPos.X, m_DestPos.Y, m_DestPos.Z, iterations);
 		} else  if (node->Peek_Sector () == m_DestSector) {
 			m_State = SOLVED_PATH;
 
@@ -469,12 +453,8 @@ PathSolveClass::Initialize (float sector_fudge)
 	//
 	if (m_StartSector == NULL) {
 		m_State = ERROR_INVALID_START_POS;
-		Pathfind_Log("[PATH] INVALID_START_POS pos=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f)\n",
-			m_StartPos.X, m_StartPos.Y, m_StartPos.Z, m_DestPos.X, m_DestPos.Y, m_DestPos.Z);
 	} else if (m_DestSector == NULL) {
 		m_State = ERROR_INVALID_DEST_POS;
-		Pathfind_Log("[PATH] INVALID_DEST_POS pos=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f)\n",
-			m_StartPos.X, m_StartPos.Y, m_StartPos.Z, m_DestPos.X, m_DestPos.Y, m_DestPos.Z);
 	} else {
 
 		//
@@ -485,19 +465,6 @@ PathSolveClass::Initialize (float sector_fudge)
 		::Clip_Point (&m_StartPos, m_StartSector->Get_Bounding_Box ());
 		::Clip_Point (&m_DestPos, m_DestSector->Get_Bounding_Box ());
 		//}
-
-		static uint32 last_init_log = 0;
-		uint32 now = TIMEGETTIME();
-		if (now - last_init_log > 200) {
-			last_init_log = now;
-			Pathfind_Log("[PATH] INIT start=(%1.2f,%1.2f,%1.2f) dest=(%1.2f,%1.2f,%1.2f) start_sector=%p dest_sector=%p same=%d start_portals=%d dest_portals=%d\n",
-				m_StartPos.X, m_StartPos.Y, m_StartPos.Z,
-				m_DestPos.X, m_DestPos.Y, m_DestPos.Z,
-				m_StartSector, m_DestSector,
-				(m_StartSector == m_DestSector) ? 1 : 0,
-				m_StartSector->Get_Portal_Count(),
-				m_DestSector->Get_Portal_Count());
-		}
 	}
 
 	return ;

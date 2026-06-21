@@ -49,23 +49,7 @@
 #include "wwmemlog.h"
 #include "rendobj.h"
 #include "physlist.h"
-#include <stdarg.h>
-#include <stdio.h>
 
-static void WWPhys_Load_Log(const char *fmt, ...)
-{
-	FILE *f = fopen("/tmp/renegade_load.log", "a");
-	if (f != NULL) {
-		va_list args;
-		va_start(args, fmt);
-		vfprintf(f, fmt, args);
-		va_end(args);
-		fflush(f);
-		fclose(f);
-	}
-}
-
- 
 /*
 ** This module contains the save-load related methods of PhysicsSceneClass.  
 */
@@ -329,11 +313,6 @@ void PhysicsSceneClass::Log_Load_Stats(void)
 	Vector3 wmin;
 	Vector3 wmax;
 	Get_Level_Extents(wmin, wmax);
-
-	WWPhys_Load_Log("[LOAD] Physics stats: static=%d lights=%d dynamic=%d terrain_patches=%d\n",
-	                static_count, light_count, dynamic_count, terrain_count);
-	WWPhys_Load_Log("[LOAD] World extents: min=(%1.1f,%1.1f,%1.1f) max=(%1.1f,%1.1f,%1.1f)\n",
-	                wmin.X, wmin.Y, wmin.Z, wmax.X, wmax.Y, wmax.Z);
 }
 
 void PhysicsSceneClass::Post_Load_Level_Static_Objects(void)

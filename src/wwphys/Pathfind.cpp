@@ -54,22 +54,6 @@
 #include "colmathaabox.h"
 #include "renegade_collision_fix.h"
 
-#include <stdio.h>
-#include <stdarg.h>
-
-static void Pathfind_Log(const char *fmt, ...) {
-	static FILE *fp = NULL;
-	if (fp == NULL) {
-		fp = fopen("/tmp/renegade_gameplay.log", "a");
-	}
-	if (fp != NULL) {
-		va_list args;
-		va_start(args, fmt);
-		vfprintf(fp, fmt, args);
-		va_end(args);
-		fflush(fp);
-	}
-}
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -841,8 +825,6 @@ PathfindClass::Find_Sector
 	** query missed, scan all loaded sectors.
 	*/
 	if (closest_sector == NULL && m_SectorList.Count() > 0) {
-		Pathfind_Log("[PATH] Find_Sector fallback scan pos=(%1.2f,%1.2f,%1.2f) fudge=%1.2f sectors=%d\n",
-			position.X, position.Y, position.Z, sector_fudge, m_SectorList.Count());
 		for (int index = 0; index < m_SectorList.Count(); index++) {
 			PathfindSectorClass *sector = m_SectorList[index];
 			if (sector == exclude_sector) {
@@ -867,8 +849,6 @@ PathfindClass::Find_Sector
 				closest_sector = sector;
 			}
 		}
-		Pathfind_Log("[PATH] Find_Sector fallback result pos=(%1.2f,%1.2f,%1.2f) sector=%p\n",
-			position.X, position.Y, position.Z, closest_sector);
 	}
 #endif
 

@@ -148,7 +148,7 @@ bool VkContext::Create_Instance(bool enable_validation)
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	app_info.pApplicationName = "CnC Renegade";
 	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-	app_info.pEngineName = "WW3D2 Vulkan";
+	app_info.pEngineName = "Westwood3D Vulkan";
 	app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 	app_info.apiVersion = VK_API_VERSION_1_2;
 

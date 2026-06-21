@@ -257,14 +257,6 @@ void	C4GameObj::Init_C4( const AmmoDefinitionClass * def, SoldierGameObj *owner,
 		po->Set_Velocity( vel );
 
 		Vector3 pos = tm.Get_Translation();
-		Renegade_Gameplay_Log("[C4] Init_C4 ammo=%s pos=(%1.2f,%1.2f,%1.2f) vel=(%1.2f,%1.2f,%1.2f) throw_vel=%1.2f lifetime=%1.2f bounces=%d owner=%d\n",
-							  def->Get_Name(),
-							  pos.X, pos.Y, pos.Z,
-							  vel.X, vel.Y, vel.Z,
-							  throw_vel,
-							  po->Get_Lifetime(),
-							  po->Get_Bounce_Count(),
-							  owner ? owner->Get_ID() : -1);
 		if ( type == AmmoDefinitionClass::AMMO_TYPE_C4_REMOTE ) {
 			po->Set_Lifetime( 600.0f );
 			po->Set_Bounce_Count( 16 );
@@ -284,11 +276,6 @@ CollisionReactionType	C4GameObj::Collision_Occurred( const CollisionEventClass &
 
 	Vector3 my_pos;
 	Get_Position(&my_pos);
-	Renegade_Gameplay_Log("[C4] Collision pos=(%1.2f,%1.2f,%1.2f) stuck=%d hit_projectile=%d has_observer=%d\n",
-						  my_pos.X, my_pos.Y, my_pos.Z,
-						  Stuck ? 1 : 0,
-						  event.OtherObj->As_ProjectileClass() != NULL ? 1 : 0,
-						  event.OtherObj->Get_Observer() != NULL ? 1 : 0);
 
 //	if ( ( !Stuck ) && (CombatManager::I_Am_Server()) ) 
 	if (!Stuck)

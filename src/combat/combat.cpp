@@ -360,7 +360,6 @@ public:
 	void Thread_Function() {
 
 		CombatManager::Set_Load_Progress( 0 );
-		Renegade_Load_Log("[LOAD] LoadThreadClass::Thread_Function started\n");
 
 		WWMEMLOG(MEM_GAMEDATA);
 
@@ -374,13 +373,11 @@ public:
 		CombatManager::Inc_Load_Progress();
 
 		//	Reload the definition databases (to support level-specific temp ddb's)
-		Renegade_Load_Log("[LOAD] Freeing definitions\n");
 		INIT_STATUS("Free definition databases");
 		DefinitionMgrClass::Free_Definitions();
 		WWLOG_INTERMEDIATE("Free definitions");
 
 		INIT_STATUS("Load definition databases");
-		Renegade_Load_Log("[LOAD] Loading definitions\n");
 		SaveGameManager::Load_Definitions();
 		WWLOG_INTERMEDIATE("Load definitions");
 
@@ -390,13 +387,11 @@ public:
 		// to be done after the definition databases are loaded...
 		//
 		AnimatedSoundMgrClass::Initialize ();
-		Renegade_Load_Log("[LOAD] AnimatedSoundMgrClass initialized\n");
 
 		StringClass filename_to_load( _load_map_name, true );
 		StringClass lsd_filename( _load_map_name,true );
 
 		// Prep the level loading
-		Renegade_Load_Log("[LOAD] Pre_Load_Game map=%s\n", _load_map_name);
 		INIT_STATUS("Pre Load level");
 
 		PlayerInfoLog::Set_Current_Map_Name(_load_map_name);
@@ -410,14 +405,12 @@ public:
 		//	Preload the assets
 		//
 		if ( _preload_assets ) {
-			Renegade_Load_Log("[LOAD] Preloading always assets\n");
 			INIT_STATUS("Preload assets");
 			AssetDependencyManager::Load_Always_Assets();
 			WWLOG_INTERMEDIATE("Preload always assets");
 
 			CombatManager::Inc_Load_Progress();
 
-			Renegade_Load_Log("[LOAD] Preloading level assets lsd=%s\n", lsd_filename);
 			AssetDependencyManager::Load_Level_Assets( lsd_filename );
 			WWLOG_INTERMEDIATE("Preload level assets");
 		} else {
@@ -427,15 +420,12 @@ public:
 		CombatManager::Inc_Load_Progress();
 
 		// Now load the level
-		Renegade_Load_Log("[LOAD] Loading game file=%s\n", filename_to_load);
 		INIT_STATUS("Load level");
 		SaveGameManager::Load_Game( filename_to_load );
-		Renegade_Load_Log("[LOAD] Load_Game returned\n");
 		WWLOG_INTERMEDIATE("Load game");
 
 		CombatManager::Inc_Load_Progress();
 
-		Renegade_Load_Log("[LOAD] LoadThreadClass::Thread_Function finished\n");
 	}
 } thread;
 
@@ -882,13 +872,10 @@ bool	CombatManager::Load( ChunkLoadClass &cload )
 		switch(cload.Cur_Chunk_ID()) {
 
 			case CHUNKID_THE_STAR:
-				Renegade_Load_Log("[LOAD] CombatManager::Load processing CHUNKID_THE_STAR\n");
 				TheStar.Load( cload );
-				Renegade_Load_Log("[LOAD] CombatManager::Load done CHUNKID_THE_STAR\n");
 				break;
 
 			case CHUNKID_VARIABLES:
-				Renegade_Load_Log("[LOAD] CombatManager::Load processing CHUNKID_VARIABLES\n");
 				while (cload.Open_Micro_Chunk()) {
 					switch(cload.Cur_Micro_Chunk_ID()) {
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_FIRST_LOAD, IsFirstLoad );
@@ -906,15 +893,12 @@ bool	CombatManager::Load( ChunkLoadClass &cload )
 					}
 					cload.Close_Micro_Chunk();
 				}
-				Renegade_Load_Log("[LOAD] CombatManager::Load done CHUNKID_VARIABLES, start_script=%s\n", StartScript);
 				break;
 
 			case CHUNKID_CCAMERA:
-				Renegade_Load_Log("[LOAD] CombatManager::Load processing CHUNKID_CCAMERA\n");
 				if ( COMBAT_CAMERA != NULL ) {
 					COMBAT_CAMERA->Load( cload );
 				}
-				Renegade_Load_Log("[LOAD] CombatManager::Load done CHUNKID_CCAMERA\n");
 				break;
 
 			default:

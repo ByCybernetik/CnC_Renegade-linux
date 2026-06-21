@@ -130,20 +130,16 @@ bool	GameObjManager::Load( ChunkLoadClass &cload )
 		switch(cload.Cur_Chunk_ID()) {
 
 			case CHUNKID_OBJECTS:
-				Renegade_Load_Log("[LOAD] GameObjManager::Load processing CHUNKID_OBJECTS\n");
 				while (cload.Open_Chunk()) {
-					{ static int obj_count = 0; if ((++obj_count % 50) == 0) Renegade_Load_Log("[LOAD] GameObjManager loaded %d objects\n", obj_count);}
 					PersistFactoryClass * factory = SaveLoadSystemClass::Find_Persist_Factory( cload.Cur_Chunk_ID() );
 					if ( factory ) {
 						factory->Load( cload );
 					}
 					cload.Close_Chunk();
 				}
-				Renegade_Load_Log("[LOAD] GameObjManager::Load done CHUNKID_OBJECTS\n");
 				break;
 								
 			case CHUNKID_VARIABLES:
-				Renegade_Load_Log("[LOAD] GameObjManager::Load processing CHUNKID_VARIABLES\n");
 				while (cload.Open_Micro_Chunk()) {
 					switch(cload.Cur_Micro_Chunk_ID()) {
 						
