@@ -32,14 +32,8 @@ if get_option('platform') == 'linux'
   ]
   if get_option('graphics_backend') == 'vulkan'
     _cpp += '-DRENEGADE_VULKAN'
-    if get_option('vulkan_renderer') == 'engine'
-      _cpp += '-DRENEGADE_VULKAN_ENGINE'
-      _bink_inc += '../ww3d2_engine'
-      binkmovie_deps += ww3d2_engine_dep
-    else
-      _bink_inc += '../ww3d2_vulkan'
-      binkmovie_deps += ww3d2_vulkan_dep
-    endif
+    _bink_inc += '../ww3d2_vulkan'
+    binkmovie_deps += ww3d2_vulkan_dep
   endif
   inc = [inc, include_directories(_bink_inc)]
   avcodec_dep = dependency('libavcodec', required : true)

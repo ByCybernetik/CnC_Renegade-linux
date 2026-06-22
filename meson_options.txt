@@ -31,7 +31,3 @@ option('graphics_backend', type : 'combo',
   value : 'dxvk',
   description : 'Linux WW3D2 renderer: dxvk-native (D3D8) or native Vulkan (ww3d2_vulkan)')
 
-option('vulkan_renderer', type : 'combo',
-  choices : ['bridge', 'engine'],
-  value : 'bridge',
-  description : 'Vulkan backend variant: bridge (DX8 wrapper) or engine (standalone)')

@@ -1,10 +1,6 @@
 if get_option('platform') != 'linux' or get_option('graphics_backend') != 'vulkan'
   subdir_done()
 endif
-if get_option('vulkan_renderer') == 'engine'
-  subdir_done()
-endif
-
 glslc = find_program('glslc', required : true)
 
 _shader_src = meson.current_source_dir() / 'shaders'

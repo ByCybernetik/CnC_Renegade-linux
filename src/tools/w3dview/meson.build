@@ -1,10 +1,6 @@
 if get_option('platform') != 'linux' or get_option('graphics_backend') != 'vulkan'
   subdir_done()
 endif
-if get_option('vulkan_renderer') == 'engine'
-  subdir_done()
-endif
-
 _linux_dxvk_compat = meson.project_source_root() / 'src/platform/linux/dxvk_compat.h'
 
 _w3dview_inc = include_directories(
