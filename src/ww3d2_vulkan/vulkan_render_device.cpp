@@ -492,6 +492,34 @@ void VulkanRenderDevice::Flush_Pending_Draws()
 	WW3DVulkan::Get().Renderer().Flush_Pending_Draws();
 }
 
+void VulkanRenderDevice::Draw_2D_Batch(const Native2DBatchDesc &desc)
+{
+	if (!Is_Active()) {
+		return;
+	}
+
+	WW3DVulkan::Get().Renderer().Flush_Pending_Draws();
+
+	VkTexture *texture = static_cast<VkTexture *>(desc.texture);
+	VkRenderer &renderer = WW3DVulkan::Get().Renderer();
+
+	renderer.Draw_Batch(
+		renderer.Current_Command_Buffer(),
+		desc.vertices,
+		desc.vertex_count,
+		desc.indices,
+		desc.index_count,
+		texture,
+		desc.texturing,
+		desc.src_blend,
+		desc.dst_blend,
+		desc.modulate_color,
+		desc.viewport_x,
+		desc.viewport_y,
+		desc.viewport_w,
+		desc.viewport_h);
+}
+
 } /* namespace ww3d_vulkan */
 
 #endif /* RENEGADE_VULKAN */

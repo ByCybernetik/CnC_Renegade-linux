@@ -614,6 +614,13 @@ void Render2DClass::Render(void)
 	}
 #endif
 
+#if defined(RENEGADE_VULKAN)
+	if (DX8Wrapper::Vulkan_Device_Active()) {
+		Render_Native();
+		return;
+	}
+#endif
+
 	// save the view and projection matrices since we're nuking them
 	Matrix4 view,proj;
 	Matrix4 identity(true);
@@ -711,6 +718,69 @@ void Render2DClass::Render(void)
 	DX8Wrapper::Set_Transform(D3DTS_VIEW,view);
 	DX8Wrapper::Set_Transform(D3DTS_PROJECTION,proj);
 }
+
+#if defined(RENEGADE_VULKAN)
+void Render2DClass::Render_Native(void)
+{
+	const int vert_count = Vertices.Count();
+	const int index_count = Indices.Count();
+	if (vert_count <= 0 || index_count <= 0) {
+		return;
+	}
+
+	uint32_t vp_x, vp_y, vp_w, vp_h;
+	if (CustomViewportActive) {
+		vp_x = (uint32_t)CustomViewport.Left;
+		vp_y = (uint32_t)CustomViewport.Top;
+		vp_w = (uint32_t)CustomViewport.Width();
+		vp_h = (uint32_t)CustomViewport.Height();
+	} else {
+		int width, height, bits;
+		bool windowed;
+		WW3D::Get_Device_Resolution(width, height, bits, windowed);
+		vp_x = 0;
+		vp_y = 0;
+		vp_w = (uint32_t)width;
+		vp_h = (uint32_t)height;
+	}
+
+	ww3d_vulkan::Simple2DVertex *verts = new ww3d_vulkan::Simple2DVertex[vert_count];
+	for (int i = 0; i < vert_count; ++i) {
+		verts[i].x = Vertices[i].X;
+		verts[i].y = Vertices[i].Y;
+		verts[i].u = UVCoordinates[i].X;
+		verts[i].v = UVCoordinates[i].Y;
+		verts[i].color = Colors[i];
+	}
+
+	ww3d_vulkan::Native2DBatchDesc desc;
+	desc.vertices = verts;
+	desc.vertex_count = (uint32_t)vert_count;
+	desc.indices = reinterpret_cast<const uint16_t *>(&Indices[0]);
+	desc.index_count = (uint32_t)index_count;
+	desc.texture = nullptr;
+	desc.texturing = (Shader.Get_Texturing() == ShaderClass::TEXTURING_ENABLE);
+	desc.src_blend = (uint8_t)Shader.Get_Src_Blend_Func();
+	desc.dst_blend = (uint8_t)Shader.Get_Dst_Blend_Func();
+	desc.modulate_color[0] = 1.0f;
+	desc.modulate_color[1] = 1.0f;
+	desc.modulate_color[2] = 1.0f;
+	desc.modulate_color[3] = 1.0f;
+	desc.viewport_x = vp_x;
+	desc.viewport_y = vp_y;
+	desc.viewport_w = vp_w;
+	desc.viewport_h = vp_h;
+
+	if (Texture != NULL) {
+		ww3d_vulkan::Apply_Loaded_Texture(Texture, true);
+		desc.texture = Texture->Peek_Vulkan_Texture();
+	}
+
+	ww3d_vulkan::VulkanRenderDevice::Get().Draw_2D_Batch(desc);
+
+	delete[] verts;
+}
+#endif
 
 
 /*

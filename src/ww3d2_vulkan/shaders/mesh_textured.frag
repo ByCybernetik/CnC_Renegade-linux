@@ -22,6 +22,7 @@ const uint FLAG_SCREEN_BLEND_UNLIT = 32u;
 const uint FLAG_SCREEN_BLEND_LIT = 64u;
 const uint FLAG_SCREEN_BLEND_EVALOGO = 128u;
 const uint FLAG_SCREEN_BLEND_GIZMO_DIM = 256u;
+const uint FLAG_PARTICLE_SIMPLE = 16384u;
 
 vec2 Apply_Bump_Offset(vec2 uv, vec4 bump_texel)
 {
@@ -111,6 +112,13 @@ float Apply_Stage1Alpha(float current, float detail_a)
 void main()
 {
 	uint flags = uint(ubo.flags);
+
+	if ((flags & FLAG_PARTICLE_SIMPLE) != 0u) {
+		vec4 texel = texture(diffuse_tex, v_uv);
+		out_color = vec4(texel.rgb * v_color.rgb, texel.a * v_color.a);
+		return;
+	}
+
 	vec4 color = v_color;
 
 	if ((flags & FLAG_TEXTURING) != 0u) {

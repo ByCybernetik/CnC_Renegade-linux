@@ -186,6 +186,10 @@ protected:
 	void	  Convert_Vert( Vector2 & vert_out, float x_in, float y_in );
 	void	  Update_Bias( void );
 
+#if defined(RENEGADE_VULKAN)
+	void	Render_Native(void);
+#endif
+
 	void	Internal_Add_Quad_Vertices( const Vector2 & v0, const Vector2 & v1, const Vector2 & v2, const Vector2 & v3 );
 	void	Internal_Add_Quad_Vertices( const RectClass & screen );
 	void	Internal_Add_Quad_UVs( const RectClass & uv );

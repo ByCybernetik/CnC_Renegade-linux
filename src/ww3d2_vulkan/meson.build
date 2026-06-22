@@ -22,13 +22,29 @@ mesh_frag_spv = custom_target(
   build_by_default : true,
 )
 
+simple2d_vert_spv = custom_target(
+  'ww3d_vulkan_simple2d_vert_spv',
+  input : 'shaders/simple_2d.vert',
+  output : 'simple_2d.vert.spv',
+  command : [glslc, '-fshader-stage=vertex'] + _glslc_inc + ['@INPUT@', '-o', '@OUTPUT@'],
+  build_by_default : true,
+)
+
+simple2d_frag_spv = custom_target(
+  'ww3d_vulkan_simple2d_frag_spv',
+  input : 'shaders/simple_2d.frag',
+  output : 'simple_2d.frag.spv',
+  command : [glslc, '-fshader-stage=fragment'] + _glslc_inc + ['@INPUT@', '-o', '@OUTPUT@'],
+  build_by_default : true,
+)
+
 shader_deploy_stamp = custom_target(
   'deploy_vulkan_shaders',
-  input : [mesh_vert_spv, mesh_frag_spv],
+  input : [mesh_vert_spv, mesh_frag_spv, simple2d_vert_spv, simple2d_frag_spv],
   output : 'shader_deploy.stamp',
   command : [
     find_program('bash'), '-c',
-    'mkdir -p "@0@" && cp "@INPUT0@" "@0@/mesh_textured.vert.spv" && cp "@INPUT1@" "@0@/mesh_textured.frag.spv" && touch "@OUTPUT@"'.format(_shader_deploy_dir),
+    'mkdir -p "@0@" && cp "@INPUT0@" "@0@/mesh_textured.vert.spv" && cp "@INPUT1@" "@0@/mesh_textured.frag.spv" && cp "@INPUT2@" "@0@/simple_2d.vert.spv" && cp "@INPUT3@" "@0@/simple_2d.frag.spv" && touch "@OUTPUT@"'.format(_shader_deploy_dir),
   ],
   build_by_default : true,
 )
@@ -36,6 +52,7 @@ shader_deploy_stamp = custom_target(
 ww3d2_vulkan_sources = files(
   'vulkan_render_device.cpp',
   'vk_native_render_state.cpp',
+  'vk_2d_renderer.cpp',
   'stb_texture.cpp',
   'vk_allocator.cpp',
   'vk_buffer.cpp',
@@ -83,7 +100,7 @@ ww3d2_vulkan_cpp_args = [
 
 ww3d2_vulkan_lib = static_library(
   'ww3d2_vulkan',
-  ww3d2_vulkan_sources + [mesh_vert_spv, mesh_frag_spv, shader_deploy_stamp],
+  ww3d2_vulkan_sources + [mesh_vert_spv, mesh_frag_spv, simple2d_vert_spv, simple2d_frag_spv, shader_deploy_stamp],
   include_directories : ww3d2_vulkan_inc,
   cpp_args : ww3d2_vulkan_cpp_args,
   dependencies : [sdl3_dep, vulkan_dep],

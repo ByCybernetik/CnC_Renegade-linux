@@ -183,6 +183,10 @@ bool VkRenderer::Init(SDL_Window *window, uint32_t width, uint32_t height, bool 
 		Shutdown();
 		return false;
 	}
+	if (!twod_renderer_.Init(this)) {
+		Shutdown();
+		return false;
+	}
 
 	bound_textures_[0] = &default_texture_;
 	bound_textures_[1] = &default_texture_;
@@ -438,6 +442,7 @@ void VkRenderer::Shutdown()
 	}
 
 	pending_draws_.clear();
+	twod_renderer_.Shutdown();
 
 	for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
 		frame_ubo_ring_[i].Destroy();
@@ -579,6 +584,7 @@ bool VkRenderer::Begin_Frame(float clear_r, float clear_g, float clear_b, float 
 	pending_draws_.reserve(512);
 	bound_pipeline_ = VK_NULL_HANDLE;
 	frame_ubo_draw_count_ = 0;
+	twod_renderer_.Begin_Frame();
 
 	bound_textures_[0] = &default_texture_;
 	bound_textures_[1] = &default_texture_;
@@ -796,6 +802,22 @@ void VkRenderer::Draw_Indexed(
 #if defined(RENEGADE_VULKAN)
 	Apply_Menu_Glow_Draw_State(draw_key, draw_ubo);
 #endif
+
+	/*
+	 * Particle workaround: use a simple texture*color path that bypasses
+	 * Apply_Stage0 / fog / screen-blend / stage1, matching the stable
+	 * debug-MODULATE output.
+	 */
+	const bool particle_simple =
+		draw_key.alpha_blend &&
+		draw_key.fvf == dynamic_fvf_type &&
+		draw_key.two_sided &&
+		!draw_key.depth_write;
+	if (particle_simple) {
+		uint32_t flags = (uint32_t)draw_ubo.flags;
+		flags |= (uint32_t)FrameUBO::FLAG_PARTICLE_SIMPLE;
+		draw_ubo.flags = (float)flags;
+	}
 
 	VkPipeline pipeline = pipe_cache.Get(draw_key);
 	if (pipeline == VK_NULL_HANDLE) {

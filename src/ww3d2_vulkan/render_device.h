@@ -4,6 +4,7 @@
 #if defined(RENEGADE_VULKAN)
 
 #include "vk_pipeline.h"
+#include "vk_2d_renderer.h"
 #include "../ww3d2/ww3dformat.h"
 #include <stdint.h>
 
@@ -64,6 +65,22 @@ struct NativeTextureState {
 	float tex_stage0_mode = 1.0f;
 	float tex_stage1_color_mode = 0.0f;
 	float tex_stage1_alpha_mode = 0.0f;
+};
+
+struct Native2DBatchDesc {
+	const Simple2DVertex *vertices;
+	uint32_t vertex_count;
+	const uint16_t *indices;
+	uint32_t index_count;
+	void *texture; // VkTexture* or nullptr
+	bool texturing;
+	uint8_t src_blend;
+	uint8_t dst_blend;
+	float modulate_color[4];
+	uint32_t viewport_x;
+	uint32_t viewport_y;
+	uint32_t viewport_w;
+	uint32_t viewport_h;
 };
 
 /*
@@ -145,6 +162,9 @@ public:
 
 	/* Flush queued draws (e.g. after 3D menu backdrop before 2D UI). */
 	void Flush_Pending_Draws();
+
+	/* Native Vulkan 2D/UI draw path (bypasses D3D8/DX8Wrapper). */
+	void Draw_2D_Batch(const Native2DBatchDesc &desc);
 
 private:
 	VulkanRenderDevice() = default;

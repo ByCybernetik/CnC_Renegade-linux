@@ -8,6 +8,7 @@
 #include "vk_render_pass.h"
 #include "vk_swapchain.h"
 #include "vk_texture.h"
+#include "vk_2d_renderer.h"
 #include <cstring>
 #include <vector>
 
@@ -24,6 +25,7 @@ struct FrameUBO {
 		FLAG_SCREEN_BLEND_LIT = 1u << 6,
 		FLAG_SCREEN_BLEND_EVALOGO = 1u << 7,
 		FLAG_SCREEN_BLEND_GIZMO_DIM = 1u << 8,
+		FLAG_PARTICLE_SIMPLE = 1u << 14,
 	};
 
 	enum {
@@ -139,6 +141,47 @@ public:
 	VkDescriptorSetLayout Descriptor_Set_Layout() const { return pipelines_.Descriptor_Set_Layout(); }
 	uint32_t Current_Frame() const { return current_frame_; }
 
+	VkCommandBuffer Current_Command_Buffer() const { return frames_[current_frame_].command_buffer; }
+	VkRenderPass Main_Render_Pass() const { return render_pass_.Handle(); }
+	PFN_vkCmdPushDescriptorSetKHR Push_Descriptor_Func() const { return push_descriptor_set_; }
+	VkTexture *Default_Texture() { return &default_texture_; }
+	VkTexture *Offscreen_Target() const { return offscreen_target_; }
+	bool Frame_Active() const { return frame_active_; }
+	void Invalidate_Bound_Pipeline() { bound_pipeline_ = VK_NULL_HANDLE; }
+
+	void Draw_Batch(
+		VkCommandBuffer cmd,
+		const Simple2DVertex *vertices,
+		uint32_t vertex_count,
+		const uint16_t *indices,
+		uint32_t index_count,
+		VkTexture *texture,
+		bool texturing,
+		uint8_t src_blend,
+		uint8_t dst_blend,
+		const float modulate_color[4],
+		uint32_t viewport_x,
+		uint32_t viewport_y,
+		uint32_t viewport_w,
+		uint32_t viewport_h)
+	{
+		twod_renderer_.Draw_Batch(
+			cmd,
+			vertices,
+			vertex_count,
+			indices,
+			index_count,
+			texture,
+			texturing,
+			src_blend,
+			dst_blend,
+			modulate_color,
+			viewport_x,
+			viewport_y,
+			viewport_w,
+			viewport_h);
+	}
+
 private:
 	struct PendingDraw {
 		MeshPipelineKey key;
@@ -191,6 +234,9 @@ private:
 	VkRect2D scissor_state_ = {};
 	VkPipeline bound_pipeline_ = VK_NULL_HANDLE;
 	PFN_vkCmdPushDescriptorSetKHR push_descriptor_set_ = nullptr;
+
+	/* 2D/UI direct draw path. */
+	Vk2DRenderer twod_renderer_;
 
 	/* Draw batching: queued per frame, sorted and flushed at frame end. */
 	std::vector<PendingDraw> pending_draws_;
