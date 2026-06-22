@@ -1,4 +1,4 @@
-# C&C Renegade — Windows (MinGW) or Linux (SDL3 + dxvk-native).
+# C&C Renegade — Windows (MinGW) or Linux (SDL3 + native Vulkan).
 #
 #   ./meson-setup-mingw.sh build-mingw
 #   ./meson-setup-linux.sh build-linux

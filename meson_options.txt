@@ -17,17 +17,8 @@ option('wwaudio_backend', type : 'combo',
 option('wwaudio_mpg123', type : 'boolean', value : true,
   description : 'WWAudio: libmpg123 for MP3 on faudio/openal (Linux sdl3 uses FFmpeg instead)')
 
-option('dxvk_native_prefix', type : 'string', value : '',
-  description : 'dxvk-native install prefix (…/dxvk-native-*/usr from package-native.sh)')
-
-option('dxvk_native_include', type : 'string', value : '',
-  description : 'Extra -I for D3D headers (default: $prefix/include/dxvk if prefix set)')
-
-option('dxvk_native_libdir', type : 'string', value : '',
-  description : 'Directory with libdxvk_d3d8.so (default: $prefix/lib if prefix set)')
-
 option('graphics_backend', type : 'combo',
-  choices : ['dxvk', 'vulkan'],
-  value : 'dxvk',
-  description : 'Linux WW3D2 renderer: dxvk-native (D3D8) or native Vulkan (ww3d2_vulkan)')
+  choices : ['vulkan'],
+  value : 'vulkan',
+  description : 'Linux WW3D2 renderer: native Vulkan (ww3d2_vulkan)')
 
