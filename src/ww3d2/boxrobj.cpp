@@ -108,40 +108,13 @@
 #include "../wwphys/renegade_collision_fix.h"
 
 #if defined(RENEGADE_COLLISION_FIX)
-static bool
-Linux_Box_Collision_Type_Matches_Intersect ( const RenderObjClass &robj, int query_type )
-{
-	return ( robj.Get_Collision_Type () & query_type ) != 0;
-}
-
-static bool
-Linux_Box_Collision_Type_Matches_Cast ( const RenderObjClass &robj, int query_type )
-{
-	int obj_type = robj.Get_Collision_Type ();
-	if ( ( obj_type & query_type ) != 0 ) {
-		return true;
-	}
-
-	/*
-	** Hidden collision proxies may ship with only COLLISION_TYPE_ALL.  Use them
-	** for swept casts (movement blocking) but not boolean intersection (resting
-	** contact), which falsely freezes vehicles on the ground.
-	*/
-	if (	( obj_type & COLLISION_TYPE_ALL ) != 0 &&
-			( obj_type & ~COLLISION_TYPE_ALL ) == 0 &&
-			( query_type & ( COLLISION_TYPE_PHYSICAL | COLLISION_TYPE_VEHICLE ) ) != 0 &&
-			( robj.Is_Hidden () || robj.Is_Animation_Hidden () ) )
-	{
-		return true;
-	}
-
-	return false;
-}
-
+/* Both intersect and cast use the same collision type check on Linux.
+ * Hidden COLLISION_TYPE_ALL proxies are NOT used for movement blocking —
+ * they are culling/visibility helpers that would seal doorways if activated. */
 #define LINUX_BOX_INTERSECT_GATE(robj, query_type) \
-	Linux_Box_Collision_Type_Matches_Intersect ( ( robj ), ( query_type ) )
+	( ( ( robj ).Get_Collision_Type () & ( query_type ) ) != 0 )
 #define LINUX_BOX_CAST_GATE(robj, query_type) \
-	Linux_Box_Collision_Type_Matches_Cast ( ( robj ), ( query_type ) )
+	( ( ( robj ).Get_Collision_Type () & ( query_type ) ) != 0 )
 #else
 #define LINUX_BOX_INTERSECT_GATE(robj, query_type) \
 	( ( ( robj ).Get_Collision_Type () & ( query_type ) ) != 0 )

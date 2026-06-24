@@ -142,16 +142,7 @@
 #include "dx8wrapper.h"
 #include "../wwphys/renegade_collision_fix.h"
 
-#if defined(RENEGADE_COLLISION_FIX)
-static bool
-Linux_HLod_Collision_Sub_Obj ( RenderObjClass *sub )
-{
-	int class_id = sub->Class_ID ();
-	return	class_id == RenderObjClass::CLASSID_OBBOX ||
-			class_id == RenderObjClass::CLASSID_AABOX ||
-			class_id == RenderObjClass::CLASSID_MESH;
-}
-#endif
+
 
 
 /*
@@ -2751,7 +2742,6 @@ bool HLodClass::Cast_Ray(RayCollisionTestClass & raytest)
 	bool res = false;
 	int i;
 
-	// collide against the top LOD
 	int top = LodCount-1;
 	for (i = 0; i < Lod[top].Count(); i++) {
 		res |= Lod[top][i].Model->Cast_Ray(raytest);
@@ -2760,20 +2750,6 @@ bool HLodClass::Cast_Ray(RayCollisionTestClass & raytest)
 	for (i = 0; i < AdditionalModels.Count(); i++) {
 		res |= AdditionalModels[i].Model->Cast_Ray(raytest);
 	}
-
-#if defined(RENEGADE_COLLISION_FIX)
-	if ( !res ) {
-		int lod;
-		for ( lod = 0; lod < top; lod++ ) {
-			for ( i = 0; i < Lod[lod].Count(); i++ ) {
-				RenderObjClass *sub = Lod[lod][i].Model;
-				if ( Linux_HLod_Collision_Sub_Obj ( sub ) ) {
-					res |= sub->Cast_Ray ( raytest );
-				}
-			}
-		}
-	}
-#endif
 
 	return res;
 }
@@ -2807,7 +2783,6 @@ bool HLodClass::Cast_AABox(AABoxCollisionTestClass & boxtest)
 	bool res = false;
 	int i;
 
-	// collide against the top LOD
 	int top = LodCount-1;
 	for (i = 0; i < Lod[top].Count(); i++) {
 		res |= Lod[top][i].Model->Cast_AABox(boxtest);
@@ -2816,20 +2791,6 @@ bool HLodClass::Cast_AABox(AABoxCollisionTestClass & boxtest)
 	for (i = 0; i < AdditionalModels.Count(); i++) {
 		res |= AdditionalModels[i].Model->Cast_AABox(boxtest);
 	}
-
-#if defined(RENEGADE_COLLISION_FIX)
-	if ( !res ) {
-		int lod;
-		for ( lod = 0; lod < top; lod++ ) {
-			for ( i = 0; i < Lod[lod].Count(); i++ ) {
-				RenderObjClass *sub = Lod[lod][i].Model;
-				if ( Linux_HLod_Collision_Sub_Obj ( sub ) ) {
-					res |= sub->Cast_AABox ( boxtest );
-				}
-			}
-		}
-	}
-#endif
 
 	return res;
 }
@@ -2849,33 +2810,6 @@ bool HLodClass::Cast_AABox(AABoxCollisionTestClass & boxtest)
  *=============================================================================================*/
 bool HLodClass::Cast_OBBox(OBBoxCollisionTestClass & boxtest)
 {
-#if defined(RENEGADE_COLLISION_FIX)
-	if (Are_Sub_Object_Transforms_Dirty() || !AllLodTransformsValid) {
-		Update_All_Sub_Object_Transforms();
-	}
-
-	bool res = false;
-	int lod;
-	int i;
-
-	for ( lod = 0; lod < LodCount; lod++ ) {
-		for ( i = 0; i < Lod[lod].Count (); i++ ) {
-			RenderObjClass *sub = Lod[lod][i].Model;
-			if ( Linux_HLod_Collision_Sub_Obj ( sub ) ) {
-				res |= sub->Cast_OBBox ( boxtest );
-			}
-		}
-	}
-
-	for ( i = 0; i < AdditionalModels.Count (); i++ ) {
-		RenderObjClass *sub = AdditionalModels[i].Model;
-		if ( Linux_HLod_Collision_Sub_Obj ( sub ) ) {
-			res |= sub->Cast_OBBox ( boxtest );
-		}
-	}
-
-	return res;
-#else
 	if (Are_Sub_Object_Transforms_Dirty ()) {
 		Update_Sub_Object_Transforms ();
 	}
@@ -2893,7 +2827,6 @@ bool HLodClass::Cast_OBBox(OBBoxCollisionTestClass & boxtest)
 	}
 
 	return res;
-#endif
 }
 
 
@@ -2935,20 +2868,6 @@ bool HLodClass::Intersect_AABox(AABoxIntersectionTestClass & boxtest)
 		res |= AdditionalModels[i].Model->Intersect_AABox(boxtest);
 	}
 
-#if defined(RENEGADE_COLLISION_FIX)
-	if ( !res ) {
-		int lod;
-		for ( lod = 0; lod < top; lod++ ) {
-			for ( i = 0; i < Lod[lod].Count(); i++ ) {
-				RenderObjClass *sub = Lod[lod][i].Model;
-				if ( Linux_HLod_Collision_Sub_Obj ( sub ) ) {
-					res |= sub->Intersect_AABox ( boxtest );
-				}
-			}
-		}
-	}
-#endif
-
 	return res;
 }
 
@@ -2967,33 +2886,6 @@ bool HLodClass::Intersect_AABox(AABoxIntersectionTestClass & boxtest)
  *=============================================================================================*/
 bool HLodClass::Intersect_OBBox(OBBoxIntersectionTestClass & boxtest)
 {
-#if defined(RENEGADE_COLLISION_FIX)
-	if (Are_Sub_Object_Transforms_Dirty() || !AllLodTransformsValid) {
-		Update_All_Sub_Object_Transforms();
-	}
-
-	bool res = false;
-	int lod;
-	int i;
-
-	for ( lod = 0; lod < LodCount; lod++ ) {
-		for ( i = 0; i < Lod[lod].Count (); i++ ) {
-			RenderObjClass *sub = Lod[lod][i].Model;
-			if ( Linux_HLod_Collision_Sub_Obj ( sub ) ) {
-				res |= sub->Intersect_OBBox ( boxtest );
-			}
-		}
-	}
-
-	for ( i = 0; i < AdditionalModels.Count (); i++ ) {
-		RenderObjClass *sub = AdditionalModels[i].Model;
-		if ( Linux_HLod_Collision_Sub_Obj ( sub ) ) {
-			res |= sub->Intersect_OBBox ( boxtest );
-		}
-	}
-
-	return res;
-#else
 	if (Are_Sub_Object_Transforms_Dirty ()) {
 		Update_Sub_Object_Transforms ();
 	}
@@ -3011,7 +2903,6 @@ bool HLodClass::Intersect_OBBox(OBBoxIntersectionTestClass & boxtest)
 	}
 
 	return res;
-#endif
 }
 
 

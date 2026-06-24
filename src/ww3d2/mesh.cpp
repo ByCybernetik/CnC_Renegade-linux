@@ -110,29 +110,13 @@
 #include "../wwphys/renegade_collision_fix.h"
 
 #if defined(RENEGADE_COLLISION_FIX)
-static bool
-Linux_Mesh_Collision_Type_Matches_Query ( const MeshClass &mesh, int query_type )
-{
-	int obj_type = mesh.Get_Collision_Type ();
-	if ( ( obj_type & query_type ) != 0 ) {
-		return true;
-	}
-
-	if (	( obj_type & COLLISION_TYPE_ALL ) != 0 &&
-			( obj_type & ~COLLISION_TYPE_ALL ) == 0 &&
-			( query_type & ( COLLISION_TYPE_PHYSICAL | COLLISION_TYPE_VEHICLE ) ) != 0 &&
-			( mesh.Is_Hidden () || mesh.Is_Animation_Hidden () ) )
-	{
-		return true;
-	}
-
-	return false;
-}
-
+/* Both intersect and cast use the same collision type check on Linux.
+ * Hidden COLLISION_TYPE_ALL proxies are NOT used for movement blocking —
+ * they are culling/visibility helpers that would seal doorways if activated. */
 #define LINUX_MESH_INTERSECT_GATE(mesh, query_type) \
 	( ( ( mesh ).Get_Collision_Type () & ( query_type ) ) != 0 )
 #define LINUX_MESH_CAST_GATE(mesh, query_type) \
-	Linux_Mesh_Collision_Type_Matches_Query ( ( mesh ), ( query_type ) )
+	( ( ( mesh ).Get_Collision_Type () & ( query_type ) ) != 0 )
 #else
 #define LINUX_MESH_INTERSECT_GATE(mesh, query_type) \
 	( ( ( mesh ).Get_Collision_Type () & ( query_type ) ) != 0 )
