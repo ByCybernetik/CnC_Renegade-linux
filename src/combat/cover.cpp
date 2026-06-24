@@ -218,7 +218,7 @@ bool	CoverEntryClass::Save( ChunkSaveClass & csave )
 			Vector3 pos = AttackPositionList[i];
 			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_ATTACK_POSITION,     pos );				
 		}
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_REMAP_PTR,     me );				
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_REMAP_PTR,     me );				
 	csave.End_Chunk();
 
 	return true;

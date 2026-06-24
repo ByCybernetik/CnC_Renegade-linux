@@ -102,7 +102,7 @@ else
   wwlib_sources += files('verchk.cpp')
 endif
 
-_wwlib_inc = ['.', 'mingw', '../wwdebug', '../platform']
+_wwlib_inc = ['.', 'mingw', '../wwdebug', '../platform', '../wwsaveload']
 if get_option('platform') == 'linux'
   _wwlib_inc += '../platform/linux'
 endif

@@ -645,7 +645,7 @@ bool	SoldierGameObj::Save( ChunkSaveClass & csave )
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_KEY_RING, KeyRing );		
 //		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_FORCE_FACING, ForceFacing );
 		if ( Vehicle != NULL ) {
-			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_VEHICLE, Vehicle );
+			WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_VEHICLE, Vehicle );
 		}
 		csave.Begin_Micro_Chunk( MICROCHUNKID_ANIMATION_NAME );
 		char anim_string[80];
@@ -653,7 +653,7 @@ bool	SoldierGameObj::Save( ChunkSaveClass & csave )
 		csave.Write( anim_string, strlen( anim_string ) + 1);
 		csave.End_Micro_Chunk();
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_INNATE_ENABLE_BITS, InnateEnableBits );
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_INNATE_OBSERVER_PTR, InnateObserver );		
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_INNATE_OBSERVER_PTR, InnateObserver );		
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_LAST_LEG_MODE, LastLegMode );		
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_HEAD_LOOK_DURATION, HeadLookDuration );		
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_HEAD_ROTATION, HeadRotation );		
@@ -664,7 +664,7 @@ bool	SoldierGameObj::Save( ChunkSaveClass & csave )
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_SPECIAL_DAMAGE_MODE, SpecialDamageMode );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_SPECIAL_DAMAGE_TIMER, SpecialDamageTimer );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_AI_STATE, AIState );
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_WEAPON_MODEL, WeaponRenderModel );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_WEAPON_MODEL, WeaponRenderModel );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_IS_USING_GHOST_COLLISION, IsUsingGhostCollision );
 				
 	csave.End_Chunk();

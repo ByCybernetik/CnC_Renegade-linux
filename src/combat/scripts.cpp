@@ -504,11 +504,11 @@ bool ScriptManager::Save(ChunkSaveClass& csave)
 		WRITE_MICRO_CHUNK_STRING(csave, MICROCHUNKID_PARAM, paramString);
 
 		GameObjObserverClass* game_obj_observer_ptr = (GameObjObserverClass*)script;
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_GAME_OBJ_OBSERVER_PTR, game_obj_observer_ptr );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_GAME_OBJ_OBSERVER_PTR, game_obj_observer_ptr );
 
 		ScriptableGameObj* owner_ptr = *(script->Get_Owner_Ptr());
 //		Debug_Say(("\tObjectPtr: '%p'\n", *owner_ptr));
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_OWNER_PTR, owner_ptr );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_OWNER_PTR, owner_ptr );
 
 		int id = script->Get_ID();
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_ID, id );

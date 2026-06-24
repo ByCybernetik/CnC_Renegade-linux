@@ -66,6 +66,7 @@
 #include "chunkio.h"
 #include <string.h>
 #include <assert.h>
+#include "saveloadlog.h"
 
 
 /*********************************************************************************************** 
@@ -130,6 +131,7 @@ bool ChunkSaveClass::Begin_Chunk(uint32 id)
 	if (File->Write(&chunkh,sizeof(chunkh)) != sizeof(chunkh)) {
 		return false;
 	}
+	SAVELOAD_LOG("[CHUNK] Begin_Chunk: 0x%08X (depth=%d)", id, StackIndex);
 	return true;
 }
 
@@ -173,6 +175,7 @@ bool ChunkSaveClass::End_Chunk(void)
 	// Go back to the end of the file
 	File->Seek(curpos,SEEK_SET);
 
+	SAVELOAD_LOG("[CHUNK] End_Chunk: 0x%08X size=%u (depth=%d)", chunkh.Get_Type(), chunkh.Get_Size(), StackIndex);
 	return true;
 }
 
@@ -454,6 +457,11 @@ bool ChunkLoadClass::Open_Chunk()
 
 	PositionStack[StackIndex] = 0;
 	StackIndex++;
+	SAVELOAD_LOG("[CHUNK] Open_Chunk: 0x%08X size=%u has_sub=%d (depth=%d)",
+		HeaderStack[StackIndex-1].Get_Type(),
+		HeaderStack[StackIndex-1].Get_Size(),
+		HeaderStack[StackIndex-1].Get_Sub_Chunk_Flag(),
+		StackIndex);
 	return true;
 }
 
@@ -522,6 +530,7 @@ bool ChunkLoadClass::Close_Chunk()
 	// check for stack overflow
 	assert(StackIndex > 0);
 	
+	uint32 chunk_id = HeaderStack[StackIndex-1].Get_Type();
 	int csize = HeaderStack[StackIndex-1].Get_Size();
 	int pos = PositionStack[StackIndex-1];
 	
@@ -534,6 +543,7 @@ bool ChunkLoadClass::Close_Chunk()
 		PositionStack[StackIndex - 1] += csize + sizeof(ChunkHeader);
 	}
 
+	SAVELOAD_LOG("[CHUNK] Close_Chunk: 0x%08X (depth=%d)", chunk_id, StackIndex);
 	return true;
 }
 
@@ -815,7 +825,7 @@ uint32 ChunkLoadClass::Read(void * buf,uint32 nbytes)
 uint32 ChunkLoadClass::Read(IOVector2Struct * v)
 {
 	assert(v != NULL);
-	return Read(v,sizeof(v));
+	return Read(v,sizeof(*v));
 }
 
 
@@ -834,7 +844,7 @@ uint32 ChunkLoadClass::Read(IOVector2Struct * v)
 uint32 ChunkLoadClass::Read(IOVector3Struct * v)
 {
 	assert(v != NULL);
-	return Read(v,sizeof(v));
+	return Read(v,sizeof(*v));
 }
 
 
@@ -853,7 +863,7 @@ uint32 ChunkLoadClass::Read(IOVector3Struct * v)
 uint32 ChunkLoadClass::Read(IOVector4Struct * v)
 {
 	assert(v != NULL);
-	return Read(v,sizeof(v));
+	return Read(v,sizeof(*v));
 }
 
 
@@ -872,6 +882,6 @@ uint32 ChunkLoadClass::Read(IOVector4Struct * v)
 uint32 ChunkLoadClass::Read(IOQuaternionStruct * q)
 {
 	assert(q != NULL);
-	return Read(q,sizeof(q));
+	return Read(q,sizeof(*q));
 }
 

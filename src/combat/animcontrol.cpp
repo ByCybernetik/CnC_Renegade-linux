@@ -552,7 +552,7 @@ AnimControlClass::~AnimControlClass( void )
 bool 	AnimControlClass::Save( ChunkSaveClass & csave )
 {
 	csave.Begin_Chunk( CHUNKID_VARIABLES );
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_MODEL_PTR, Model );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_MODEL_PTR, Model );
 	csave.End_Chunk();
 
 	return true;

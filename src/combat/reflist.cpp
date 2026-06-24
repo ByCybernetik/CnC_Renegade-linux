@@ -118,7 +118,7 @@ ReferencerClass::Get_Ptr (void) const
 bool	ReferencerClass::Save( ChunkSaveClass & csave )
 {
 	csave.Begin_Chunk( CHUNKID_REF_VARIABLES );
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_TARGET, ReferenceTarget );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_TARGET, ReferenceTarget );
 	csave.End_Chunk();
 	return true;
 }
@@ -134,7 +134,7 @@ bool	ReferencerClass::Load( ChunkLoadClass & cload )
 
 	while (cload.Open_Micro_Chunk()) {
 		switch(cload.Cur_Micro_Chunk_ID()) {
-			READ_MICRO_CHUNK( cload, MICROCHUNKID_TARGET, ReferenceTarget );
+			READ_MICRO_CHUNK_WIRE_POINTER( cload, MICROCHUNKID_TARGET, ReferenceTarget );
 			default:
 //				Debug_Say(( "Unrecognized REFLIST Variable chunkID\n" ));
 				break;

@@ -50,6 +50,7 @@
 #include "chunkio.h"
 #include "wwdebug.h"
 #include "saveload.h"
+#include "saveloadlog.h"
 
 class PersistClass;
 
@@ -131,6 +132,8 @@ SimplePersistFactoryClass<T,CHUNKID>::Load(ChunkLoadClass & cload) const
 	new_obj->Load(cload);
 	cload.Close_Chunk();
 
+	SAVELOAD_LOG("[FACTORY] Load: chunk=0x%08X old=0x%p new=0x%p",
+		CHUNKID, (void*)old_obj, (void*)new_obj);
 	SaveLoadSystemClass::Register_Pointer(old_obj,new_obj);
 	return new_obj;
 }

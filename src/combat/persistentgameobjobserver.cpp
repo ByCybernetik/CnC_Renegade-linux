@@ -69,7 +69,7 @@ bool	PersistentGameObjObserverClass::Save( ChunkSaveClass & csave )
 
 	csave.Begin_Chunk( CHUNKID_VARIABLES );
 		void * observer_ptr = (GameObjObserverClass*)this;
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_OBSERVER_PTR, observer_ptr );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_OBSERVER_PTR, observer_ptr );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_OBSERVER_ID, ID );
 	csave.End_Chunk();
 

@@ -163,7 +163,7 @@ bool cPlayer::Save(ChunkSaveClass & csave)
 	WRITE_MICRO_CHUNK(csave, MICROCHUNK_DEATHS, Deaths);
 	WRITE_MICRO_CHUNK(csave, MICROCHUNK_TEAMNUMBER, PlayerType);
 	void * old_ptr = this;
-	WRITE_MICRO_CHUNK(csave, MICROCHUNK_REMAP_POINTER, old_ptr);
+	WRITE_MICRO_CHUNK_WIRE_POINTER(csave, MICROCHUNK_REMAP_POINTER, old_ptr);
 
 	csave.End_Chunk();
 

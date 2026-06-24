@@ -58,6 +58,7 @@
 #include "texturethumbnail.h"
 #include "systeminfolog.h"
 #include "wwprofile.h"
+#include "saveloadlog.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include "specialbuilds.h"
@@ -99,6 +100,11 @@ enum	{
 */
 void _cdecl SaveGameManager::Save_Game( const char * filename, ... )
 {
+	SAVELOAD_OPEN();
+	SAVELOAD_LOG("[SAVEGAME] === Save_Game: %s ===", filename);
+	SAVELOAD_LOG("[SAVEGAME] MapFilename: %s", MapFilename);
+	SAVELOAD_INDENT();
+
 	Debug_Say(( "Save Game %s\n", filename ));
 	CurrentGameFilename = filename;
 
@@ -118,6 +124,8 @@ void _cdecl SaveGameManager::Save_Game( const char * filename, ... )
 
 		_ConversationMgrSaveLoad.Set_Category_To_Save (ConversationMgrClass::CATEGORY_LEVEL);
 
+		SAVELOAD_LOG("[SAVEGAME] Saving subsystems...");
+		SAVELOAD_INDENT();
 		SaveLoadSystemClass::Save( csave, _CombatSaveLoad );
 		SaveLoadSystemClass::Save( csave, _ConversationMgrSaveLoad );
 		SaveLoadSystemClass::Save( csave, _PhysDynamicSaveSystem );
@@ -138,6 +146,7 @@ void _cdecl SaveGameManager::Save_Game( const char * filename, ... )
 			}
 		}
 		va_end (arg_list);
+		SAVELOAD_UNINDENT();
 
 	csave.End_Chunk();
 
@@ -145,6 +154,9 @@ void _cdecl SaveGameManager::Save_Game( const char * filename, ... )
 
 	_TheWritingFileFactory->Return_File(file);
 
+	SAVELOAD_UNINDENT();
+	SAVELOAD_LOG("[SAVEGAME] === Save_Game done ===");
+	SAVELOAD_CLOSE();
 }
 
 
@@ -239,6 +251,10 @@ void	SaveGameManager::Pre_Load_Game
 
 void	SaveGameManager::Load_Game( const char * filename )
 {
+	SAVELOAD_OPEN();
+	SAVELOAD_LOG("[SAVEGAME] === Load_Game: %s ===", filename);
+	SAVELOAD_INDENT();
+
 	WWLOG_PREPARE_TIME_AND_MEMORY("Load_Game");
 
 	WWMEMLOG(MEM_GAMEDATA);
@@ -253,9 +269,13 @@ void	SaveGameManager::Load_Game( const char * filename )
 	bool level_data_loaded = false;
 	WWLOG_INTERMEDIATE("Open file");
 	while (cload.Open_Chunk()) {
-		switch(cload.Cur_Chunk_ID()) {
+		uint32 chunk_id = cload.Cur_Chunk_ID();
+		SAVELOAD_LOG("[SAVEGAME] Top-level chunk: 0x%08X", chunk_id);
+		SAVELOAD_INDENT();
+		switch(chunk_id) {
 
 			case CHUNKID_LEVEL_INFO:
+				SAVELOAD_LOG("[SAVEGAME] Reading LEVEL_INFO");
 				while (cload.Open_Micro_Chunk()) {
 					switch(cload.Cur_Micro_Chunk_ID()) {
 						
@@ -270,6 +290,8 @@ void	SaveGameManager::Load_Game( const char * filename )
 					cload.Close_Micro_Chunk();
 				}
 
+				SAVELOAD_LOG("[SAVEGAME] Map: %s, DescID: %d", MapFilename, MissionDescriptionID);
+				SAVELOAD_INDENT();
 
 				{
 				// Load level specific Defs
@@ -284,10 +306,12 @@ void	SaveGameManager::Load_Game( const char * filename )
 				// Load the static data
 				Load_Level();	
 				WWLOG_INTERMEDIATE("Load_Level");
+				SAVELOAD_UNINDENT();
 				
 				break;
 								
 			case CHUNKID_LEVEL_DATA:
+				SAVELOAD_LOG("[SAVEGAME] Reading LEVEL_DATA (server=%d)", CombatManager::I_Am_Server());
 				if (CombatManager::I_Am_Server()) {
 					SaveLoadSystemClass::Load( cload, false );
 					level_data_loaded = true;
@@ -297,15 +321,21 @@ void	SaveGameManager::Load_Game( const char * filename )
 
 			default:
 				Debug_Say(( "Unrecognized Level chunkID\n" ));
+				SAVELOAD_LOG("[SAVEGAME] WARNING: unrecognized chunk 0x%08X", chunk_id);
 				break;
 
 		}
+		SAVELOAD_UNINDENT();
 		cload.Close_Chunk();
 	}
 
 	file->Close();
 	_TheFileFactory->Return_File(file);
 	WWLOG_INTERMEDIATE("Rest of the stuff");
+
+	SAVELOAD_UNINDENT();
+	SAVELOAD_LOG("[SAVEGAME] === Load_Game done ===");
+	SAVELOAD_CLOSE();
 }
 
 
@@ -485,6 +515,7 @@ bool SaveGameManager::Peek_Map_Name( const char * filename, StringClass &map_nam
 */
 void	SaveGameManager::Save_Level( void )
 {
+	SAVELOAD_LOG("[SAVEGAME] Save_Level: %s", MapFilename);
 	Debug_Say(( "Save Level %s\n", MapFilename ));
 	Save_Save_Load_System(	MapFilename,	
 									&_PhysStaticDataSaveSystem, 
@@ -498,6 +529,7 @@ void	SaveGameManager::Save_Level( void )
 
 void	SaveGameManager::Load_Level( void )
 {
+	SAVELOAD_LOG("[SAVEGAME] Load_Level: %s", MapFilename);
 	Debug_Say(( "Load Level %s\n", MapFilename ));
 	Load_Save_Load_System( MapFilename, false );	// false = no automatic post load processing (needs to be called explicitly)
 }
@@ -507,12 +539,14 @@ void	SaveGameManager::Load_Level( void )
 */
 void	SaveGameManager::Save_Definitions( const char * filename )
 {
+	SAVELOAD_LOG("[SAVEGAME] Save_Definitions: %s", filename);
 	Debug_Say(( "Save Definitions %s\n", filename ));
 	Save_Save_Load_System( filename, &_TheDefinitionMgr, NULL );
 }
 
 void	SaveGameManager::Load_Definitions( const char * filename )
 {
+	SAVELOAD_LOG("[SAVEGAME] Load_Definitions: %s", filename);
 	WWMEMLOG(MEM_GAMEDATA);
 	Debug_Say(( "Load Definitions %s\n", filename ));
 	Load_Save_Load_System( filename, true );	// true = automatic post load processing
@@ -523,6 +557,8 @@ void	SaveGameManager::Load_Definitions( const char * filename )
 */
 void _cdecl SaveGameManager::Save_Save_Load_System( const char * filename, ... )
 {
+	SAVELOAD_LOG("[SAVEGAME] Save_Save_Load_System: %s", filename);
+	SAVELOAD_INDENT();
 	FileClass * file = _TheWritingFileFactory->Get_File( filename );
 	WWASSERT(file);
 	file->Open(FileClass::WRITE);
@@ -543,10 +579,14 @@ void _cdecl SaveGameManager::Save_Save_Load_System( const char * filename, ... )
 
 	file->Close();
 	_TheWritingFileFactory->Return_File(file);
+	SAVELOAD_UNINDENT();
+	SAVELOAD_LOG("[SAVEGAME] Save_Save_Load_System done");
 }
 
 void	SaveGameManager::Load_Save_Load_System( const char * filename, bool auto_post_load )
 {
+	SAVELOAD_LOG("[SAVEGAME] Load_Save_Load_System: %s (auto_post_load=%d)", filename, auto_post_load);
+	SAVELOAD_INDENT();
 	FileClass * file = _TheFileFactory->Get_File( filename );
 	if ( file != NULL ) {
 		file->Open( FileClass::READ );
@@ -556,7 +596,10 @@ void	SaveGameManager::Load_Save_Load_System( const char * filename, bool auto_po
 		_TheFileFactory->Return_File(file);
 	} else {
 		Debug_Say(( "Failed to load file %s\n", filename ));
+		SAVELOAD_LOG("[SAVEGAME] ERROR: Failed to load file %s", filename);
 //		WWASSERT( file );
 	}
+	SAVELOAD_UNINDENT();
+	SAVELOAD_LOG("[SAVEGAME] Load_Save_Load_System done");
 }
 

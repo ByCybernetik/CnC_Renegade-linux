@@ -145,7 +145,7 @@ WaypointClass::Save (ChunkSaveClass &csave)
 	csave.Begin_Chunk (CHUNKID_VARIABLES);
 				
 		WaypointClass *this_ptr = this;
-		WRITE_MICRO_CHUNK (csave, VARID_OLD_PTR,		this_ptr);
+		WRITE_MICRO_CHUNK_WIRE_POINTER (csave, VARID_OLD_PTR,		this_ptr);
 		WRITE_MICRO_CHUNK (csave, VARID_FLAGS,			m_Flags);		
 		WRITE_MICRO_CHUNK (csave, VARID_POSITION,		m_Position);		
 		WRITE_MICRO_CHUNK (csave, VARID_ID,				m_ID);

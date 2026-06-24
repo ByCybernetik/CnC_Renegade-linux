@@ -570,7 +570,10 @@ bool	VehicleGameObj::Save( ChunkSaveClass & csave )
 
 	if ( num_seats != 0 ) {
 		csave.Begin_Chunk( CHUNKID_SEAT_LIST );
-		csave.Write( &SeatOccupants[0], num_seats * sizeof( SeatOccupants[0] ) );
+		for ( int i = 0; i < num_seats; i++ ) {
+			uint32 _wire = (uint32)(uintptr_t)SeatOccupants[i];
+			csave.Write( &_wire, sizeof(_wire) );
+		}
 		csave.End_Chunk();
 	}
 
@@ -621,8 +624,10 @@ bool	VehicleGameObj::Load( ChunkLoadClass &cload )
 				}
 
 				SeatOccupants.Resize( num_seats );
-				cload.Read( &SeatOccupants[0], num_seats * sizeof( SeatOccupants[0] ) );
 				for ( int i = 0; i < num_seats; i++ ) {
+					uint32 _wire = 0;
+					cload.Read( &_wire, sizeof(_wire) );
+					SeatOccupants[i] = (SoldierGameObj *)(uintptr_t)_wire;
 					if ( SeatOccupants[i] != NULL ) {
 						REQUEST_POINTER_REMAP( (void **)&SeatOccupants[i] );
 					}

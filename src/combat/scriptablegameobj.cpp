@@ -437,12 +437,12 @@ bool	ScriptableGameObj::Save( ChunkSaveClass & csave )
 
 	csave.Begin_Chunk( CHUNKID_VARIABLES );
 		ReferenceableGameObj * referenceable_ptr = (ReferenceableGameObj *)this;
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_REFERENCEABLE_PTR, referenceable_ptr );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_REFERENCEABLE_PTR, referenceable_ptr );
 
 		const GameObjObserverList & observer_list = Get_Observers();
 		for( int index = 0; index < observer_list.Count(); index++ ) {
 			void	* game_obj_observer_ptr = observer_list[ index ];
-			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_GAME_OBJ_OBSERVER_PTR, game_obj_observer_ptr );
+			WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_GAME_OBJ_OBSERVER_PTR, game_obj_observer_ptr );
 		}
 
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_OBSERVER_CREATED_PENDING, ObserverCreatedPending );

@@ -789,7 +789,7 @@ public:
 			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_FIRST_CALL,			FirstCall		);
 			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_USE_MOVE_OBJECT,	UseMoveObject	);
 			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_TARGET_PREV_POS,	TargetPrevPos	);
-			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_PATH_SOLVE_PTR,	PathSolver		);
+			WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_PATH_SOLVE_PTR,	PathSolver		);
 		csave.End_Chunk();
 
 		csave.Begin_Chunk( CHUNKID_PATH_ACTION );
@@ -816,7 +816,11 @@ public:
 							READ_MICRO_CHUNK( cload, MICROCHUNKID_TARGET_PREV_POS,	TargetPrevPos	);
 
 							case MICROCHUNKID_PATH_SOLVE_PTR:
-								LOAD_MICRO_CHUNK( cload, PathSolver );
+								{
+									uint32 _wire_ptr_u32 = 0;
+									cload.Read(&_wire_ptr_u32, sizeof(_wire_ptr_u32));
+									*(void **)&PathSolver = (void *)(uintptr_t)_wire_ptr_u32;
+								}
 								if (PathSolver != NULL) {
 									REQUEST_REF_COUNTED_POINTER_REMAP( (RefCountClass **)&PathSolver );
 								}
@@ -2329,7 +2333,7 @@ public:
 					//
 					//	Save the conversation pointer
 					//
-					WRITE_MICRO_CHUNK( csave, MICROCHUNKID_CONVERSATION_PTR, Conversation );
+					WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_CONVERSATION_PTR, Conversation );
 					REF_PTR_RELEASE( conv );
 				}
 			}
@@ -2355,7 +2359,11 @@ public:
 							READ_MICRO_CHUNK( cload, MICROCHUNKID_ORIGINAL_POS,			OriginalPos		);
 
 							case MICROCHUNKID_CONVERSATION_PTR:
-								LOAD_MICRO_CHUNK( cload, Conversation );
+								{
+									uint32 _wire_ptr_u32 = 0;
+									cload.Read(&_wire_ptr_u32, sizeof(_wire_ptr_u32));
+									*(void **)&Conversation = (void *)(uintptr_t)_wire_ptr_u32;
+								}
 
 								//
 								//	Fixup the pointer

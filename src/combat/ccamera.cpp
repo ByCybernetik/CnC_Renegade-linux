@@ -460,7 +460,7 @@ enum	{
 bool	CCameraClass::Save( ChunkSaveClass & csave )
 {
 	csave.Begin_Chunk( CHUNKID_VARIABLES );
-		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_HOST_MODEL,					HostModel );
+		WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_HOST_MODEL,					HostModel );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_ANCHOR_POSITION,			AnchorPosition );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_IS_VALID,					IsValid );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_TILT,							Tilt );
@@ -517,7 +517,7 @@ bool	CCameraClass::Load( ChunkLoadClass &cload )
 			case CHUNKID_VARIABLES:
 				while (cload.Open_Micro_Chunk()) {
 					switch(cload.Cur_Micro_Chunk_ID()) {
-						READ_MICRO_CHUNK( cload, MICROCHUNKID_HOST_MODEL,					HostModel );
+						READ_MICRO_CHUNK_WIRE_POINTER( cload, MICROCHUNKID_HOST_MODEL,					HostModel );
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_ANCHOR_POSITION,			AnchorPosition );
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_IS_VALID,						IsValid );
 						READ_MICRO_CHUNK( cload, MICROCHUNKID_TILT,							Tilt );

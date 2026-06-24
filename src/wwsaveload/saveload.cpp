@@ -45,6 +45,7 @@
 #include "wwhack.h"
 
 #include "wwprofile.h"
+#include "saveloadlog.h"
 
 #pragma warning(disable:4201) // warning C4201: nonstandard extension used : nameless struct/union
 #include <windows.h>
@@ -63,9 +64,14 @@ bool SaveLoadSystemClass::Save (ChunkSaveClass &csave,SaveLoadSubSystemClass & s
 	bool ok = true;
 
 	if (subsystem.Contains_Data()) {
+		SAVELOAD_LOG("[SAVE] Begin subsystem %s (chunk 0x%08X)", subsystem.Name(), subsystem.Chunk_ID());
+		SAVELOAD_INDENT();
 		csave.Begin_Chunk (subsystem.Chunk_ID ());
 		ok &= subsystem.Save (csave);
 		csave.End_Chunk ();
+		SAVELOAD_UNINDENT();
+		SAVELOAD_LOG("[SAVE] End subsystem %s", subsystem.Name());
+		SAVELOAD_FLUSH();
 	}
 
 	return ok;
@@ -73,8 +79,13 @@ bool SaveLoadSystemClass::Save (ChunkSaveClass &csave,SaveLoadSubSystemClass & s
 
 bool SaveLoadSystemClass::Load (ChunkLoadClass &cload,bool auto_post_load)
 {
+	SAVELOAD_LOG("[LOAD] === Start SaveLoadSystemClass::Load (auto_post_load=%d) ===", auto_post_load);
+	SAVELOAD_INDENT();
+
 	WWLOG_PREPARE_TIME_AND_MEMORY("SaveLoadSystemClass::Load");
 	PointerRemapper.Reset();
+	SAVELOAD_LOG("[LOAD] PointerRemapper::Reset() — pair=%d, request=%d, refcount=%d",
+		PointerRemapper.PairCount(), PointerRemapper.RequestCount(), PointerRemapper.RefCountRequestCount());
 	WWLOG_INTERMEDIATE("PointerRemapper.Reset()");
 	bool ok = true;
 
@@ -85,26 +96,43 @@ bool SaveLoadSystemClass::Load (ChunkLoadClass &cload,bool auto_post_load)
 		SaveLoadSubSystemClass *sys = Find_Sub_System(chunk_id);
 		WWLOG_INTERMEDIATE("Find_Sub_System");
 		if (sys != NULL) {
+			SAVELOAD_LOG("[LOAD] Subsystem chunk 0x%08X found: %s", chunk_id, sys->Name());
+			SAVELOAD_INDENT();
 //WWRELEASE_SAY(("			Name: %s\n",sys->Name()));
 			INIT_SUB_STATUS(sys->Name());
 			ok &= sys->Load(cload);
 			WWLOG_INTERMEDIATE(sys->Name());
+			SAVELOAD_UNINDENT();
+			SAVELOAD_LOG("[LOAD] Subsystem %s done", sys->Name());
+		} else {
+			SAVELOAD_LOG("[LOAD] WARNING: No subsystem registered for chunk 0x%08X", chunk_id);
 		}
 		cload.Close_Chunk();
 	}
 
+	SAVELOAD_LOG("[LOAD] All chunks processed. Starting pointer remap...");
+	SAVELOAD_INDENT();
 
 	// Process all of the pointer remap requests
 	PointerRemapper.Process();
+	SAVELOAD_UNINDENT();
+	SAVELOAD_LOG("[LOAD] Pointer remap done");
 	WWLOG_INTERMEDIATE("PointerRemapper.Process()");
 	PointerRemapper.Reset();
+	SAVELOAD_LOG("[LOAD] PointerRemapper reset after process");
 	WWLOG_INTERMEDIATE("PointerRemapper.Reset()");
+
 	// Call PostLoad on each PersistClass that wanted post-load
 	if (auto_post_load) {
+		SAVELOAD_LOG("[LOAD] Starting Post_Load_Processing...");
 		Post_Load_Processing(NULL);
+		SAVELOAD_LOG("[LOAD] Post_Load_Processing done");
 	}
 	WWLOG_INTERMEDIATE("PostLoadProcessing");
 
+	SAVELOAD_UNINDENT();
+	SAVELOAD_LOG("[LOAD] === End SaveLoadSystemClass::Load ===");
+	SAVELOAD_FLUSH();
 
 	return ok;
 }
@@ -122,16 +150,22 @@ bool SaveLoadSystemClass::Load (ChunkLoadClass &cload,bool auto_post_load)
 bool SaveLoadSystemClass::Post_Load_Processing (void(*network_callback)(void))
 {
 	unsigned long time = TIMEGETTIME();
+	int count = 0;
+
+	SAVELOAD_LOG("[POSTLOAD] Starting Post_Load_Processing");
 
 	// Call PostLoad on each PersistClass that wanted post-load
 	PostLoadableClass * obj = PostLoadList.Remove_Head();
 	while (obj) {
 		UPDATE_NETWORK;
+		SAVELOAD_LOG("[POSTLOAD] [%d] On_Post_Load() obj=0x%p", count, (void*)obj);
 		obj->On_Post_Load();
 		obj->Set_Post_Load_Registered(false);
+		count++;
 		obj = PostLoadList.Remove_Head();
 	}
 
+	SAVELOAD_LOG("[POSTLOAD] Done — %d objects processed", count);
 	return true;
 }
 
@@ -155,10 +189,12 @@ SaveLoadSubSystemClass * SaveLoadSystemClass::Find_Sub_System (uint32 chunk_id)
 	SaveLoadSubSystemClass * sys;
 	for ( sys = SubSystemListHead; sys != NULL; sys = sys->NextSubSystem ) {
 		if ( sys->Chunk_ID() == chunk_id ) {
-			break;
+			SAVELOAD_LOG("[SYS] Find_Sub_System: 0x%08X -> %s", chunk_id, sys->Name());
+			return sys;
 		}
 	}
-	return sys;
+	SAVELOAD_LOG("[SYS] Find_Sub_System: 0x%08X -> NOT FOUND", chunk_id);
+	return NULL;
 }
 
 void SaveLoadSystemClass::Register_Persist_Factory(PersistFactoryClass * factory)
@@ -179,10 +215,12 @@ PersistFactoryClass * SaveLoadSystemClass::Find_Persist_Factory(uint32 chunk_id)
 	PersistFactoryClass * fact;
 	for ( fact = FactoryListHead; fact != NULL; fact = fact->NextFactory ) {
 		if ( fact->Chunk_ID() == chunk_id ) {
-			break;
+			SAVELOAD_LOG("[FACTORY] Find_Persist_Factory: 0x%08X -> found", chunk_id);
+			return fact;
 		}
 	}
-	return fact;
+	SAVELOAD_LOG("[FACTORY] Find_Persist_Factory: 0x%08X -> NOT FOUND!", chunk_id);
+	return NULL;
 }
 
 bool SaveLoadSystemClass::Is_Post_Load_Callback_Registered(PostLoadableClass * obj)
@@ -207,6 +245,7 @@ void SaveLoadSystemClass::Register_Post_Load_Callback(PostLoadableClass * obj)
 	if (!obj->Is_Post_Load_Registered()) {
 		obj->Set_Post_Load_Registered(true);
 		PostLoadList.Add_Head(obj);
+		SAVELOAD_LOG("[POSTLOAD] Register_Post_Load_Callback: obj=0x%p", (void*)obj);
 	}
 }
 

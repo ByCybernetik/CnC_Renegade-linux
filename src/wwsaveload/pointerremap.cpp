@@ -38,6 +38,7 @@
 #include "pointerremap.h"
 #include "refcount.h"
 #include "wwdebug.h"
+#include "saveloadlog.h"
 
 #if defined(__GNUC__) && defined(_WIN32)
 
@@ -76,6 +77,10 @@ void PointerRemapClass::Reset(void)
 
 void PointerRemapClass::Process(void)
 {
+	SAVELOAD_LOG("[REMAP] Process: pairs=%d, requests=%d, refcount_reqs=%d",
+		PointerPairTable.Count(), PointerRequestTable.Count(), RefCountRequestTable.Count());
+	SAVELOAD_INDENT();
+
 	if ( PointerPairTable.Count() > 0 ) {
 		qsort(&PointerPairTable[0], PointerPairTable.Count(), sizeof(PointerPairTable[0]), ptr_pair_compare_function);
 	}
@@ -93,6 +98,8 @@ void PointerRemapClass::Process(void)
 		Process_Request_Table(RefCountRequestTable,true);
 	}
 
+	SAVELOAD_UNINDENT();
+	SAVELOAD_LOG("[REMAP] Process done");
 }
 
 void PointerRemapClass::Process_Request_Table(DynamicVectorClass<PtrRemapStruct> & request_table,bool refcount)
@@ -100,6 +107,8 @@ void PointerRemapClass::Process_Request_Table(DynamicVectorClass<PtrRemapStruct>
 	// Remap the pointers
 	int pointer_index = 0;
 	int pair_index = 0;
+	int remap_ok = 0;
+	int remap_fail = 0;
 
 	for (pointer_index = 0; pointer_index < request_table.Count(); pointer_index++) {
 
@@ -149,6 +158,7 @@ void PointerRemapClass::Process_Request_Table(DynamicVectorClass<PtrRemapStruct>
 				}
 			}
 #endif
+			remap_ok++;
 
 		} else {
 			
@@ -157,14 +167,19 @@ void PointerRemapClass::Process_Request_Table(DynamicVectorClass<PtrRemapStruct>
 			// If this happens, things could be going very wrong.  (find out why its happening!)
 			pair_index = pre_search_index;
 			*slot = NULL;
+			remap_fail++;
+			SAVELOAD_LOG("[REMAP] FAILED: old_ptr=0x%p slot=0x%p", pointer_to_remap, (void*)slot);
 #ifdef WWDEBUG			
 			const char * file = request_table[pointer_index].File;
 			int line = request_table[pointer_index].Line;
 			WWDEBUG_SAY(("Warning! Failed to re-map pointer! old_ptr = 0x%X  file = %s  line = %d\r\n",(unsigned int)pointer_to_remap,file,line));
+			SAVELOAD_LOG("[REMAP] FAILED: %s:%d old_ptr=0x%p", file ? file : "?", line, pointer_to_remap);
 			WWASSERT( 0 );
 #endif
 		}
 	}
+
+	SAVELOAD_LOG("[REMAP] Table done: ok=%d fail=%d (refcount=%d)", remap_ok, remap_fail, (int)refcount);
 }
 
 void PointerRemapClass::Register_Pointer (void *old_pointer, void *new_pointer)
@@ -174,6 +189,8 @@ void PointerRemapClass::Register_Pointer (void *old_pointer, void *new_pointer)
 		return;
 	}
 #endif
+	SAVELOAD_LOG("[REMAP] Register_Pointer: 0x%p -> 0x%p (total pairs: %d)",
+		old_pointer, new_pointer, PointerPairTable.Count() + 1);
 	PointerPairTable.Add(PtrPairStruct(old_pointer,new_pointer));
 }
 

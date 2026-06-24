@@ -869,15 +869,15 @@ RaveshawBossGameObjClass::Save_Variables (ChunkSaveClass &csave)
 	//	Save a pointer for each arc-object
 	//
 	for (int index = 0; index < ARC_OBJ_COUNT; index ++) {		
-		WRITE_MICRO_CHUNK (csave, VARID_ARC_OBJ_PTR,	ArcObjects[index]);
+		WRITE_MICRO_CHUNK_WIRE_POINTER (csave, VARID_ARC_OBJ_PTR,	ArcObjects[index]);
 	}
 
 	Matrix3D cam_tm = CameraBoneModel->Get_Transform ();
-	WRITE_MICRO_CHUNK (csave, VARID_CAMERA_BONE_PTR,					CameraBoneModel);
+	WRITE_MICRO_CHUNK_WIRE_POINTER (csave, VARID_CAMERA_BONE_PTR,					CameraBoneModel);
 	WRITE_MICRO_CHUNK (csave, VARID_CAMERA_BONE_TM,						cam_tm);
 	WRITE_MICRO_CHUNK (csave, VARID_RESTORE_FIRST_PERSON,				RestoreFirstPerson);	
 
-	WRITE_MICRO_CHUNK (csave, VARID_THROWN_OBJECT_PTR,					ThrownObject);
+	WRITE_MICRO_CHUNK_WIRE_POINTER (csave, VARID_THROWN_OBJECT_PTR,					ThrownObject);
 	WRITE_MICRO_CHUNK (csave, VARID_IS_TIBERIUM_EFFECT_APPLIED,		IsTiberiumEffectApplied);
 
 	WRITE_MICRO_CHUNK (csave, VARID_CURRENT_DEST_POS,					CurrentDestPos);
@@ -916,14 +916,18 @@ RaveshawBossGameObjClass::Load_Variables (ChunkLoadClass &cload)
 		switch (cload.Cur_Micro_Chunk_ID ()) {
 
 			case VARID_ARC_OBJ_PTR:
-				LOAD_MICRO_CHUNK (cload, ArcObjects[arc_obj_index++]);
+				{
+					uint32 _wire_ptr_u32 = 0;
+					cload.Read(&_wire_ptr_u32, sizeof(_wire_ptr_u32));
+					ArcObjects[arc_obj_index++] = (SimpleGameObj *)(uintptr_t)_wire_ptr_u32;
+				}
 				break;
 
-			READ_MICRO_CHUNK (cload, VARID_CAMERA_BONE_PTR,					old_camera_bone_ptr);
+			READ_MICRO_CHUNK_WIRE_POINTER (cload, VARID_CAMERA_BONE_PTR,					old_camera_bone_ptr);
 			READ_MICRO_CHUNK (cload, VARID_CAMERA_BONE_TM,					cam_tm);
 			READ_MICRO_CHUNK (cload, VARID_RESTORE_FIRST_PERSON,			RestoreFirstPerson);	
 
-			READ_MICRO_CHUNK (cload, VARID_THROWN_OBJECT_PTR,				ThrownObject);
+			READ_MICRO_CHUNK_WIRE_POINTER (cload, VARID_THROWN_OBJECT_PTR,				ThrownObject);
 			READ_MICRO_CHUNK (cload, VARID_IS_TIBERIUM_EFFECT_APPLIED,	IsTiberiumEffectApplied);
 
 			READ_MICRO_CHUNK (cload, VARID_CURRENT_DEST_POS,				CurrentDestPos);

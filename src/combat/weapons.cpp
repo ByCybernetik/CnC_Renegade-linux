@@ -336,7 +336,7 @@ bool	WeaponClass::Save( ChunkSaveClass & csave )
 			csave.Write( model_name, strlen( model_name ) + 1 );
 			csave.End_Micro_Chunk();
 #endif
-			WRITE_MICRO_CHUNK( csave, MICROCHUNKID_MODEL_PTR, Model );
+			WRITE_MICRO_CHUNK_WIRE_POINTER( csave, MICROCHUNKID_MODEL_PTR, Model );
 		}
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_STATE, State );
 		WRITE_MICRO_CHUNK( csave, MICROCHUNKID_STATE_TIMER, StateTimer );

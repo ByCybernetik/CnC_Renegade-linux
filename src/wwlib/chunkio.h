@@ -329,6 +329,21 @@ private:
 	csave.Write((const WCHAR *)var, (var.Get_Length () + 1) * 2); \
 	csave.End_Micro_Chunk(); }
 
+/*
+** Win32 level/save files store pointers as 32-bit values in micro-chunks.
+** On LP64 hosts WRITE_MICRO_CHUNK would over-write and produce incompatible files.
+*/
+#if defined(RENEGADE_LINUX)
+#define WRITE_MICRO_CHUNK_WIRE_POINTER(csave,id,var) { \
+	csave.Begin_Micro_Chunk(id); \
+	uint32 _wire_ptr_u32 = (uint32)(uintptr_t)(var); \
+	csave.Write(&_wire_ptr_u32, sizeof(_wire_ptr_u32)); \
+	csave.End_Micro_Chunk(); }
+#else
+#define WRITE_MICRO_CHUNK_WIRE_POINTER(csave,id,var) \
+	WRITE_MICRO_CHUNK(csave,id,var)
+#endif
+
 
 /*
 ** READ_MICRO_CHUNK - use this macro in a switch statement to read a micro chunk into a variable

@@ -95,7 +95,7 @@ PathfindPortalClass::Save (ChunkSaveClass &csave)
 		WRITE_MICRO_CHUNK (csave, VARID_ID,					m_ID);		
 		
 		PathfindPortalClass *this_ptr = this;
-		WRITE_MICRO_CHUNK (csave, VARID_OLD_PTR, this_ptr);
+		WRITE_MICRO_CHUNK_WIRE_POINTER (csave, VARID_OLD_PTR, this_ptr);
 
 	csave.End_Chunk ();
 
@@ -196,8 +196,8 @@ PathfindActionPortalClass::Save (ChunkSaveClass &csave)
 		WRITE_MICRO_CHUNK (csave, ACTION_VARID_DESTINATION,	m_Destination);
 		WRITE_MICRO_CHUNK (csave, ACTION_VARID_MECHANISM_ID,	m_MechanismID);
 		WRITE_MICRO_CHUNK (csave, ACTION_VARID_ACTION_ID,		m_ActionID);
-		WRITE_MICRO_CHUNK (csave, ACTION_VARID_EXIT_PORTAL,	m_ExitPortal);
-		WRITE_MICRO_CHUNK (csave, ACTION_VARID_ENTER_PORTAL,	m_EnterPortal);
+		WRITE_MICRO_CHUNK_WIRE_POINTER (csave, ACTION_VARID_EXIT_PORTAL,	m_ExitPortal);
+		WRITE_MICRO_CHUNK_WIRE_POINTER (csave, ACTION_VARID_ENTER_PORTAL,	m_EnterPortal);
 	csave.End_Chunk ();
 
 	return true;

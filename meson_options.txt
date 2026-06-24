@@ -22,3 +22,6 @@ option('graphics_backend', type : 'combo',
   value : 'vulkan',
   description : 'Linux WW3D2 renderer: native Vulkan (ww3d2_vulkan)')
 
+option('saveload_debug', type : 'boolean', value : false,
+  description : 'Enable verbose save/load debug logging to saveload_debug.txt')
+

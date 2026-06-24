@@ -467,9 +467,9 @@ bool PhysClass::Save (ChunkSaveClass &csave)
 
 	csave.Begin_Chunk(PHYS_CHUNK_VARIABLES);
 	// (gth) not saving observer pointers any more!
-	WRITE_MICRO_CHUNK(csave,PHYS_VARIABLE_CULLABLE_PTR,cullable_ptr);
-	WRITE_MICRO_CHUNK(csave,PHYS_VARIABLE_WIDGETUSER_PTR,widgetuser_ptr);
-	WRITE_MICRO_CHUNK(csave,PHYS_VARIABLE_EDITABLE_PTR,editable_ptr);
+	WRITE_MICRO_CHUNK_WIRE_POINTER(csave,PHYS_VARIABLE_CULLABLE_PTR,cullable_ptr);
+	WRITE_MICRO_CHUNK_WIRE_POINTER(csave,PHYS_VARIABLE_WIDGETUSER_PTR,widgetuser_ptr);
+	WRITE_MICRO_CHUNK_WIRE_POINTER(csave,PHYS_VARIABLE_EDITABLE_PTR,editable_ptr);
 	WRITE_MICRO_CHUNK(csave,PHYS_VARIABLE_FLAGS,Flags);
 	WRITE_MICRO_CHUNK(csave,PHYS_VARIABLE_INSTANCEID,InstanceID);	
 	if (Name.Get_Length() > 0) {

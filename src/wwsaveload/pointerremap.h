@@ -64,6 +64,10 @@ class PointerRemapClass
 		void		Reset(void);
 		void		Process(void);
 
+		int			PairCount() const { return PointerPairTable.Count(); }
+		int			RequestCount() const { return PointerRequestTable.Count(); }
+		int			RefCountRequestCount() const { return RefCountRequestTable.Count(); }
+
 		void		Register_Pointer (void *old_pointer, void *new_pointer);
 
 #ifdef WWDEBUG

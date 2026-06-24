@@ -21,6 +21,9 @@ endif
 if get_option('disable_audio')
   add_global_arguments('-DRENEGADE_DISABLE_AUDIO', language : ['cpp'])
 endif
+if get_option('saveload_debug')
+  add_global_arguments('-DSAVELOAD_DEBUG', language : ['cpp'])
+endif
 
 if _is_linux
   renegade_cpp_args = [

@@ -1878,7 +1878,7 @@ PathSolveClass::Save (ChunkSaveClass &csave)
 		WRITE_MICRO_CHUNK (csave, VARID_PRIORITY,			m_Priority);
 
 		PathSolveClass *this_ptr = this;
-		WRITE_MICRO_CHUNK (csave, VARID_OLD_PTR,			this_ptr);
+		WRITE_MICRO_CHUNK_WIRE_POINTER (csave, VARID_OLD_PTR,			this_ptr);
 
 	csave.End_Chunk ();
 	return ;
@@ -1946,7 +1946,7 @@ PathSolveClass::Load_Variables (ChunkLoadClass &cload)
 			READ_MICRO_CHUNK (cload, VARID_STARTPOS,		m_StartPos);
 			READ_MICRO_CHUNK (cload, VARID_DESTPOS,		m_DestPos);
 			READ_MICRO_CHUNK (cload, VARID_PATH_OBJECT,	m_PathObject);
-			READ_MICRO_CHUNK (cload, VARID_OLD_PTR,		old_ptr);
+			READ_MICRO_CHUNK_WIRE_POINTER (cload, VARID_OLD_PTR,		old_ptr);
 			READ_MICRO_CHUNK (cload, VARID_PRIORITY,		m_Priority);
 		}
 
