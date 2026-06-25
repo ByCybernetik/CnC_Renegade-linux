@@ -70,92 +70,7 @@ Linux_Pad_Query_AABox ( AABoxClass &bounds, float min_extent )
 	}
 }
 
-/*
-** Reject codes for vehicle cull-intersect fallback (0 = allowed).
-*/
-static int
-Linux_Vehicle_Cull_Intersect_Reject_Code
-(
-	PhysClass *obj,
-	const OBBoxClass &query_box
-)
-{
-	//
-	// Allow compact props only; buildings use pathfind / mesh collision.
-	//
-	const AABoxClass &cull = obj->Get_Cull_Box ();
-	float min_ext = cull.Extent.X;
-	float max_ext = min_ext;
-	if ( cull.Extent.Y < min_ext ) {
-		min_ext = cull.Extent.Y;
-	}
-	if ( cull.Extent.Z < min_ext ) {
-		min_ext = cull.Extent.Z;
-	}
-	if ( cull.Extent.Y > max_ext ) {
-		max_ext = cull.Extent.Y;
-	}
-	if ( cull.Extent.Z > max_ext ) {
-		max_ext = cull.Extent.Z;
-	}
 
-	RenderObjClass *model = obj->Peek_Model ();
-	if ( model == NULL ) {
-		return 3;
-	}
-
-	int class_id = model->Class_ID ();
-	if ( class_id != RenderObjClass::CLASSID_MESH && class_id != RenderObjClass::CLASSID_HLOD ) {
-		return 4;
-	}
-
-	//
-	// Match StaticPhysClass::Cast_OBBox cull fallback (0.25-10 m).
-	// Buildings >10 m are handled by mesh-level brute_force collision.
-	//
-	if ( max_ext < 0.25f || max_ext > 10.0f ) {
-		return 2;
-	}
-
-	if ( min_ext < 0.35f && max_ext > 2.0f ) {
-		return 5;
-	}
-
-	float max_query_ext = query_box.Extent.X;
-	if ( query_box.Extent.Y > max_query_ext ) {
-		max_query_ext = query_box.Extent.Y;
-	}
-	if ( query_box.Extent.Z > max_query_ext ) {
-		max_query_ext = query_box.Extent.Z;
-	}
-
-	//
-	// Tall vertical culls (lamppost): side overlap resolves upward — block
-	// intersect fallback; movement blocking still uses cull cast in staticphys.
-	//
-	float horiz_ext = cull.Extent.X;
-	if ( cull.Extent.Y > horiz_ext ) {
-		horiz_ext = cull.Extent.Y;
-	}
-	if ( horiz_ext > 0.001f && cull.Extent.Z > horiz_ext * 1.8f &&
-			query_box.Center.Z < cull.Center.Z - horiz_ext * 0.5f ) {
-		return 8;
-	}
-
-	float cull_top = cull.Center.Z + cull.Extent.Z;
-	float query_bottom = query_box.Center.Z - max_query_ext;
-	if ( query_bottom > cull_top - 0.20f ) {
-		return 6;
-	}
-
-	return 0;
-}
-
-static bool
-Linux_Vehicle_Cull_Intersect_Allowed ( PhysClass *obj, const OBBoxClass &query_box )
-{
-	return Linux_Vehicle_Cull_Intersect_Reject_Code ( obj, query_box ) == 0;
-}
 
 #if defined(RENEGADE_LINUX)
 /*
@@ -202,8 +117,6 @@ PhysicsSceneClass::Linux_Intersect_Static_In_AABox
 	PhysOBBoxIntersectionTestClass &boxtest
 )
 {
-	const bool vehicle_query = ( boxtest.CollisionType & COLLISION_TYPE_VEHICLE ) != 0;
-
 	RefPhysListIterator it ( &StaticObjList );
 	for ( it.First (); !it.Is_Done (); it.Next () ) {
 		PhysClass *obj = it.Peek_Obj ();
@@ -214,15 +127,8 @@ PhysicsSceneClass::Linux_Intersect_Static_In_AABox
 			if ( obj->Is_Ignore_Me () ) {
 				continue;
 			}
-			bool cull_intersects = CollisionMath::Intersection_Test ( obj->Get_Cull_Box (), boxtest.Box );
 			if ( obj->Intersection_Test ( boxtest ) ) {
 				return true;
-			}
-			if ( vehicle_query && cull_intersects ) {
-				int reject = Linux_Vehicle_Cull_Intersect_Reject_Code ( obj, boxtest.Box );
-				if ( reject == 0 ) {
-					return true;
-				}
 			}
 		}
 	}
