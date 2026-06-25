@@ -41,6 +41,7 @@
 #include "assets.h"
 #include "debug.h"
 #include <stdio.h>
+
 #include "smartgameobj.h"
 #include "combat.h"
 #include "slist.h"
@@ -188,11 +189,11 @@ void	ArmorWarheadManager::Init( void )
 				section_name,
 				sizeof(section_name),
 				SECTION_SCALE,
-				ArmorNames[armor_num]);
+				(const char *)ArmorNames[armor_num]);
 			section_name[sizeof(section_name) - 1] = '\0';
 			for ( int warhead_num = 0; warhead_num < WarheadNames.Count(); warhead_num++ ) {
 				Multipliers[ armor_num * Get_Num_Warhead_Types() + warhead_num ]  =
-					armorINI->Get_Float( section_name, WarheadNames[warhead_num], 1.0f );
+					armorINI->Get_Float( section_name, (const char *)WarheadNames[warhead_num], 1.0f );
 			}
 		}
 
@@ -204,11 +205,11 @@ void	ArmorWarheadManager::Init( void )
 				section_name,
 				sizeof(section_name),
 				SECTION_SHIELD,
-				ArmorNames[armor_num]);
+				(const char *)ArmorNames[armor_num]);
 			section_name[sizeof(section_name) - 1] = '\0';
 			for ( int warhead_num = 0; warhead_num < WarheadNames.Count(); warhead_num++ ) {
-				Absorbsion[ armor_num * Get_Num_Warhead_Types() + warhead_num ]  =
-					armorINI->Get_Float( section_name, WarheadNames[warhead_num], 0.0f );
+				float val = armorINI->Get_Float( section_name, (const char *)WarheadNames[warhead_num], 0.0f );
+				Absorbsion[ armor_num * Get_Num_Warhead_Types() + warhead_num ] = val;
 			}
 		}
 
@@ -905,7 +906,8 @@ float	DefenseObjectClass::Do_Damage( const OffenseObjectClass & offense, float s
 		// if we have a shield, redirect a fraction of our damage;
 		// If alternate skin (MCT) ignore sheild damage;
 		if ( (float)ShieldStrength > 0.0f && alternate_skin == -1 ) {
-			shield_damage = damage * ArmorWarheadManager::Get_Shield_Absorbsion( ShieldType, offense.Get_Warhead() );
+			float shield_absorb_pct = ArmorWarheadManager::Get_Shield_Absorbsion( ShieldType, offense.Get_Warhead() );
+			shield_damage = damage * shield_absorb_pct;
 			damage -= shield_damage;
 
 			shield_damage *= shield_damage_scale;
