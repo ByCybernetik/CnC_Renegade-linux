@@ -37,6 +37,7 @@
 #include "projectile.h"
 #include "pscene.h"
 #include "lineseg.h"
+#include <string.h>
 #include "physcon.h"
 #include "physcoltest.h"
 #include "rendobj.h"
@@ -229,6 +230,12 @@ void ProjectileClass::Timestep(float dt)
 
 	if ( CollidesOnMove ) {
 
+		/*
+		** Tracers raycasting against thousands of static objects on the Linux linear-scan
+		** collision path is extremely expensive. Only check dynamic objects for them.
+		*/
+		bool is_tracer = (Model != NULL && Model->Get_Name() != NULL && strncmp(Model->Get_Name(), "TRACER_", 7) == 0);
+
 		WWPROFILE("Move and Collide");
 
 		/*
@@ -261,6 +268,9 @@ void ProjectileClass::Timestep(float dt)
 			CastResultStruct res;
 			LineSegClass ray(oldstate.Position,State.Position);
 			PhysRayCollisionTestClass raytest(ray,&res,Get_Collision_Group(),COLLISION_TYPE_PROJECTILE);
+			if (is_tracer) {
+				raytest.CheckStaticObjs = false;
+			}
 
 			{ 
 				WWPROFILE("Raycast");
