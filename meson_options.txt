@@ -10,12 +10,9 @@ option('platform', type : 'combo',
   description : 'Target OS: windows (MinGW cross) or linux (native SDL3 + dxvk-native)')
 
 option('wwaudio_backend', type : 'combo',
-  choices : ['mss', 'faudio', 'openal', 'stub', 'sdl3'],
+  choices : [     'mss'],
   value : 'mss',
-  description : 'WWAudio Miles shim: mss (Miles SDK), faudio, openal, sdl3 (Linux), or silent stub')
-
-option('wwaudio_mpg123', type : 'boolean', value : true,
-  description : 'WWAudio: libmpg123 for MP3 on faudio/openal (Linux sdl3 uses FFmpeg instead)')
+  description : 'WWAudio backend: mss (Miles stubs) or sdl3 (SDL3 audio)')
 
 option('graphics_backend', type : 'combo',
   choices : ['vulkan'],
@@ -24,4 +21,3 @@ option('graphics_backend', type : 'combo',
 
 option('saveload_debug', type : 'boolean', value : false,
   description : 'Enable verbose save/load debug logging to saveload_debug.txt')
-

@@ -44,15 +44,7 @@
 #include "persistfactory.h"
 #include "chunkio.h"
 #include "sound3dhandle.h"
-#include "sound2dhandle.h"
 #include "systimer.h"
-#if defined(WWAUDIO_USE_SDL3)
-#include "sdl3_mix_export.h"
-#endif
-#if defined(RENEGADE_LINUX)
-#include "wwmath.h"
-#endif
-#include <stdio.h>
 
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -239,25 +231,11 @@ Sound3DClass::On_Frame_Update (unsigned int milliseconds)
 	// If necessary, update the volume based on the distance
 	// from the edge of the dropoff radius.
 	//
-#if defined(RENEGADE_LINUX)
-	const bool pseudo_ambient = Uses_Linux_Pseudo_Ambient_Playback ();
-#else
-	const bool pseudo_ambient = false;
-#endif
-
-	if (m_SoundHandle != NULL && !pseudo_ambient) {
+	if (m_SoundHandle != NULL) {
 		Update_Edge_Volume ();
 	}
 
-	bool result = AudibleSoundClass::On_Frame_Update (milliseconds);
-
-#if defined(RENEGADE_LINUX)
-	if (pseudo_ambient && m_SoundHandle != NULL) {
-		Update_Linux_Pseudo_Ambient_Playback ();
-	}
-#endif
-
-	return result;
+	return AudibleSoundClass::On_Frame_Update ();
 }
 
 
@@ -361,13 +339,6 @@ Sound3DClass::Set_Listener_Transform (const Matrix3D &tm)
 void
 Sound3DClass::Update_Miles_Transform (void)
 {
-#if defined(RENEGADE_LINUX)
-	if (Uses_Linux_Pseudo_Ambient_Playback ()) {
-		Update_Linux_Pseudo_Ambient_Playback ();
-		return;
-	}
-#endif
-
 	//
 	// Do we have a valid miles handle?
 	//
@@ -541,19 +512,6 @@ Sound3DClass::Set_Max_Vol_Radius (float radius)
 void
 Sound3DClass::Initialize_Miles_Handle (void)
 {
-#if defined(RENEGADE_LINUX)
-	/*
-	** Static mono level beds use Sound2DHandleClass + pseudo pan/volume.
-	** The 3D init path skips fade/loop handling and calls 3D APIs on a 2D voice.
-	*/
-	if (Uses_Linux_Pseudo_Ambient_Playback () && m_SoundHandle != NULL &&
-			m_SoundHandle->Get_H3DSAMPLE () == NULL)
-	{
-		AudibleSoundClass::Initialize_Miles_Handle ();
-		return;
-	}
-#endif
-
 	MMSLockClass lock;
 
 	// If this sound is already playing, then update its
@@ -574,16 +532,14 @@ Sound3DClass::Initialize_Miles_Handle (void)
 		//
 		// Record the total length of the sample in milliseconds...
 		//
-		m_SoundHandle->Get_Sample_MS_Position ((S32 *)&m_Length, NULL);
+		S32 length_ms = 0;
+		m_SoundHandle->Get_Sample_MS_Position (&length_ms, NULL);
+		m_Length = (unsigned long)length_ms;
 
 		//
 		// Pass our cached settings onto miles
 		//
 		float real_volume = Determine_Real_Volume ();
-		if (m_FadeType == FADE_IN && m_FadeTime > 0) {
-			float percent = 1.0F - ((float)m_FadeTimer / (float)m_FadeTime);
-			real_volume *= WWMath::Clamp (percent, 0.0F, 1.0F);
-		}
 		m_SoundHandle->Set_Sample_Volume (int(real_volume * 127.0F));
 		m_SoundHandle->Set_Sample_Pan (int(m_Pan * 127.0F));
 		m_SoundHandle->Set_Sample_Loop_Count (m_LoopCount);
@@ -637,80 +593,6 @@ Sound3DClass::Initialize_Miles_Handle (void)
 }
 
 
-#if defined(RENEGADE_LINUX)
-
-bool
-Sound3DClass::Uses_Linux_Pseudo_Ambient_Playback (void) const
-{
-	return (	m_IsStatic &&
-				m_LoopCount == INFINITE_LOOPS &&
-				As_SoundPseudo3DClass () == NULL);
-}
-
-
-void
-Sound3DClass::Update_Linux_Pseudo_Ambient_Playback (void)
-{
-	MMSLockClass lock;
-	float distance = 0.0F;
-	int miles_vol = 0;
-
-	if (m_SoundHandle == NULL) {
-		return;
-	}
-
-#if defined(RENEGADE_LINUX)
-	if (!Verify_Linux_Miles_Handle_Ownership ()) {
-		return;
-	}
-#endif
-
-	{
-		Vector3 sound_pos = m_ListenerTransform.Get_Translation () - m_Transform.Get_Translation ();
-		distance = sound_pos.Quick_Length ();
-		float volume_mod = Determine_Real_Volume ();
-		if (m_FadeType == FADE_IN && m_FadeTime > 0) {
-			float percent = 1.0F - ((float)m_FadeTimer / (float)m_FadeTime);
-			volume_mod *= WWMath::Clamp (percent, 0.0F, 1.0F);
-		}
-		float max_distance = Get_DropOff_Radius ();
-		float min_distance = Get_Max_Vol_Radius ();
-		float delta = max_distance - min_distance;
-		float volume = 1.0F;
-
-		if (delta > 0.001F && distance > min_distance) {
-			volume = 1.0F - ((distance - min_distance) / delta);
-			volume = min (volume, 1.0F);
-			volume = max (volume, 0.0F);
-		} else if (delta <= 0.001F && distance > max_distance) {
-			volume = 0.0F;
-		}
-
-		volume = volume * volume_mod;
-
-		miles_vol = (int)(volume * 127.0F + 0.5F);
-		if (miles_vol < 0) {
-			miles_vol = 0;
-		} else if (miles_vol > 127) {
-			miles_vol = 127;
-		}
-		m_SoundHandle->Set_Sample_Volume (miles_vol);
-	}
-
-	{
-		Vector3 sound_pos = m_Transform.Get_Translation ();
-		Vector3 rel_sound_pos;
-		Matrix3D::Inverse_Transform_Vector (m_ListenerTransform, sound_pos, &rel_sound_pos);
-		float angle = WWMath::Atan2 (rel_sound_pos.Y, rel_sound_pos.X);
-		float pan = -WWMath::Fast_Sin (angle);
-		pan = (pan / 2.0F) + 0.5F;
-		m_SoundHandle->Set_Sample_Pan (S32(pan * 127.0F));
-	}
-}
-
-#endif
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //	Allocate_Miles_Handle
@@ -725,30 +607,6 @@ Sound3DClass::Allocate_Miles_Handle (void)
 	// If we need to, get a play-handle from the audio system
 	//
 	if (m_SoundHandle == NULL) {
-#if defined(RENEGADE_LINUX)
-#endif
-#if defined(RENEGADE_LINUX)
-		/*
-		** Static mono level beds: pseudo-3D (2D pan/volume) like stereo ambients.
-		** H3DSAMPLE + EAX was too loud and panned differently than SoundPseudo3D.
-		*/
-		if (Uses_Linux_Pseudo_Ambient_Playback ()) {
-			MILES_HANDLE handle =
-				(MILES_HANDLE)WWAudioClass::Get_Instance ()->Get_2D_Sample (*this);
-
-#if defined(RENEGADE_LINUX)
-			if (handle == INVALID_MILES_HANDLE) {
-				return;
-			}
-#endif
-
-			AudibleSoundClass::Set_Miles_Handle (handle);
-			Update_Linux_Pseudo_Ambient_Playback ();
-#if defined(RENEGADE_LINUX)
-#endif
-			return;
-		}
-#endif
 		Set_Miles_Handle ((MILES_HANDLE)WWAudioClass::Get_Instance ()->Get_3D_Sample (*this));
 	}
 
@@ -920,26 +778,12 @@ Sound3DClass::Set_Miles_Handle (MILES_HANDLE handle)
 		//	Configure the sound handle
 		//
 		m_SoundHandle = new Sound3DHandleClass;
-		m_SoundHandle->Set_Miles_Handle ((H3DSAMPLE)handle);
-
-#if defined(RENEGADE_LINUX)
-		m_SoundHandle->Set_Sample_User_Data (INFO_OBJECT_PTR, (intptr_t)this);
-#endif
+		m_SoundHandle->Set_Miles_Handle (handle);
 
 		//
 		//	Use this new handle
 		//
 		Initialize_Miles_Handle ();
-
-#if defined(WWAUDIO_USE_SDL3)
-		if (m_SoundHandle != NULL) {
-			H3DSAMPLE miles_sample = m_SoundHandle->Get_Miles_Sample ();
-
-			sdl3_voice_set_bus (
-				(HSAMPLE)miles_sample,
-				AudibleSound_Resolve_Voice_Bus (this));
-		}
-#endif
 	}
 
 	return ;

@@ -1,1 +1,1 @@
-../../../scripts/scriptevents.h
+../../../combat/scriptevents.h

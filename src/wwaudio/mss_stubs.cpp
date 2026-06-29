@@ -1,6 +1,9 @@
 #include "mss_stub.h"
 
 #include <string.h>
+#include <time.h>
+#include <pthread.h>
+#include <map>
 
 static char g_last_error[] = "Miles stub (no audio hardware)";
 
@@ -10,8 +13,14 @@ static DIG_DRIVER_TYPE g_stub_driver_data;
 static HDIGDRIVER g_stub_driver = &g_stub_driver_data;
 static HPROVIDER g_stub_provider = (HPROVIDER)4;
 static H3DPOBJECT g_stub_listener = (H3DPOBJECT)5;
-static S32 g_sample_user_data[8];
-static S32 g_3d_user_data[8];
+
+/* Per-sample user data storage (8 slots each). The real MSS stores user data
+ * per-sample; the original stub used a single global array, which meant one
+ * handle's data corrupted all others. Use intptr_t so 64-bit callers can
+ * store full pointers without truncation on LP64 (x86_64 Linux). */
+struct UserData8 { intptr_t d[8]; };
+static std::map<HSAMPLE, UserData8> g_sample_user_data;
+static std::map<H3DSAMPLE, UserData8> g_3d_user_data;
 
 void AIL_startup(void) {}
 void AIL_shutdown(void) {}
@@ -52,16 +61,21 @@ void AIL_sample_ms_position(HSAMPLE, S32 *len, S32 *pos)
 	if (len) *len = 0;
 	if (pos) *pos = 0;
 }
-void AIL_set_sample_user_data(HSAMPLE, U32 index, S32 data)
+void AIL_set_sample_user_data(HSAMPLE sample, U32 index, intptr_t data)
 {
 	if (index < 8u) {
-		g_sample_user_data[index] = data;
+		g_sample_user_data[sample].d[index] = data;
 	}
 }
-S32 AIL_sample_user_data(HSAMPLE, U32 index)
+intptr_t AIL_sample_user_data(HSAMPLE sample, U32 index)
 {
-	return (index < 8u) ? g_sample_user_data[index] : 0;
+	if (index < 8u) {
+		std::map<HSAMPLE, UserData8>::iterator it = g_sample_user_data.find(sample);
+		return (it != g_sample_user_data.end()) ? it->second.d[index] : 0;
+	}
+	return 0;
 }
+S32 AIL_sample_playback_busy(HSAMPLE) { return 0; }
 S32 AIL_sample_playback_rate(HSAMPLE) { return 44100; }
 void AIL_set_sample_playback_rate(HSAMPLE, S32) {}
 void AIL_set_sample_processor(HSAMPLE, S32, HPROVIDER) {}
@@ -112,15 +126,19 @@ S32 AIL_3D_sample_loop_count(H3DSAMPLE) { return 0; }
 void AIL_set_3D_sample_offset(H3DSAMPLE, U32) {}
 U32 AIL_3D_sample_offset(H3DSAMPLE) { return 0; }
 U32 AIL_3D_sample_length(H3DSAMPLE) { return 0; }
-void AIL_set_3D_object_user_data(H3DSAMPLE, U32 index, S32 data)
+void AIL_set_3D_object_user_data(H3DSAMPLE sample, U32 index, intptr_t data)
 {
 	if (index < 8u) {
-		g_3d_user_data[index] = data;
+		g_3d_user_data[sample].d[index] = data;
 	}
 }
-S32 AIL_3D_object_user_data(H3DSAMPLE, U32 index)
+intptr_t AIL_3D_object_user_data(H3DSAMPLE sample, U32 index)
 {
-	return (index < 8u) ? g_3d_user_data[index] : 0;
+	if (index < 8u) {
+		std::map<H3DSAMPLE, UserData8>::iterator it = g_3d_user_data.find(sample);
+		return (it != g_3d_user_data.end()) ? it->second.d[index] : 0;
+	}
+	return 0;
 }
 S32 AIL_3D_sample_playback_rate(H3DSAMPLE) { return 44100; }
 void AIL_set_3D_sample_playback_rate(H3DSAMPLE, S32) {}
@@ -159,4 +177,18 @@ S32 AIL_WAV_info(void const *, AILSOUNDINFO *info)
 		info->channels = 1;
 	}
 	return 0;
+}
+
+/* ---- Win32 API stubs for Linux (only _beginthread, others provided by platform) ---- */
+
+/* _beginthread: spawn a detached pthread */
+uintptr_t _beginthread(void (*proc)(void*), unsigned, void* arg)
+{
+	pthread_t thread;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_create(&thread, &attr, (void*(*)(void*))proc, arg);
+	pthread_attr_destroy(&attr);
+	return (uintptr_t)thread;
 }

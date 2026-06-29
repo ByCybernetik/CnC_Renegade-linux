@@ -1,1 +1,1 @@
-../../../scripts/visualc.h
+../../../wwlib/visualc.h

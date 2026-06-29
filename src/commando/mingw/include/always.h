@@ -1,1 +1,1 @@
-../../../scripts/always.h
+../../../wwlib/always.h

@@ -1,1 +1,1 @@
-../../../scripts/borlandc.h
+../../../wwlib/borlandc.h

@@ -44,7 +44,6 @@
 #endif
 #include "wwphys.h"
 #include "wwaudio.h"
-#include "audio_decode.h"
 #include "wwsaveload.h"
 #include "input.h"
 #include "inputconfigmgr.h"
@@ -887,7 +886,7 @@ bool Game_Init(void)
 #endif
 	WWAudioClass::Get_Instance()->Initialize( APPLICATION_SUB_KEY_NAME_SOUND );
 	WWAudioClass::Get_Instance()->Set_File_Factory( &AudioFileFactory );
-	audio_set_file_factory( &AudioFileFactory );
+	//audio_set_file_factory( &AudioFileFactory );
 	// Install text callback
 	WWAudioClass::Get_Instance()->Register_Text_Callback(AudioTextCallback,0);
 

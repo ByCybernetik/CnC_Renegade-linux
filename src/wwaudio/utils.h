@@ -39,7 +39,11 @@
 #define __UTILS_H
 
 #pragma warning (push, 3)
+#if defined(RENEGADE_LINUX)
+#include "mss_stub.h"
+#else
 #include "mss.h"
+#endif
 #pragma warning (pop)
 
 /////////////////////////////////////////////////////////////////////////////
@@ -90,11 +94,9 @@ Get_Filename_From_Path (LPCTSTR path)
 {
 	// Find the last occurance of the directory deliminator
 	LPCTSTR filename = ::strrchr (path, '\\');
-	if (filename == NULL) {
-		filename = ::strrchr (path, '/');
-	}
 	if (filename != NULL) {
-		filename++;
+		// Increment past the directory deliminator
+		filename ++;
 	} else {
 		filename = path;
 	}

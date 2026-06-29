@@ -29,7 +29,6 @@ _commando_inc += [
   '../ww3d2',
   '../wwphys',
   '../wwaudio',
-  '../wwaudio/mingw',
   '../wwui',
   '../combat',
   '../binkmovie',
@@ -347,18 +346,11 @@ commando_sources = files(
 )
 
 _renegade_deps = _is_linux ? [platform_dep, linux_graphics_dep] : [dxsdk8_dep]
-if not _is_linux
-  _ww_backend = get_option('wwaudio_backend')
-  if _ww_backend == 'mss'
-    _renegade_deps += dependency('miles', required : true)
-  elif _ww_backend == 'faudio'
-    _renegade_deps += dependency('faudio', required : true)
-  elif _ww_backend == 'openal'
-    _renegade_deps += dependency('openal-soft', required : true)
-  endif
-  if get_option('wwaudio_mpg123') and _ww_backend != 'stub' and _ww_backend != 'mss'
-    _renegade_deps += dependency('libmpg123', required : true)
-  endif
+if not _is_linux and get_option('wwaudio_backend') == 'mss'
+  _renegade_deps += dependency('miles', required : true)
+endif
+if _is_linux
+  _renegade_deps += wwaudio_deps
 endif
 _renegade_link = _is_linux ? (_link + linux_link_args) : (_link + ['-mwindows'] + win_link_args)
 

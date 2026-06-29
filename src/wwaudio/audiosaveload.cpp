@@ -142,12 +142,9 @@ StaticAudioSaveLoadClass::Load (ChunkLoadClass &cload)
 			//
 			case CHUNKID_STATIC_SCENE:
 			{
-				WWAudioClass *audio = WWAudioClass::Get_Instance ();
-				if (audio != NULL) {
-					SoundSceneClass *scene = audio->Get_Sound_Scene ();
-					if (scene != NULL) {
-						scene->Load_Static (cload);
-					}
+				SoundSceneClass *scene = WWAudioClass::Get_Instance ()->Get_Sound_Scene ();
+				if (scene != NULL) {
+					scene->Load_Static (cload);
 				}
 			}
 			break;
@@ -263,10 +260,7 @@ DynamicAudioSaveLoadClass::Load (ChunkLoadClass &cload)
 						{
 							StringClass filename;
 							LOAD_MICRO_CHUNK_WWSTRING (cload, filename);
-							WWAudioClass *audio = WWAudioClass::Get_Instance ();
-							if (audio != NULL) {
-								audio->Set_Background_Music (filename);
-							}
+							WWAudioClass::Get_Instance ()->Set_Background_Music (filename);
 							break;
 						}						
 
@@ -282,12 +276,9 @@ DynamicAudioSaveLoadClass::Load (ChunkLoadClass &cload)
 			//
 			case CHUNKID_DYNAMIC_SCENE:
 			{
-				WWAudioClass *audio = WWAudioClass::Get_Instance ();
-				if (audio != NULL) {
-					SoundSceneClass *scene = audio->Get_Sound_Scene ();
-					if (scene != NULL) {
-						scene->Load_Dynamic (cload);
-					}
+				SoundSceneClass *scene = WWAudioClass::Get_Instance ()->Get_Sound_Scene ();
+				if (scene != NULL) {
+					scene->Load_Dynamic (cload);
 				}
 			}
 			break;

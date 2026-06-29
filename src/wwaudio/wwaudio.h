@@ -43,8 +43,20 @@
 
 #include "always.h"
 #pragma warning (push, 3)
+#if defined(RENEGADE_LINUX)
+#include "mss_stub.h"
+#else
 #include "mss.h"
+#endif
 #pragma warning (pop)
+
+/* MSS 9.3b compatibility: the original VC6 code used a newer MSS SDK */
+#ifndef H3DSAMPLE
+typedef HSAMPLE H3DSAMPLE;
+#endif
+#ifndef DP_FILTER
+#define DP_FILTER SP_FILTER
+#endif
 
 #include "vector.h"
 #include "soundbuffer.h"
@@ -89,9 +101,6 @@ typedef enum
 //	Default values
 /////////////////////////////////////////////////////////////////////////////////
 const int DEF_2D_SAMPLE_COUNT		= 16;
-#if defined(RENEGADE_LINUX)
-const int DEF_2D_SAMPLE_COUNT_LINUX	= 32;
-#endif
 const int DEF_3D_SAMPLE_COUNT		= 16;
 const float DEF_MUSIC_VOL			= 1.0F;
 const float DEF_SFX_VOL				= 1.0F;
@@ -99,18 +108,8 @@ const float DEF_DIALOG_VOL			= 1.0F;
 const float DEF_CINEMATIC_VOL		= 1.0F;
 const float DEF_FADE_TIME			= 0.5F;
 const int DEF_CACHE_SIZE			= 1024;
-/*
-** Preload SFX up to 128 KiB compressed in RAM (Sound2DHandle). Larger assets (menu.mp3)
-** use StreamSoundBuffer. Stale-cache eviction in Get_Sound_Buffer / Force_Reload remains.
-*/
-const int DEF_MAX_2D_BUFFER_SIZE	= 131072;
+const int DEF_MAX_2D_BUFFER_SIZE	= 20000;
 const int DEF_MAX_3D_BUFFER_SIZE	= 100000;
-/* Between combat pool (<50) and reload (75). Routes to dedicated 2D handle[2]. */
-const float DEF_WEAPON_FIRE_RUNTIME_PRIORITY	= 50.0F;
-/* Between combat pool (<75) and menu/UI (>=100). Routes to dedicated 2D handle[1]. */
-const float DEF_RELOAD_RUNTIME_PRIORITY	= 75.0F;
-/* Reload PCM ~1.7 s @ 22050 stereo; quiet must cover full clip + late combat SFX (logs: 800 ms too short). */
-const int DEF_RELOAD_QUIET_MS			= 2500;
 
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -336,7 +335,7 @@ public:
 	void					Allow_Cinematic_Sound (bool onoff = true);
 	bool					Is_Cinematic_Sound_On (void) const							{ return m_IsCinematicSoundEnabled; }
 
-	void					Enable_New_Sounds (bool onoff);
+	void					Enable_New_Sounds (bool onoff)			{ m_AreNewSoundsEnabled = onoff; }
 	bool					Are_New_Sounds_Enabled (void)	const		{ return m_AreNewSoundsEnabled; }
 
 	void					Temp_Disable_Audio (bool onoff);
@@ -412,6 +411,11 @@ public:
 
 	const char *			Get_Background_Music_Name (void)						{ return m_BackgroundMusicName; }
 	AudibleSoundClass *	Peek_Background_Music (void)							{ return m_BackgroundMusic; }
+	void						Pause_Game_Music_Bus (void);
+	void						Resume_Game_Music_Bus (void);
+	void						Stop_Menu_Music (void);
+	bool						Is_Menu_Music_Active (void);
+	void						Play_Menu_Music (const char *filename = NULL);
 
 	//////////////////////////////////////////////////////////////////////
 	//	Logical-sound related methods
@@ -463,13 +467,6 @@ public:
 	int					Get_Cache_Size (void) const						{ return m_MaxCacheSize / 1024; }
 	int					Get_Current_Cache_Size (void) const				{ return m_CurrentCacheSize; }
 	void					Flush_Cache (void);
-	void					Remove_Cached_Buffer (const char *string_id);
-	void					Stop_Combat_2D_Samples (void);
-	void					Stop_Combat_3D_Samples (void);
-	void					Arm_Reload_Sfx_Quiet_Window (void);
-	void					Prepare_Reload_Sound (void);
-	bool					Begin_Reload_Sound_Playback (void);
-	bool					Is_Dialog_Playback_Active (void) const;
 
 	//
 	// This settings determines whether a sound buffer is loaded
@@ -518,14 +515,7 @@ public:
 	// when the secondary page is active.
 	//
 	void					Set_Active_Sound_Page (SOUND_PAGE page);
-#if defined(RENEGADE_LINUX)
-	void					Play_Menu_Music (const char *filename);
-	void					Stop_Menu_Music (void);
-	bool					Is_Menu_Music_Active (void) const;
-	void					Pause_Game_Music_Bus (void);
-	void					Resume_Game_Music_Bus (void);
-#endif
-	SOUND_PAGE			Get_Active_Sound_Page (void)					{ m_CurrPage; }
+	SOUND_PAGE			Get_Active_Sound_Page (void)					{ return m_CurrPage; }
 
 	void					Push_Active_Sound_Page (SOUND_PAGE page);
 	void					Pop_Active_Sound_Page (void);
@@ -603,9 +593,6 @@ protected:
 	void						Update_Fade (void);
 	void						Internal_Set_Sound_Effects_Volume (float volume);
 	void						Internal_Set_Music_Volume (float volume);
-#if defined(WWAUDIO_USE_SDL3)
-	void						Play_Background_Music_Bus (const char *filename, int fade_in_ms);
-#endif
 
 	//////////////////////////////////////////////////////////////////////
 	//	Cache methods
@@ -621,22 +608,12 @@ protected:
 	//////////////////////////////////////////////////////////////////////
 	//	Miles File Callbacks
 	//////////////////////////////////////////////////////////////////////
-	static U32 AILCALLBACK	File_Open_Callback (char const *filename, U32 *file_handle);
-	static void AILCALLBACK	File_Close_Callback (U32 file_handle);
-	static S32 AILCALLBACK	File_Seek_Callback (U32 file_handle, S32 offset, U32 type);
-	static U32 AILCALLBACK	File_Read_Callback (U32 file_handle, void *buffer, U32 bytes);
+	static U32 AILCALLBACK	File_Open_Callback (char const *filename, intptr_t *file_handle);
+	static void AILCALLBACK	File_Close_Callback (intptr_t file_handle);
+	static S32 AILCALLBACK	File_Seek_Callback (intptr_t file_handle, S32 offset, U32 type);
+	static U32 AILCALLBACK	File_Read_Callback (intptr_t file_handle, void *buffer, U32 bytes);
 
 private:
-
-	void						Link_Background_Music_To_Primary_Page (void);
-	void						Release_2D_Sample_Owner (HSAMPLE sample);
-	void						Detach_2D_Sample_Holders (HSAMPLE sample);
-	void						Release_3D_Sample_Owner (H3DSAMPLE sample);
-	void						Takeover_2D_Sample (HSAMPLE sample, const AudibleSoundClass &new_owner);
-#if defined(RENEGADE_LINUX)
-	void						Detach_3D_Sample_Holders (H3DSAMPLE sample);
-	void						Takeover_3D_Sample (H3DSAMPLE sample, const AudibleSoundClass &new_owner);
-#endif
 
 	//////////////////////////////////////////////////////////////////////
 	//	Static member data
@@ -712,10 +689,6 @@ private:
 	FileFactoryClass *								m_FileFactory;
 	AudibleSoundClass *								m_BackgroundMusic;
 	StringClass											m_BackgroundMusicName;
-#if defined(RENEGADE_LINUX)
-	bool													m_MenuMusicOnBus;
-	bool													m_GameMusicBusPaused;
-#endif
 
 	bool													m_CachedIsMusicEnabled;
 	bool													m_CachedIsDialogEnabled;
@@ -742,15 +715,7 @@ private:
 
 	// Available sample handles
 	DynamicVectorClass<HSAMPLE>					m_2DSampleHandles;
-	HSAMPLE												m_DedicatedMusicSample;
-	HSAMPLE												m_DedicatedReloadSample;
-	HSAMPLE												m_DedicatedCombat2DSample;
-	HSAMPLE												m_DedicatedDialog2DSample;
-	HSAMPLE												m_DedicatedUISample;
-	DWORD												m_ReloadSfxQuietUntilMs;
-	DWORD												m_LastReloadSoundMs;
 	DynamicVectorClass<H3DSAMPLE>					m_3DSampleHandles;
-	H3DSAMPLE											m_DedicatedDialog3DSample;
 
 	// Playlist managment
 	DynamicVectorClass<AudibleSoundClass *>	m_Playlist[PAGE_COUNT];

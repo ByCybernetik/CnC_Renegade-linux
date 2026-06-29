@@ -37,8 +37,6 @@
 #include "sound2dhandle.h"
 #include "audiblesound.h"
 #include "wwprofile.h"
-#if defined(RENEGADE_LINUX)
-#endif
 
 
 //////////////////////////////////////////////////////////////////////
@@ -170,8 +168,6 @@ Sound2DHandleClass::Set_Sample_Pan (S32 pan)
 {
 	if (SampleHandle != (HSAMPLE)INVALID_MILES_HANDLE) {
 		::AIL_set_sample_pan (SampleHandle, pan);
-#if defined(RENEGADE_LINUX)
-#endif
 	}
 
 	return ;
@@ -304,11 +300,7 @@ void
 Sound2DHandleClass::Set_Sample_User_Data (S32 i, intptr_t val)
 {
 	if (SampleHandle != (HSAMPLE)INVALID_MILES_HANDLE) {
-#if defined(RENEGADE_LINUX)
 		::AIL_set_sample_user_data (SampleHandle, i, val);
-#else
-		::AIL_set_sample_user_data (SampleHandle, i, (S32)val);
-#endif
 	}
 
 	return ;
@@ -326,11 +318,7 @@ Sound2DHandleClass::Get_Sample_User_Data (S32 i)
 	intptr_t retval = 0;
 
 	if (SampleHandle != (HSAMPLE)INVALID_MILES_HANDLE) {
-#if defined(RENEGADE_LINUX)
 		retval = ::AIL_sample_user_data (SampleHandle, i);
-#else
-		retval = (intptr_t)::AIL_sample_user_data (SampleHandle, i);
-#endif
 	}
 
 	return retval;
@@ -377,8 +365,8 @@ Sound2DHandleClass::Set_Sample_Playback_Rate (S32 rate)
 //
 //////////////////////////////////////////////////////////////////////
 void
-Sound2DHandleClass::Set_Miles_Handle (HSAMPLE handle)
+Sound2DHandleClass::Set_Miles_Handle (uint32 handle)
 {
-	SampleHandle = handle;
+	SampleHandle = (HSAMPLE)handle;
 	return ;
 }

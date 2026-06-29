@@ -98,25 +98,12 @@ else
   if _ww_backend == 'mss'
     add_global_arguments('-DWWAUDIO_USE_MSS', language : 'cpp')
     subdir('deps/miles')
-  elif _ww_backend == 'faudio'
-    subdir('deps/faudio')
-    if get_option('wwaudio_mpg123')
-      subdir('deps/mpg123')
-    endif
-  elif _ww_backend == 'openal'
-    subdir('deps/openal-dll')
-    if get_option('wwaudio_mpg123')
-      subdir('deps/mpg123')
-    endif
   endif
 endif
 
 if _is_linux
-  if get_option('wwaudio_backend') != 'sdl3'
-    warning('Linux port expects -Dwwaudio_backend=sdl3; overriding')
-  endif
-  if get_option('wwaudio_mpg123')
-    subdir('deps/mpg123')
+  if not get_option('disable_audio')
+    message('Linux: audio via SDL3 + FFmpeg')
   endif
 endif
 
@@ -158,9 +145,6 @@ summary('wwtranslatedb', wwtranslatedb_lib.full_path(), section : 'Static librar
 summary('wwnet', wwnet_lib.full_path(), section : 'Static libraries')
 summary('ww3d2', ww3d2_lib.full_path(), section : 'Static libraries')
 summary('wwaudio', wwaudio_lib.full_path(), section : 'Static libraries')
-if not _is_linux and get_option('wwaudio_backend') == 'faudio' and get_option('wwaudio_mpg123')
-  summary('mp3_faudio_player', mp3_faudio_player.full_path(), section : 'Targets')
-endif
 summary('wwphys', wwphys_lib.full_path(), section : 'Static libraries')
 summary('binkmovie', binkmovie_lib.full_path(), section : 'Static libraries')
 summary('scontrol', scontrol_lib.full_path(), section : 'Static libraries')

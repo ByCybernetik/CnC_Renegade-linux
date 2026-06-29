@@ -37,7 +37,11 @@
 #ifndef __WWAUDIO_THREADS_H
 #define __WWAUDIO_THREADS_H
 
+#if defined(RENEGADE_LINUX)
+#include "mss_stub.h"
+#else
 #include <windows.h>
+#endif
 #include "vector.h"
 #include "mutex.h"
 

@@ -188,6 +188,7 @@ SmartGameObj::SmartGameObj( void ) :
 SmartGameObj::~SmartGameObj( void )
 {
 	GameObjManager::Remove_Smart( this );
+	Listener->Register_Callback (AudioCallbackClass::EVENT_NONE, NULL);
 	Listener->Remove_From_Scene();
 	Listener->Release_Ref();
 	REF_PTR_RELEASE(StealthEffect);
@@ -698,21 +699,9 @@ void SmartGameObj::Apply_Control( void )
 			if ( Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_USE ) ) {
 				Get_Weapon()->Next_C4_Detonation_Mode();
 			}
-#if defined(RENEGADE_LINUX)
-			{
-				static bool s_last_reload_key = false;
-				const bool reload_key = Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_RELOAD );
-
-				if ( reload_key && !s_last_reload_key ) {
-					Get_Weapon()->Force_Reload();
-				}
-				s_last_reload_key = reload_key;
-			}
-#else
 			if ( Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_RELOAD ) ) {
 				Get_Weapon()->Force_Reload();
 			}
-#endif
 
 			// If we fire a weapon, we de-cloak for a certain amount of time
 			if (	Control.Get_Boolean( ControlClass::BOOLEAN_WEAPON_FIRE_PRIMARY ) ||
@@ -894,6 +883,7 @@ bool	SmartGameObj::Is_Obj_Visible( PhysicalGameObj *obj )
 void	SmartGameObj::On_Logical_Heard (LogicalListenerClass *listener, LogicalSoundClass *sound_obj) 
 {
 	(void)listener;
+	if (sound_obj == NULL) return;
 
 	CombatSound sound;
 	sound.Type = (CombatSoundType)sound_obj->Get_Type_Mask();

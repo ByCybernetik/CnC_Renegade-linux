@@ -72,13 +72,12 @@ public:
 	//	Handle access
 	//
 	H3DSAMPLE					Get_H3DSAMPLE (void)		{ return SampleHandle; }
-	HSAMPLE						Get_HSAMPLE (void)		{ return (HSAMPLE)SampleHandle; }
 
 
 	//
 	//	Inherited
 	//
-	void							Set_Miles_Handle (H3DSAMPLE handle);
+	void							Set_Miles_Handle (uint32 handle);
 	void							Initialize (SoundBufferClass *buffer);
 	void							Start_Sample (void);
 	void							Stop_Sample (void);
@@ -93,7 +92,7 @@ public:
 	void							Set_Sample_MS_Position (U32 ms);
 	void							Get_Sample_MS_Position (S32 *len, S32 *pos);
 	void							Set_Sample_User_Data (S32 i, intptr_t val);
-	intptr_t						Get_Sample_User_Data (S32 i);
+	intptr_t							Get_Sample_User_Data (S32 i);
 	S32							Get_Sample_Playback_Rate (void);
 	void							Set_Sample_Playback_Rate (S32 rate);
 	

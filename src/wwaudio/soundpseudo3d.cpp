@@ -42,11 +42,6 @@
 #include "soundchunkids.h"
 #include "persistfactory.h"
 #include "soundhandle.h"
-#include "sound2dhandle.h"
-#include "audiblesound.h"
-#include "wwmath.h"
-#if defined(RENEGADE_LINUX)
-#endif
 
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -113,23 +108,7 @@ SoundPseudo3DClass::operator= (const SoundPseudo3DClass &src)
 void
 SoundPseudo3DClass::Set_Miles_Handle (MILES_HANDLE handle)
 {
-	/*
-	** Footstep / surface SFX: use one-shot 2D PCM (not AIL_open_stream on the HSAMPLE).
-	** Streaming + rewind_resubmit stacked buffers and crashed inside FAudio matrix code.
-	*/
-	Free_Miles_Handle ();
-
-	if (handle != INVALID_MILES_HANDLE && m_Buffer != NULL) {
-		m_SoundHandle = new Sound2DHandleClass;
-		m_SoundHandle->Set_Miles_Handle (handle);
-
-#if defined(RENEGADE_LINUX)
-		m_SoundHandle->Set_Sample_User_Data (INFO_OBJECT_PTR, (intptr_t)this);
-#endif
-
-		Initialize_Miles_Handle ();
-	}
-
+	AudibleSoundClass::Set_Miles_Handle (handle);
 	return ;
 }
 
@@ -144,7 +123,6 @@ SoundPseudo3DClass::Initialize_Miles_Handle (void)
 {
 	AudibleSoundClass::Initialize_Miles_Handle ();
 	Update_Pseudo_Volume ();
-	Update_Pseudo_Pan ();
 	return ;
 }
 
@@ -163,47 +141,27 @@ SoundPseudo3DClass::Update_Pseudo_Volume (float distance)
 	// Only do this if the sound is really playing
 	//
 	if (m_SoundHandle != NULL) {
-
-#if defined(RENEGADE_LINUX)
-		if (!Verify_Linux_Miles_Handle_Ownership ()) {
-			return;
-		}
-#endif
 		
 		float volume_mod = Determine_Real_Volume ();
-		if (m_FadeType == FADE_IN && m_FadeTime > 0) {
-			float percent = 1.0F - ((float)m_FadeTimer / (float)m_FadeTime);
-			volume_mod *= WWMath::Clamp (percent, 0.0F, 1.0F);
-		}
 		float max_distance = Get_DropOff_Radius ();
 		float min_distance = Get_Max_Vol_Radius ();
 		float delta = max_distance - min_distance;
 
 		// Determine a normalized volume from the position
 		float volume = 1.0F;
-		if (delta > 0.001F && distance > min_distance) {
+		if (distance > min_distance) {
 			volume = 1.0F - ((distance - min_distance) / delta);
 			volume = min (volume, 1.0F);
 			volume = max (volume, 0.0F);			
-		} else if (delta <= 0.001F && distance > max_distance) {
-			volume = 0.0F;
 		}
 
 		// Multiply the 'max' volume with the calculated volume
 		volume = volume * volume_mod;
 
 		//
-		// Pass the volume on (Miles 0..127; round so low levels are not stuck at 0 or 1).
+		// Pass the volume on
 		//
-		{
-			int miles_vol = (int)(volume * 127.0F + 0.5F);
-			if (miles_vol < 0) {
-				miles_vol = 0;
-			} else if (miles_vol > 127) {
-				miles_vol = 127;
-			}
-			m_SoundHandle->Set_Sample_Volume (miles_vol);
-		}
+		m_SoundHandle->Set_Sample_Volume (int(volume * 127.0F));
 	}
 
 	return ;
@@ -253,12 +211,6 @@ SoundPseudo3DClass::Update_Pseudo_Pan (void)
 	// Only do this if the sound is really playing
 	//
 	if (m_SoundHandle != NULL) {
-
-#if defined(RENEGADE_LINUX)
-		if (!Verify_Linux_Miles_Handle_Ownership ()) {
-			return;
-		}
-#endif
 		
 		//
 		//	Transform the sound's position into 'listener-space'
@@ -278,9 +230,6 @@ SoundPseudo3DClass::Update_Pseudo_Pan (void)
 		// Pass the pan on
 		//
 		m_SoundHandle->Set_Sample_Pan (S32(pan * 127.0F));
-
-#if defined(RENEGADE_LINUX)
-#endif
 	}
 
 	return ;
@@ -306,9 +255,9 @@ SoundPseudo3DClass::Allocate_Miles_Handle (void)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////
 void
-SoundPseudo3DClass::Free_Miles_Handle (bool force_end)
+SoundPseudo3DClass::Free_Miles_Handle (void)
 {
-	AudibleSoundClass::Free_Miles_Handle (force_end);
+	AudibleSoundClass::Free_Miles_Handle ();
 	return ;
 }
 
@@ -320,19 +269,16 @@ SoundPseudo3DClass::Free_Miles_Handle (bool force_end)
 ////////////////////////////////////////////////////////////////////////////////////////////////
 bool
 SoundPseudo3DClass::On_Frame_Update (unsigned int milliseconds)
-{
-	/*
-	** Apply fade before distance/pan — otherwise uncull fade lags one frame and
-	** ambients can pop loud when entering a zone.
-	*/
-	bool result = Sound3DClass::On_Frame_Update (milliseconds);
-
+{	
+	// If necessary, update the volume based on the distance
+	// from the listener
 	if (m_SoundHandle != NULL) {
 		Update_Pseudo_Volume ();
 		Update_Pseudo_Pan ();
 	}
 
-	return result;
+	// Allow the base Sound3DClass to process this call
+	return Sound3DClass::On_Frame_Update ();
 }
 
 

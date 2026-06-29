@@ -3479,7 +3479,6 @@ float SoldierGameObj::Say_Dynamic_Dialogue
 			AudibleSoundClass *speech = WWAudioClass::Get_Instance ()->Create_Sound( sound_def_id );
 			if ( speech != NULL ) {
 				speech->Set_Type (AudibleSoundClass::TYPE_DIALOG);
-				duration = (speech->Get_Duration() / 1000.0F);
 
 				//
 				//	Return the sound object to the caller as necessary
@@ -3504,6 +3503,12 @@ float SoldierGameObj::Say_Dynamic_Dialogue
 					//
 					speech->Play();
 				}
+
+				//
+				//	Get duration after Add_To_Scene/Play so Initialize_Miles_Handle
+				// has updated m_Length with the correct PCM duration.
+				//
+				duration = (speech->Get_Duration() / 1000.0F);
 			}
 
 			//

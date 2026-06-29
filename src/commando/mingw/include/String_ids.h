@@ -1,1 +1,1 @@
-../../../scripts/string_ids.h
+../../../combat/string_ids.h

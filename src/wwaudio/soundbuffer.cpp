@@ -140,7 +140,9 @@ SoundBufferClass::Determine_Stats (unsigned char *buffer)
 
 		// Determine how long this sound will play for
 		float bytes_sec = float((m_Channels * m_Rate * m_Bits) >> 3);
-		m_Duration = (unsigned long)((((float)m_Length) / bytes_sec) * 1000.0F);
+		if (bytes_sec > 0.0f && m_Length > 0) {
+			m_Duration = (unsigned long)((((float)m_Length) / bytes_sec) * 1000.0F);
+		}
 	}
 
 	return ;

@@ -1,1 +1,1 @@
-../../../scripts/bool.h
+../../../wwlib/bool.h

@@ -154,7 +154,6 @@ _combat_inc += [
   '../ww3d2',
   '../wwphys',
   '../wwaudio',
-  '../wwaudio/mingw',
   '../wwui',
   '../commando',
 ]

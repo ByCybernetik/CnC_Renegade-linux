@@ -87,21 +87,10 @@ public:
 	virtual HSAMPLE		Get_HSAMPLE (void)		{ return NULL; }
 	virtual HSTREAM		Get_HSTREAM (void)		{ return NULL; }
 
-	/* 2D HSAMPLE and 3D H3DSAMPLE share the same voice pointer on Linux. */
-	HSAMPLE					Get_Miles_Sample (void) const
-	{
-		HSAMPLE sample = Get_HSAMPLE ();
-		if (sample != NULL) {
-			return sample;
-		}
-		H3DSAMPLE sample_3d = Get_H3DSAMPLE ();
-		return (sample_3d != NULL) ? (HSAMPLE)sample_3d : NULL;
-	}
-
 	//
 	//	Initialization
 	//	
-	virtual void	Set_Miles_Handle (HSAMPLE handle) = 0;
+	virtual void	Set_Miles_Handle (uint32 handle) = 0;
 	virtual void	Initialize (SoundBufferClass *buffer);
 
 	//
@@ -123,8 +112,6 @@ public:
 	virtual intptr_t	Get_Sample_User_Data (S32 i) = 0;
 	virtual S32		Get_Sample_Playback_Rate (void) = 0;
 	virtual void	Set_Sample_Playback_Rate (S32 rate) = 0;
-
-	bool				Is_Sample_Ready (void) const { return Buffer != NULL; }
 	
 protected:
 	

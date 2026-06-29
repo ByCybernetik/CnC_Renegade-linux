@@ -37,8 +37,6 @@ _wwonline_inc_dirs = [
   '../wwbitpack',
   '../wwnet',
   '../wwaudio',
-  '../wwaudio/mingw',
-  '../wwaudio/linux',
   '../combat',
   '../../Code/wolapi',
 ]

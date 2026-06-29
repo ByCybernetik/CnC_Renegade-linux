@@ -45,6 +45,8 @@
 #include "threads.h"
 #include "wwmemlog.h"
 #include "systimer.h"
+
+
 DEFINE_AUTO_POOL(SoundSceneClass::AudibleInfoClass, 64);
 
 
@@ -176,19 +178,42 @@ SoundSceneClass::Collect_Logical_Sounds (int listener_count)
 		//	Now loop through the list of sounds this listener can hear
 		// and notify their callback.
 		//
-		SoundCullObjClass * cull_obj;
+		//	NOTE: Collect_Objects builds a linked list threaded through
+		//	NextCollected pointers embedded in each CullableClass.
+		//	Remove_Object does NOT clear these pointers, so if a callback
+		//	triggers Remove_Logical_Sound for another sound in the same
+		//	list, the freed CullableClass remains in the collection chain
+		//	causing a use-after-free crash.  We pre-ref every collected
+		//	object (and its LogicalSoundClass) to keep them alive across
+		//	the entire iteration.
+		//
+		DynamicVectorClass<SoundCullObjClass *> collected_cull;
+		DynamicVectorClass<LogicalSoundClass *> collected_snd;
+
+		SoundCullObjClass *cull_obj;
 		for (	cull_obj = m_LogicalCullingSystem.Get_First_Collected_Object();
 				cull_obj != NULL;
 				cull_obj = m_LogicalCullingSystem.Get_Next_Collected_Object (cull_obj))
 		{
-			//
-			// Get a pointer to the current 'cull-sound' object.
-			//
-			LogicalSoundClass *sound_obj = (LogicalSoundClass *)cull_obj->Peek_Sound_Obj ();
+			LogicalSoundClass *snd = (LogicalSoundClass *)cull_obj->Peek_Sound_Obj ();
+			cull_obj->Add_Ref ();
+			if (snd != NULL) {
+				snd->Add_Ref ();
+			}
+			collected_cull.Add (cull_obj);
+			collected_snd.Add (snd);
+		}
+
+		for (int index = 0; index < collected_cull.Count (); index ++) {
+			SoundCullObjClass *cull_obj	= collected_cull[index];
+			LogicalSoundClass *sound_obj	= collected_snd[index];
+			if (sound_obj == NULL) {
+				continue;
+			}
 
 			//
-			//	Test this sound against the scale associated with the current listener to
-			// see if the listener can really "hear" the sound.
+			//	Test this sound against the scale associated with the current
+			// listener to see if the listener can really "hear" the sound.
 			//
 			const Vector3 &sound_pos	= cull_obj->Get_Bounding_Box ().Center;
 			Vector3 listener_pos			= listener->Get_Position ();
@@ -204,6 +229,13 @@ SoundSceneClass::Collect_Logical_Sounds (int listener_count)
 					listener->On_Event (AudioCallbackClass::EVENT_LOGICAL_HEARD, (uintptr_t)listener, (uintptr_t)sound_obj);
 				}
 			}
+		}
+
+		for (int index = 0; index < collected_cull.Count (); index ++) {
+			if (collected_snd[index] != NULL) {
+				collected_snd[index]->Release_Ref ();
+			}
+			collected_cull[index]->Release_Ref ();
 		}
 	}
 
@@ -347,27 +379,19 @@ SoundSceneClass::On_Frame_Update (unsigned int milliseconds)
 	//	First, collect any auxiliary sounds that are audible
 	//
 	if (m_2ndListener != NULL) {
-		{ WWPROFILE( "Scene:2ndListener" );
-			m_2ndListener->On_Frame_Update (milliseconds);
-		}
-		{ WWPROFILE( "Scene:CollectAux" );
-			Collect_Audible_Sounds (m_2ndListener, auxiliary_sounds);
-		}
+		m_2ndListener->On_Frame_Update (milliseconds);
+		Collect_Audible_Sounds (m_2ndListener, auxiliary_sounds);
 	}
 
 	//
 	// Update the listener's position/velocity, etc
 	//
-	{ WWPROFILE( "Scene:ListenerUpdate" );
-		m_Listener->On_Frame_Update (milliseconds);
-	}
+	m_Listener->On_Frame_Update (milliseconds);
 
 	//
 	//	Collect the primary sounds that are audible
 	//
-	{ WWPROFILE( "Scene:CollectPrimary" );
-		Collect_Audible_Sounds (m_Listener, primary_sounds);
-	}
+	Collect_Audible_Sounds (m_Listener, primary_sounds);
 
 	//
 	//	Loop through the auxiliary sounds and make sure
@@ -1342,68 +1366,3 @@ SoundSceneClass::Set_2nd_Listener (Listener3DClass *listener)
 	REF_PTR_SET (m_2ndListener, listener);
 	return ;
 }
-
-
-#if defined(RENEGADE_LINUX) || defined(WWAUDIO_USE_MSS)
-
-#include "audiblesound.h"
-#if defined(RENEGADE_LINUX)
-#include "linux/mss_stub.h"
-#endif
-
-static void
-scene_try_detach_sample (AudibleSoundClass *sound, HSAMPLE sample, int *detached)
-{
-	if (sound == NULL || detached == NULL) {
-		return;
-	}
-
-	if (sound->Linux_Detach_If_Holding_Sample ((void *)sample)) {
-		(*detached) ++;
-	}
-}
-
-
-int
-SoundSceneClass::Detach_Miles_Sample_Holders (void *miles_sample)
-{
-	HSAMPLE sample = (HSAMPLE)miles_sample;
-	int detached = 0;
-
-	if (sample == NULL || sample == (HSAMPLE)INVALID_MILES_HANDLE) {
-		return 0;
-	}
-
-	{
-		MultiListIterator<SoundCullObjClass> it (&m_StaticSounds);
-		for (it.First (); !it.Is_Done (); it.Next ()) {
-			SoundCullObjClass *cull_obj = it.Peek_Obj ();
-			scene_try_detach_sample (
-				(AudibleSoundClass *)cull_obj->Peek_Sound_Obj (),
-				sample,
-				&detached);
-		}
-	}
-
-	{
-		MultiListIterator<SoundCullObjClass> it (&m_DynamicSounds);
-		for (it.First (); !it.Is_Done (); it.Next ()) {
-			SoundCullObjClass *cull_obj = it.Peek_Obj ();
-			scene_try_detach_sample (
-				(AudibleSoundClass *)cull_obj->Peek_Sound_Obj (),
-				sample,
-				&detached);
-		}
-	}
-
-	{
-		MultiListIterator<AudibleSoundClass> it (&m_LastSoundsAudible);
-		for (it.First (); !it.Is_Done (); it.Next ()) {
-			scene_try_detach_sample (it.Peek_Obj (), sample, &detached);
-		}
-	}
-
-	return detached;
-}
-
-#endif

@@ -175,11 +175,6 @@ class Sound3DClass : public AudibleSoundClass
 		virtual bool					On_Frame_Update (unsigned int milliseconds = 0);		
 		void								Update_Edge_Volume (void);
 
-#if defined(RENEGADE_LINUX)
-		bool								Uses_Linux_Pseudo_Ambient_Playback (void) const;
-		void								Update_Linux_Pseudo_Ambient_Playback (void);
-#endif
-
 		//////////////////////////////////////////////////////////////////////
 		//	Handle information
 		//////////////////////////////////////////////////////////////////////				

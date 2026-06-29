@@ -64,7 +64,7 @@ lvlview_exe = executable(
     wwsaveload_lib,
     platform_lib,
   ],
-  dependencies : [sdl3_dep, vulkan_dep, linux_graphics_dep],
+  dependencies : [sdl3_dep, vulkan_dep, linux_graphics_dep] + wwaudio_deps,
   override_options : ['cpp_std=gnu++11'],
 )
 

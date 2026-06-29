@@ -1,1 +1,1 @@
-../../../scripts/slist.h
+../../../wwlib/slist.h

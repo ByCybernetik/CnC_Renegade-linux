@@ -1,1 +1,1 @@
-../../../wwmath/pot.h
+../../../ww3d2/pot.h

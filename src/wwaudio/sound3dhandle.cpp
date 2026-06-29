@@ -80,9 +80,9 @@ Sound3DHandleClass::Initialize (SoundBufferClass *buffer)
 		//	Configure the 3D sample
 		//
 		U32 success = ::AIL_set_3D_sample_file_len (
-			SampleHandle,
-			Buffer->Get_Raw_Buffer (),
-			(S32)Buffer->Get_Raw_Length ());
+				SampleHandle,
+				Buffer->Get_Raw_Buffer (),
+				(S32)Buffer->Get_Raw_Length ());
 
 		S32 test1 = 0;
 		S32 test2 = 0;
@@ -267,13 +267,9 @@ Sound3DHandleClass::Set_Sample_MS_Position (U32 ms)
 	if (SampleHandle != (H3DSAMPLE)INVALID_MILES_HANDLE) {
 
 		WWASSERT (Buffer != NULL);
-		U32 bytes_per_sec = Buffer->Get_Rate () * Buffer->Get_Channels () * (Buffer->Get_Bits () >> 3);
+		U32 bytes_per_sec = (Buffer->Get_Rate () * Buffer->Get_Bits ()) >> 3;
 		U32 bytes = (ms * bytes_per_sec) / 1000;
-		if (Buffer->Get_Channels () >= 2) {
-			bytes &= ~(U32)3;
-		} else {
-			bytes &= ~(U32)1;
-		}
+		bytes += (bytes & 1);
 		::AIL_set_3D_sample_offset (SampleHandle, bytes);
 	}
 
@@ -289,37 +285,22 @@ Sound3DHandleClass::Set_Sample_MS_Position (U32 ms)
 void
 Sound3DHandleClass::Get_Sample_MS_Position (S32 *len, S32 *pos)
 {
-	if (SampleHandle == (H3DSAMPLE)INVALID_MILES_HANDLE) {
-		return;
-	}
+	if (SampleHandle != (H3DSAMPLE)INVALID_MILES_HANDLE) {
 
-#if defined(RENEGADE_LINUX)
-	::AIL_sample_ms_position ((HSAMPLE)SampleHandle, len, pos);
-	return;
-#endif
-
-	if (Buffer == NULL) {
-		if (len != NULL) {
-			*len = 0;
-		}
+		WWASSERT (Buffer != NULL);
 		if (pos != NULL) {
-			*pos = 0;
+			U32 bytes = ::AIL_3D_sample_offset (SampleHandle);
+			U32 bytes_per_sec = (Buffer->Get_Rate () * Buffer->Get_Bits ()) >> 3;
+			U32 ms = (bytes * 1000) / bytes_per_sec;
+			(*pos) = ms;
 		}
-		return;
-	}
 
-	if (pos != NULL) {
-		U32 bytes = ::AIL_3D_sample_offset (SampleHandle);
-		U32 bytes_per_sec = (Buffer->Get_Rate () * Buffer->Get_Bits ()) >> 3;
-		U32 ms = (bytes_per_sec > 0) ? (bytes * 1000) / bytes_per_sec : 0;
-		(*pos) = ms;
-	}
-
-	if (len != NULL) {
-		U32 bytes = ::AIL_3D_sample_length (SampleHandle);
-		U32 bytes_per_sec = (Buffer->Get_Rate () * Buffer->Get_Bits ()) >> 3;
-		U32 ms = (bytes_per_sec > 0) ? (bytes * 1000) / bytes_per_sec : 0;
-		(*len) = ms;
+		if (len != NULL) {
+			U32 bytes = ::AIL_3D_sample_length (SampleHandle);
+			U32 bytes_per_sec = (Buffer->Get_Rate () * Buffer->Get_Bits ()) >> 3;
+			U32 ms = (bytes * 1000) / bytes_per_sec;
+			(*len) = ms;
+		}
 	}
 
 	return ;
@@ -335,11 +316,7 @@ void
 Sound3DHandleClass::Set_Sample_User_Data (S32 i, intptr_t val)
 {
 	if (SampleHandle != (H3DSAMPLE)INVALID_MILES_HANDLE) {
-#if defined(RENEGADE_LINUX)
 		::AIL_set_3D_object_user_data (SampleHandle, i, val);
-#else
-		::AIL_set_3D_object_user_data (SampleHandle, i, (S32)val);
-#endif
 	}
 	return ;
 }
@@ -356,11 +333,7 @@ Sound3DHandleClass::Get_Sample_User_Data (S32 i)
 	intptr_t retval = 0;
 
 	if (SampleHandle != (H3DSAMPLE)INVALID_MILES_HANDLE) {
-#if defined(RENEGADE_LINUX)
 		retval = AIL_3D_object_user_data (SampleHandle, i);
-#else
-		retval = (intptr_t)AIL_3D_object_user_data (SampleHandle, i);
-#endif
 	}
 
 	return retval;
@@ -407,10 +380,10 @@ Sound3DHandleClass::Set_Sample_Playback_Rate (S32 rate)
 //
 //////////////////////////////////////////////////////////////////////
 void
-Sound3DHandleClass::Set_Miles_Handle (H3DSAMPLE handle)
+Sound3DHandleClass::Set_Miles_Handle (uint32 handle)
 {
 	WWASSERT (SampleHandle == (H3DSAMPLE)INVALID_MILES_HANDLE);
 
-	SampleHandle = handle;
+	SampleHandle = (H3DSAMPLE)handle;
 	return ;
 }

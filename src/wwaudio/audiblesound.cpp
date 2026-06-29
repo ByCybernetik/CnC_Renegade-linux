@@ -52,13 +52,6 @@
 #include "soundstreamhandle.h"
 #include "sound2dhandle.h"
 #include "systimer.h"
-#include "sound3d.h"
-#include "soundpseudo3d.h"
-#include "wwmath.h"
-#include "wwprofile.h"
-#if defined(WWAUDIO_USE_SDL3)
-#include "sdl3_mix_export.h"
-#endif
 
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -316,9 +309,6 @@ AudibleSoundClass::Set_Buffer (SoundBufferClass *buffer)
 	// Get the time (in ms) that this buffer will play for...
 	if (m_Buffer != NULL) {
 		m_Length = m_Buffer->Get_Duration ();
-#if defined(RENEGADE_LINUX)
-		m_Length += RENEGADE_AUDIO_PLAYBACK_TAIL_MS;
-#endif
 	}
 
 	// Reinitialize the handle with this new data
@@ -375,8 +365,11 @@ AudibleSoundClass::Update_Fade (void)
 	//
 	//	Determine what percent we should ramp up or down to...
 	//
-	float percent	= ((float)m_FadeTimer / (float)m_FadeTime);
-	percent			= WWMath::Clamp (percent, 0.0F, 1.0F);
+	float percent = 0.0F;
+	if (m_FadeTime > 0.0F) {
+		percent = ((float)m_FadeTimer / (float)m_FadeTime);
+		percent = WWMath::Clamp (percent, 0.0F, 1.0F);
+	}
 
 	//
 	//	Invert the percent if we're fading in
@@ -399,14 +392,7 @@ AudibleSoundClass::Update_Fade (void)
 		//	Stop the sound when its done fading out
 		//
 		if (m_FadeType == FADE_OUT) {
-#if defined(RENEGADE_LINUX)
-			if (m_IsCulled && AudibleSound_Is_Level_Ambient_Bed (this)) {
-				Free_Miles_Handle (true);
-			} else
-#endif
-			{
-				Stop ();
-			}
+			Stop ();
 		}
 
 		m_FadeType = FADE_NONE;
@@ -474,222 +460,6 @@ AudibleSoundClass::Verify_Playability (void)
 }
 
 
-static const int LEVEL_AMBIENT_UNCULL_FADE_MS = 900;
-static const int STATIC_SOUND_UNCULL_FADE_MS = 450;
-
-bool AudibleSound_Is_Level_Ambient_Bed (const AudibleSoundClass *sound)
-{
-	if (sound == NULL || !sound->Is_In_Scene ()) {
-		return false;
-	}
-
-	if (sound->Get_Loop_Count () != INFINITE_LOOPS) {
-		return false;
-	}
-
-	const Sound3DClass *sound3d = sound->As_Sound3DClass ();
-	if (sound3d != NULL) {
-		return sound3d->Is_Static ();
-	}
-
-	return true;
-}
-
-
-#if defined(RENEGADE_LINUX) || defined(WWAUDIO_USE_SDL3) || defined(WWAUDIO_USE_MSS) || defined(WWAUDIO_USE_FAUDIO) || defined(WWAUDIO_USE_OPENAL)
-
-bool AudibleSound_Is_2D_Environmental_Loop (const AudibleSoundClass *sound)
-{
-	if (sound == NULL) {
-		return false;
-	}
-
-	/*
-	** Wind/rain: 2D infinite loops, Play() without Add_To_Scene (WeatherMgr).
-	*/
-	return	sound->Get_Loop_Count () == INFINITE_LOOPS &&
-			!sound->Is_In_Scene () &&
-			sound->As_Sound3DClass () == NULL &&
-			sound->Get_Type () != AudibleSoundClass::TYPE_MUSIC &&
-			sound->Get_Type () != AudibleSoundClass::TYPE_DIALOG;
-}
-
-
-bool AudibleSound_Is_Ambient_Loop_Sound (const AudibleSoundClass *sound)
-{
-	return	AudibleSound_Is_Level_Ambient_Bed (sound) ||
-			AudibleSound_Is_2D_Environmental_Loop (sound);
-}
-
-#endif
-
-
-#if defined(WWAUDIO_USE_SDL3)
-#include "sdl3_mix_export.h"
-#include <cstring>
-
-
-static bool audiblesound_substr_ci (const char *haystack, const char *needle)
-{
-	size_t needle_len;
-
-	if (haystack == NULL || needle == NULL || needle[0] == '\0') {
-		return false;
-	}
-
-	needle_len = ::strlen (needle);
-	for (; *haystack != '\0'; ++haystack) {
-		size_t i;
-
-		for (i = 0; i < needle_len; ++i) {
-			char h = haystack[i];
-			char n = needle[i];
-
-			if (h >= 'A' && h <= 'Z') {
-				h = (char)(h + ('a' - 'A'));
-			}
-			if (n >= 'A' && n <= 'Z') {
-				n = (char)(n + ('a' - 'A'));
-			}
-			if (h != n) {
-				break;
-			}
-		}
-		if (i == needle_len) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-
-static bool AudibleSound_Name_Looks_Like_Dialog (const char *name)
-{
-	static const char *voice_tokens[] = {
-		"dsgn", "evag", "eval", "gemg", "evac", "mein",
-		"gbmg", "gbrs", "ncxs", "ncxk", "tdfa", "evan",
-		"gomg", "itos", "itoc", "nemg",
-		"in_gemg", "in_evag", "in_eval", "in_evac", "in_gomg",
-		NULL
-	};
-	int i;
-
-	if (name == NULL || name[0] == '\0') {
-		return false;
-	}
-
-	/* Legacy EVA one-shots: 00-N066E, 00-N170E, ... */
-	if (::strncmp (name, "00-N", 4) == 0 || ::strncmp (name, "00-n", 4) == 0) {
-		return true;
-	}
-
-	if (audiblesound_substr_ci (name, "eva_")) {
-		return true;
-	}
-
-	/*
-	** Mission VO presets/wavs: *DSGN*I1*EVAG*_SND, m01eval_dsgn..._snd.wav, etc.
-	*/
-	if (	!audiblesound_substr_ci (name, "_snd") &&
-			!audiblesound_substr_ci (name, ".wav"))
-	{
-		return false;
-	}
-
-	for (i = 0; voice_tokens[i] != NULL; ++i) {
-		if (audiblesound_substr_ci (name, voice_tokens[i])) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-
-bool AudibleSound_Is_Dialog_Sound (const AudibleSoundClass *sound)
-{
-	AudibleSoundDefinitionClass *def;
-
-	if (sound == NULL) {
-		return false;
-	}
-
-	if (sound->Get_Type () == AudibleSoundClass::TYPE_DIALOG) {
-		return true;
-	}
-
-	if (AudibleSound_Name_Looks_Like_Dialog (sound->Get_Filename ())) {
-		return true;
-	}
-
-	def = sound->Get_Definition ();
-	if (def != NULL && AudibleSound_Name_Looks_Like_Dialog (def->Get_Name ())) {
-		return true;
-	}
-
-	return false;
-}
-
-
-void AudibleSound_Apply_Dialog_Classification (AudibleSoundClass *sound)
-{
-	if (sound == NULL) {
-		return;
-	}
-
-	if (	sound->Get_Type () != AudibleSoundClass::TYPE_DIALOG &&
-			AudibleSound_Is_Dialog_Sound (sound))
-	{
-		sound->Set_Type (AudibleSoundClass::TYPE_DIALOG);
-	}
-}
-
-
-int AudibleSound_Resolve_Voice_Bus (const AudibleSoundClass *sound)
-{
-	if (sound == NULL) {
-		return SDL3_VOICE_BUS_WEAPON;
-	}
-
-	if (sound->Get_Runtime_Priority () >= 100.0F) {
-		return SDL3_VOICE_BUS_UI;
-	}
-
-	if (AudibleSound_Is_Dialog_Sound (sound)) {
-		return SDL3_VOICE_BUS_DIALOG;
-	}
-
-	if (AudibleSound_Is_Ambient_Loop_Sound (sound)) {
-		return SDL3_VOICE_BUS_AMBIENT;
-	}
-
-	/*
-	** Level wind beds (wnd*.wav) loop forever; keep off weapon bus even when not static.
-	*/
-	if (sound->Get_Loop_Count () == INFINITE_LOOPS) {
-		const char *fname = sound->Get_Filename ();
-
-		if (	fname != NULL &&
-				(strncmp(fname, "wnd", 3) == 0 || strncmp(fname, "amb", 3) == 0)) {
-			return SDL3_VOICE_BUS_AMBIENT;
-		}
-	}
-
-	/*
-	** Weather pseudo-3D (thunder etc.) was on weapon bus alongside reload SFX
-	** (logs: thunder06.wav bus 0 during rifle_reload.wav — sounds like stuck reload).
-	 */
-	if (	sound->As_SoundPseudo3DClass () != NULL &&
-			sound->Get_Loop_Count () == 1) {
-		return SDL3_VOICE_BUS_AMBIENT;
-	}
-
-	return SDL3_VOICE_BUS_WEAPON;
-}
-#endif
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //	Play
@@ -705,20 +475,6 @@ AudibleSoundClass::Play (bool alloc_handle)
 	//
 	if (Verify_Playability () == false) {
 		return false;
-	}
-
-	/*
-	** Static level ambients stay on the playlist while culled but must not grab a
-	** hardware handle until uncull — otherwise they pop in at full volume.
-	*/
-	if (m_IsCulled && AudibleSound_Is_Level_Ambient_Bed (this)) {
-		if (m_State != STATE_PLAYING) {
-			WWAudioClass::Get_Instance ()->Add_To_Playlist (this);
-			m_State		= STATE_PLAYING;
-			m_Timestamp	= TIMEGETTIME ();
-			m_LoopsLeft	= m_LoopCount;
-		}
-		return true;
 	}
 
 	//
@@ -778,15 +534,6 @@ AudibleSoundClass::Play (bool alloc_handle)
 			const StringClass &text = m_Definition->Get_Display_Text ();
 			WWAudioClass::Get_Instance ()->Fire_Text_Callback (this, text);
 		}
-	} else if (m_SoundHandle != NULL) {
-		/*
-		** Re-trigger one-shot SFX (weapon fire reuses the same AudibleSound).
-		** Miles restarts the sample; FAudio needs an explicit rewind + start.
-		*/
-		m_SoundHandle->Set_Sample_MS_Position (0);
-		m_SoundHandle->Start_Sample ();
-		m_Timestamp = TIMEGETTIME ();
-		m_LoopsLeft = m_LoopCount;
 	}
 
 	return true;
@@ -811,22 +558,6 @@ AudibleSoundClass::Pause (void)
 		// location
 		//
 		m_CurrentPosition = TIMEGETTIME () - m_Timestamp;
-
-#if defined(RENEGADE_LINUX)
-		/*
-		** Pause menu swaps sound pages and pauses the whole PRIMARY playlist.
-		** Free_Miles_Handle()->End_Sample tears down PCM; mass Resume() then
-		** races for ~32 handles and ambient loops often stay silent.
-		** Hold the voice and stop playback only for infinite ambient beds.
-		*/
-		if (	m_SoundHandle != NULL &&
-				AudibleSound_Is_Ambient_Loop_Sound (this))
-		{
-			m_SoundHandle->Stop_Sample ();
-			m_State = STATE_PAUSED;
-			return true;
-		}
-#endif
 
 		//
 		//	Get rid of our play-handle (this will stop the sound)
@@ -862,31 +593,6 @@ AudibleSoundClass::Resume (void)
 		//	Re-sync our timestamp
 		//
 		m_Timestamp = TIMEGETTIME () - m_CurrentPosition;
-
-#if defined(RENEGADE_LINUX)
-		if (	m_SoundHandle != NULL &&
-				AudibleSound_Is_Ambient_Loop_Sound (this))
-		{
-			m_SoundHandle->Resume_Sample ();
-
-#if defined(WWAUDIO_USE_SDL3)
-			{
-				HSAMPLE miles_sample = m_SoundHandle->Get_Miles_Sample ();
-
-				sdl3_voice_set_bus (
-					miles_sample,
-					AudibleSound_Resolve_Voice_Bus (this));
-			}
-#endif
-
-			if (m_CurrentPosition > 0) {
-				Seek (m_CurrentPosition);
-			}
-
-			m_State = STATE_PLAYING;
-			return true;
-		}
-#endif
 
 		//
 		// Ensure we have a play handle...
@@ -925,7 +631,7 @@ AudibleSoundClass::Resume (void)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////
 bool
-AudibleSoundClass::Stop (bool remove_from_playlist, bool sfx_natural_end)
+AudibleSoundClass::Stop (bool remove_from_playlist)
 {
 	MMSLockClass lock;
 
@@ -939,24 +645,13 @@ AudibleSoundClass::Stop (bool remove_from_playlist, bool sfx_natural_end)
 		// Actually stop the sample from playing
 		//
 		if (m_SoundHandle != NULL) {
-#if defined(RENEGADE_LINUX)
-			const bool allow_tail_drain =
-				(m_LoopCount == 1 &&
-				 m_Type == TYPE_SOUND_EFFECT &&
-				 m_RuntimePriority < DEF_RELOAD_RUNTIME_PRIORITY);
-			if (allow_tail_drain && sfx_natural_end) {
-				Free_Miles_Handle (false);
-			} else {
-				m_SoundHandle->Stop_Sample ();
-				Free_Miles_Handle (true);
-			}
-#else
 			m_SoundHandle->Stop_Sample ();
-			Free_Miles_Handle ();
-#endif
-		} else {
-			Free_Miles_Handle ();
 		}
+
+		//
+		// Free up the handle we have been using
+		//
+		Free_Miles_Handle ();
 		m_State = STATE_STOPPED;
 		retval = true;
 
@@ -1003,7 +698,7 @@ AudibleSoundClass::Seek (unsigned long milliseconds)
 {
 	MMSLockClass lock;
 
-	if (milliseconds >= 0 && (m_Length == 0 || milliseconds < m_Length)) {
+	if ((milliseconds >= 0) && (milliseconds < m_Length)) {
 
 		// Record our new position and recalculate the 'starting' timestamp
 		// from this information
@@ -1040,11 +735,9 @@ AudibleSoundClass::Set_Miles_Handle (MILES_HANDLE handle)
 	//
 	if (handle != INVALID_MILES_HANDLE && m_Buffer != NULL) {
 
-		/*
-		** StreamSoundBufferClass (> DEF_MAX_2D_BUFFER_SIZE): no raw bytes in RAM, only filename.
-		** Must use SoundStreamHandleClass (AIL_open_stream_by_sample). Sound2DHandle with NULL
-		** buffer is silent on FAudio (logs: ui_play handle=1 but no voice_upload).
-		*/
+		//
+		//	Determine which type of sound handle to create, streaming or standard 2D
+		//
 		if (m_Buffer->Is_Streaming ()) {
 			m_SoundHandle = new SoundStreamHandleClass;
 		} else {
@@ -1054,60 +747,12 @@ AudibleSoundClass::Set_Miles_Handle (MILES_HANDLE handle)
 		//
 		//	Configure the sound handle
 		//
-		m_SoundHandle->Set_Miles_Handle ((HSAMPLE)handle);
-
-#if defined(RENEGADE_LINUX)
-		m_SoundHandle->Set_Sample_User_Data (INFO_OBJECT_PTR, (intptr_t)this);
-#endif
-
-		/*
-		** Fade must be configured before Initialize/Start_Sample. Logs at 50473 showed
-		** init_vol=0.43 because fade was applied only after Initialize_Miles_Handle.
-		*/
-		if (AudibleSound_Is_Level_Ambient_Bed (this) && !m_IsCulled) {
-			if (m_LoopCount == INFINITE_LOOPS && m_CurrentPosition == 0) {
-				unsigned long len = m_Length;
-				if (len == 0 && m_Buffer != NULL) {
-					len = m_Buffer->Get_Duration ();
-				}
-				if (len > 500) {
-					m_CurrentPosition = (unsigned long)(WWMath::Random_Float (0.15F, 0.85F) * (float)len);
-					if (m_State == STATE_PLAYING || m_State == STATE_PAUSED) {
-						m_Timestamp = TIMEGETTIME () - m_CurrentPosition;
-					}
-				}
-			}
-
-			m_FadeTime	= LEVEL_AMBIENT_UNCULL_FADE_MS;
-			m_FadeTimer	= LEVEL_AMBIENT_UNCULL_FADE_MS;
-			m_FadeType	= FADE_IN;
-			Internal_Set_Volume (0.0F);
-		}
+		m_SoundHandle->Set_Miles_Handle (handle);
 
 		//
 		//	Use this new handle
 		//
 		Initialize_Miles_Handle ();
-
-#if defined(WWAUDIO_USE_SDL3)
-		if (m_SoundHandle != NULL) {
-			HSAMPLE miles_sample = m_SoundHandle->Get_Miles_Sample ();
-
-			sdl3_voice_set_bus (
-				miles_sample,
-				AudibleSound_Resolve_Voice_Bus (this));
-		}
-#endif
-
-		if (	m_SoundHandle != NULL &&
-				AudibleSound_Is_Level_Ambient_Bed (this) &&
-				!m_IsCulled)
-		{
-			if (m_CurrentPosition > 0) {
-				Seek (m_CurrentPosition);
-			}
-			Internal_Set_Volume (0.0F);
-		}
 	}
 
 	return ;
@@ -1124,15 +769,24 @@ AudibleSoundClass::Initialize_Miles_Handle (void)
 {
 	MMSLockClass lock;
 
+	//
 	// If this sound is already playing, then update its
 	// playing position to make sure we really should
 	// be playing it... (it will free the miles handle if not)
+	//
+	// Note: We must sync the timestamp from the saved current position
+	// first to account for wall-clock time that passed while the sound
+	// was culled. Otherwise Update_Play_Position would compute a
+	// play_time that includes the culled period and may kill the sound
+	// prematurely.
+	//
 	if (m_State == STATE_PLAYING) {
+		m_Timestamp = TIMEGETTIME () - m_CurrentPosition;
 		Update_Play_Position ();
 	}
 
 	// Do we have a valid sample handle from miles?
-	if (m_SoundHandle != NULL) {
+		if (m_SoundHandle != NULL) {
 
 		//
 		//	Initialize the handle
@@ -1142,11 +796,20 @@ AudibleSoundClass::Initialize_Miles_Handle (void)
 		//
 		// Record the total length of the sample in milliseconds...
 		//
-		m_SoundHandle->Get_Sample_MS_Position ((S32 *)&m_Length, NULL);
+		S32 length_ms = 0;
+		S32 cur_pos_ms = 0;
+		m_SoundHandle->Get_Sample_MS_Position (&length_ms, &cur_pos_ms);
+		if (m_Type == TYPE_DIALOG) {
+			unsigned long now = TIMEGETTIME ();
+			fprintf (stderr, "[DIALOG] T=%lu InitHandle: len_ms=%d cur=%d frames via Get_Sample_MS_Position, buf_dur=%lu\n",
+				now, length_ms, cur_pos_ms, m_Buffer ? m_Buffer->Get_Duration () : 0);
+		}
+		m_Length = (unsigned long)length_ms;
 
 		//
 		// Pass our cached settings onto miles
 		//
+		m_SoundHandle->Set_Sample_Volume (0);
 		m_SoundHandle->Set_Sample_Pan (int(m_Pan * 127.0F));
 		m_SoundHandle->Set_Sample_Loop_Count (m_LoopCount);
 
@@ -1157,26 +820,26 @@ AudibleSoundClass::Initialize_Miles_Handle (void)
 			Set_Pitch_Factor (m_PitchFactor);
 		}
 
-		//
-		// Pass the 'real' volume onto miles before Start (logs: gain 1000/vol 1.0 then real vol after Start).
-		//
-		float real_volume = Determine_Real_Volume ();
-		if (m_FadeType == FADE_IN && m_FadeTime > 0) {
-			float percent = 1.0F - ((float)m_FadeTimer / (float)m_FadeTime);
-			real_volume *= WWMath::Clamp (percent, 0.0F, 1.0F);
-		}
-		m_SoundHandle->Set_Sample_Volume (int(real_volume * 127.0F));
-
-		// If this sound is already playing (and just now got a handle) then start it.
+		// If this sound is already playing (and just now got a handle)
+		// then make sure we start it.
 		if (m_State == STATE_PLAYING) {
 			m_SoundHandle->Start_Sample ();
+
+			// Update the loop count based on the number of loops left
 			m_SoundHandle->Set_Sample_Loop_Count (m_LoopsLeft);
 		}
 
-		// Seek only when non-zero (Seek(0) on a fresh buffer stacked FAudio buffers for SFX).
-		if (m_CurrentPosition > 0) {
-			Seek (m_CurrentPosition);
-		}
+		// Seek to the position of the sound where we last left off.
+		// For example, this sound could have gotten bumped due to a low priority,
+		// but is now back and ready to resume at the position it would have been
+		// at if it was never bumped.
+		Seek (m_CurrentPosition);
+
+		//
+		// Pass the 'real' volume onto miles
+		//
+		float real_volume = Determine_Real_Volume ();
+		m_SoundHandle->Set_Sample_Volume (int(real_volume * 127.0F));
 
 		//
 		// Associate this object instance with the handle
@@ -1194,7 +857,7 @@ AudibleSoundClass::Initialize_Miles_Handle (void)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////
 void
-AudibleSoundClass::Free_Miles_Handle (bool force_end)
+AudibleSoundClass::Free_Miles_Handle (void)
 {
 	MMSLockClass lock;
 
@@ -1202,99 +865,37 @@ AudibleSoundClass::Free_Miles_Handle (bool force_end)
 	if (m_SoundHandle != NULL) {
 
 		//
-		// Release our hold on this handle
+		// Save current playback position before freeing the handle
+		// so that reacquire after culling can resume at the right spot.
 		//
-		m_SoundHandle->Set_Sample_User_Data (INFO_OBJECT_PTR, (intptr_t)0);
-
-#if defined(RENEGADE_LINUX)
-		if (!force_end && m_LoopCount == 1 && m_Type == TYPE_SOUND_EFFECT) {
-			if (m_RuntimePriority >= DEF_RELOAD_RUNTIME_PRIORITY) {
-				force_end = true;
+		if (m_State == STATE_PLAYING) {
+			S32 cur_pos = 0;
+			m_SoundHandle->Get_Sample_MS_Position (NULL, &cur_pos);
+			if (cur_pos > 0 && (unsigned long)cur_pos < m_Length) {
+				m_CurrentPosition = (unsigned long)cur_pos;
 			}
 		}
-		if (!force_end && m_LoopCount == 1 && m_Type == TYPE_SOUND_EFFECT) {
-			delete m_SoundHandle;
-			m_SoundHandle = NULL;
-			return;
-		}
-#endif
 
+		//
+		// Release our hold on this handle
+		//
+		m_SoundHandle->Set_Sample_User_Data (INFO_OBJECT_PTR, NULL);
 		m_SoundHandle->End_Sample ();
 
+		//
+		// Remove the association between file handle and AudibleSoundClass object
+		//
+		//m_SoundHandle->Set_Sample_User_Data (INFO_OBJECT_PTR, NULL);
+
+		//
+		//	Free the sound handle object
+		//
 		delete m_SoundHandle;
 		m_SoundHandle = NULL;
 	}
 
 	return ;
 }
-
-
-#if defined(RENEGADE_LINUX)
-bool
-AudibleSoundClass::Verify_Linux_Miles_Handle_Ownership (void)
-{
-	if (m_SoundHandle == NULL) {
-		return false;
-	}
-
-	HSAMPLE sample = m_SoundHandle->Get_Miles_Sample ();
-	if (sample == NULL || sample == (HSAMPLE)INVALID_MILES_HANDLE) {
-		return true;
-	}
-
-	AudibleSoundClass *owner =
-		(AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
-
-	if (owner == this) {
-		return true;
-	}
-
-	/*
-	** user_data can be cleared by stale recycle / reinit while m_SoundHandle remains.
-	** Re-claim infinite beds instead of freeing a handle we just initialized.
-	*/
-	if (owner == NULL && m_LoopCount == INFINITE_LOOPS) {
-		m_SoundHandle->Set_Sample_User_Data (INFO_OBJECT_PTR, (intptr_t)this);
-		m_SoundHandle->Set_Sample_Loop_Count (m_LoopCount);
-		return true;
-	}
-
-	if (owner == NULL) {
-		Free_Miles_Handle ();
-		return false;
-	}
-
-	if (m_LoopCount == INFINITE_LOOPS || owner != this) {
-		Free_Miles_Handle ();
-	}
-
-	return false;
-}
-#endif
-
-
-#if defined(RENEGADE_LINUX) || defined(WWAUDIO_USE_MSS)
-
-bool
-AudibleSoundClass::Linux_Detach_If_Holding_Sample (void *miles_sample)
-{
-	HSAMPLE sample = (HSAMPLE)miles_sample;
-	SoundHandleClass *handle;
-
-	if (sample == NULL || sample == (HSAMPLE)INVALID_MILES_HANDLE) {
-		return false;
-	}
-
-	handle = Get_Miles_Handle ();
-	if (handle == NULL || handle->Get_Miles_Sample () != sample) {
-		return false;
-	}
-
-	Free_Miles_Handle ();
-	return true;
-}
-
-#endif
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1560,44 +1161,18 @@ AudibleSoundClass::On_Frame_Update (unsigned int milliseconds)
 		 (m_State == STATE_PLAYING) &&
 		 (m_Length > 0))
 	{
-		{ WWPROFILE( "Audible:PlayPos" );
-			Update_Play_Position ();
-		}
+		Update_Play_Position ();
 	}
 
 	//
 	//	Update the fade as necessary
 	//
 	if (m_FadeType != FADE_NONE) {
-		{ WWPROFILE( "Audible:Fade" );
-			Update_Fade ();
-		}
+		Update_Fade ();
 	}
-
-#if defined(RENEGADE_LINUX)
-	/*
-	** Level ambients can lose a 2D handle when the pool is stressed; re-acquire so
-	** infinite-loop beds stay audible after uncull / handle recovery.
-	*/
-	if (	m_State == STATE_PLAYING &&
-			!m_IsCulled &&
-			m_SoundHandle == NULL &&
-			m_pConvertedFormat == NULL &&
-			AudibleSound_Is_Ambient_Loop_Sound (this))
-	{
-		{ WWPROFILE( "Audible:AmbientAlloc" );
-			Allocate_Miles_Handle ();
-			if (m_SoundHandle != NULL) {
-				m_SoundHandle->Start_Sample ();
-			}
-		}
-	}
-#endif
 
 	if (m_pConvertedFormat != NULL) {
-		{ WWPROFILE( "Audible:ReSync" );
-			m_pConvertedFormat->Re_Sync (*this);
-		}
+		m_pConvertedFormat->Re_Sync (*this);
 	}
 
 	//
@@ -1619,26 +1194,20 @@ AudibleSoundClass::On_Frame_Update (unsigned int milliseconds)
 void
 AudibleSoundClass::Update_Play_Position (void)
 {
+	// Determine the current offset from the beginning of the sound buffer.
 	unsigned long play_time = TIMEGETTIME () - m_Timestamp;
 	m_CurrentPosition = play_time;
 
 	// Have we gone past the end of a sounds play-time?
 	if ((m_CurrentPosition > m_Length) && (m_Length > 0)) {
 
-#if defined(RENEGADE_LINUX)
-		if (m_SoundHandle != NULL) {
-			HSAMPLE sample = m_SoundHandle->Get_Miles_Sample ();
-			if (sample != NULL && ::AIL_sample_playback_busy (sample) != 0) {
-				return;
-			}
+		//
+		// Debug: log dialog cutoff diagnostics
+		//
+		if (m_Type == TYPE_DIALOG) {
+			fprintf (stderr, "[DIALOG] trigger stop: pos=%lu len=%lu play_time=%lu loops_left=%d culled=%d handle=%p\n",
+				m_CurrentPosition, m_Length, play_time, m_LoopsLeft, (int)m_IsCulled, (void *)m_SoundHandle);
 		}
-
-		if (m_LoopCount == 1 && m_Type == TYPE_SOUND_EFFECT) {
-			m_LoopsLeft = 0;
-			On_Loop_End ();
-			return;
-		}
-#endif
 
 		// Normalize our position and timestamp information
 		m_CurrentPosition = m_CurrentPosition % m_Length;
@@ -1688,11 +1257,7 @@ AudibleSoundClass::On_Loop_End (void)
 	if ((m_LoopCount != INFINITE_LOOPS) && (m_LoopsLeft < 1)) {
 
 		// Let the audio system know that we are done with this sound
-#if defined(RENEGADE_LINUX)
-		Stop (true, (m_LoopCount == 1 && m_Type == TYPE_SOUND_EFFECT));
-#else
 		Stop ();
-#endif
 		if (m_Scene != NULL) {
 			Remove_From_Scene ();
 		}
@@ -1771,78 +1336,9 @@ AudibleSoundClass::Cull_Sound (bool culled)
 		// of the sound is currently playing.
 		//
 		if (m_IsCulled || (m_pConvertedFormat != NULL)) {
-#if defined(RENEGADE_LINUX)
-			if (	m_IsCulled &&
-					m_pConvertedFormat == NULL &&
-					AudibleSound_Is_Level_Ambient_Bed (this) &&
-					m_SoundHandle != NULL &&
-					m_FadeType != FADE_OUT)
-			{
-				m_FadeTime	= LEVEL_AMBIENT_UNCULL_FADE_MS;
-				m_FadeTimer	= LEVEL_AMBIENT_UNCULL_FADE_MS;
-				m_FadeType	= FADE_OUT;
-				return;
-			}
-#endif
-			if (m_FadeType == FADE_IN) {
-				m_FadeType = FADE_NONE;
-			}
 			Free_Miles_Handle ();
 		} else {
-			const bool ambient_bed = AudibleSound_Is_Level_Ambient_Bed (this);
-			unsigned long uncull_seek = 0;
-			const Sound3DClass *sound3d = As_Sound3DClass ();
-			const bool static_zone = (sound3d != NULL && sound3d->Is_Static ());
-
-			/*
-			** 2D level ambients restart at sample 0 when unculled — often a sharp transient.
-			** Pick a random offset in the loop and fade in from silence.
-			*/
-			if (ambient_bed && m_SoundHandle != NULL) {
-				Free_Miles_Handle (true);
-			}
-
-			if (ambient_bed && m_LoopCount == INFINITE_LOOPS && m_CurrentPosition == 0) {
-				unsigned long len = m_Length;
-				if (len == 0 && m_Buffer != NULL) {
-					len = m_Buffer->Get_Duration ();
-				}
-				if (len > 500) {
-					uncull_seek = (unsigned long)(WWMath::Random_Float (0.15F, 0.85F) * (float)len);
-					m_CurrentPosition = uncull_seek;
-				}
-			}
-
-			if (ambient_bed) {
-				m_FadeTime	= LEVEL_AMBIENT_UNCULL_FADE_MS;
-				m_FadeTimer	= LEVEL_AMBIENT_UNCULL_FADE_MS;
-				m_FadeType	= FADE_IN;
-				Internal_Set_Volume (0.0F);
-			} else if (static_zone) {
-				m_FadeTime	= STATIC_SOUND_UNCULL_FADE_MS;
-				m_FadeTimer	= STATIC_SOUND_UNCULL_FADE_MS;
-				m_FadeType	= FADE_IN;
-				Internal_Set_Volume (0.0F);
-			}
-
 			Allocate_Miles_Handle ();
-
-			if (ambient_bed) {
-				if (m_State != STATE_PLAYING) {
-					Play (false);
-				}
-				if (uncull_seek > 0) {
-					m_CurrentPosition = uncull_seek;
-					m_Timestamp = TIMEGETTIME () - uncull_seek;
-					Seek (uncull_seek);
-				}
-				Internal_Set_Volume (0.0F);
-			} else if (static_zone) {
-				if (m_State != STATE_PLAYING) {
-					Play (false);
-				}
-				Internal_Set_Volume (0.0F);
-			}
 		}
 	}
 
@@ -2406,9 +1902,6 @@ AudibleSoundDefinitionClass::Create_Sound (int classid_hint) const
 		//	Configure the sound
 		//
 		new_sound->Set_Type ((AudibleSoundClass::SOUND_TYPE)m_Type);
-#if defined(WWAUDIO_USE_SDL3)
-		AudibleSound_Apply_Dialog_Classification (new_sound);
-#endif
 		new_sound->Set_Priority (m_Priority);
 		new_sound->Set_Loop_Count (m_LoopCount);
 		new_sound->Set_DropOff_Radius (m_DropOffRadius);
@@ -2520,7 +2013,7 @@ AudibleSoundClass::Save (ChunkSaveClass &csave)
 		}
 
 		AudibleSoundClass *this_ptr = this;
-		WRITE_MICRO_CHUNK_WIRE_POINTER (csave, VARID_THIS_PTR, this_ptr);
+		WRITE_MICRO_CHUNK (csave, VARID_THIS_PTR, this_ptr);
 
 	csave.End_Chunk ();
 
@@ -2578,9 +2071,8 @@ AudibleSoundClass::Load (ChunkLoadClass &cload)
 
 						case VARID_THIS_PTR:
 						{
-							uint32 _old_ptr_u32 = 0;
-							cload.Read(&_old_ptr_u32, sizeof(_old_ptr_u32));
-							AudibleSoundClass *old_ptr = (AudibleSoundClass *)(uintptr_t)_old_ptr_u32;
+							AudibleSoundClass *old_ptr = NULL;
+							cload.Read(&old_ptr, sizeof (old_ptr));
 							SaveLoadSystemClass::Register_Pointer (old_ptr, this);
 						}
 						break;

@@ -36,20 +36,12 @@
 
 
 #include "always.h"
-#include <cstdio>
 #include <windows.h>
-#if defined(RENEGADE_LINUX)
-#include <stdint.h>
-#include <sys/mman.h>
-#include <time.h>
-#include <unistd.h>
-#endif
 #include "wwaudio.h"
 #include "wwdebug.h"
 #include "utils.h"
 #include "realcrc.h"
 #include "soundbuffer.h"
-#include "soundstreamhandle.h"
 #include "audiblesound.h"
 #include "sound3d.h"
 #include "rawfile.h"
@@ -68,299 +60,7 @@
 
 
 #ifdef G_CODE_BASE
-#include "argv.h"
-#endif
-
-#if defined(WWAUDIO_USE_SDL3)
-#include "audio_music_bus.h"
-#include "audio_sdl3_mixer.h"
-#include "sdl3_mix_export.h"
-
-static void wwaudio_sdl3_assign_voice_bus (HSAMPLE sample, const AudibleSoundClass &sound)
-{
-	if (sample == NULL) {
-		return;
-	}
-
-	sdl3_voice_set_bus (sample, AudibleSound_Resolve_Voice_Bus (&sound));
-}
-#endif
-
-
-static void wwaudio_start_instant_sound (AudibleSoundClass *sound, int classid_hint)
-{
-	bool play_as_2d;
-
-	if (sound == NULL) {
-		return;
-	}
-
-	/*
-	** 2D definitions (m_Is3D=false): always Play(), never static-scene cull.
-	** Set_HUD_Help_Text / EVA use CLASSID_3D hint but defs are 2D — logs showed
-	** ITOS promoted without voice_start (Add_To_Scene at origin, culled).
-	*/
-	play_as_2d =	(classid_hint == CLASSID_2D) ||
-					(sound->As_Sound3DClass () == NULL);
-
-	if (play_as_2d) {
-		sound->Cull_Sound (false);
-		sound->Play ();
-	} else {
-		sound->Add_To_Scene (true);
-	}
-}
-
-
-#if defined(RENEGADE_LINUX)
-
-struct MilesFileSlot {
-	FileClass *file;
-	bool used;
-	bool operator==(const MilesFileSlot &o) const { return file==o.file && used==o.used; }
-	bool operator!=(const MilesFileSlot &o) const { return !(*this == o); }
-};
-static DynamicVectorClass<MilesFileSlot> _MilesFileSlots;
-static U32 Miles_File_Alloc_Handle(FileClass *f) {
-	for (int i=0;i<_MilesFileSlots.Count();i++) if (!_MilesFileSlots[i].used) { _MilesFileSlots[i].file=f; _MilesFileSlots[i].used=true; return (U32)(i+1); }
-	MilesFileSlot s; s.file=f; s.used=true; _MilesFileSlots.Add(s); return (U32)_MilesFileSlots.Count();
-}
-static FileClass *Miles_File_From_Handle(U32 h) { int i=(int)h-1; return (h&&i>=0&&i<_MilesFileSlots.Count()&&_MilesFileSlots[i].used)?_MilesFileSlots[i].file:NULL; }
-static void Miles_File_Free_Handle(U32 h) { int i=(int)h-1; if(h&&i>=0&&i<_MilesFileSlots.Count()){_MilesFileSlots[i].file=NULL;_MilesFileSlots[i].used=false;} }
-#endif
-
-
-static bool scrub_playlist_vector(DynamicVectorClass<AudibleSoundClass *> &playlist)
-{
-	(void)playlist;
-	return false;
-}
-
-
-static int wwaudio_ui_pool_start (int handle_count)
-{
-	const int ui_pool_size = 4;
-	return (handle_count > ui_pool_size) ? (handle_count - ui_pool_size) : handle_count;
-}
-
-
-static bool wwaudio_is_ui_pool_index (int handle_count, int index)
-{
-	return index >= wwaudio_ui_pool_start (handle_count);
-}
-
-
-#if defined(WWAUDIO_USE_SDL3)
-void
-WWAudioClass::Play_Background_Music_Bus (const char *filename, int fade_in_ms)
-{
-	unsigned char *data = NULL;
-	int size = 0;
-	FileClass *file;
-
-	if (filename == NULL || Is_Disabled () || !Is_Music_On ()) {
-		music_bus_stop (0);
-		m_MenuMusicOnBus = false;
-		return;
-	}
-
-	file = Get_File (filename);
-	if (file == NULL || !file->Is_Available ()) {
-		Return_File (file);
-		WWDEBUG_SAY (( "Music bus: %s not found\r\n", filename ));
-		return;
-	}
-
-	size = file->Size ();
-	if (size <= 0) {
-		Return_File (file);
-		return;
-	}
-
-	data = new unsigned char[size];
-	if (data == NULL) {
-		Return_File (file);
-		return;
-	}
-
-	if (file->Read (data, size) != size) {
-		delete[] data;
-		Return_File (file);
-		return;
-	}
-
-	Return_File (file);
-
-	m_MenuMusicOnBus = false;
-	m_GameMusicBusPaused = false;
-	if (!music_bus_play (data, (unsigned long)size, Get_Music_Volume (), fade_in_ms)) {
-		WWDEBUG_SAY (( "Music bus: failed to play %s\r\n", filename ));
-	}
-
-	delete[] data;
-}
-
-void
-WWAudioClass::Play_Menu_Music (const char *filename)
-{
-	m_GameMusicBusPaused = false;
-	Play_Background_Music_Bus (filename, 0);
-	m_MenuMusicOnBus = music_bus_is_playing ();
-}
-
-void
-WWAudioClass::Stop_Menu_Music (void)
-{
-	if (!m_MenuMusicOnBus) {
-		return;
-	}
-
-	music_bus_stop (0);
-	m_MenuMusicOnBus = false;
-}
-
-bool
-WWAudioClass::Is_Menu_Music_Active (void) const
-{
-	return m_MenuMusicOnBus && music_bus_is_playing ();
-}
-
-void
-WWAudioClass::Pause_Game_Music_Bus (void)
-{
-	if (m_MenuMusicOnBus) {
-		return;
-	}
-	if (!music_bus_is_playing ()) {
-		return;
-	}
-
-	music_bus_pause (true);
-	m_GameMusicBusPaused = true;
-}
-
-void
-WWAudioClass::Resume_Game_Music_Bus (void)
-{
-	if (m_MenuMusicOnBus) {
-		return;
-	}
-	if (!m_GameMusicBusPaused) {
-		return;
-	}
-
-	music_bus_resume_if_paused ();
-	m_GameMusicBusPaused = false;
-}
-#endif
-
-
-/*
-** 2D environmental beds (wind, rain, level ambients): never steal handle / Stop_Combat.
-** These are CLASSID_2D, not 3D — Stop_Combat_3D infinite-loop skip does not apply.
-*/
-static bool wwaudio_is_protected_2d_owner (const AudibleSoundClass *owner)
-{
-	if (owner == NULL || !(owner != NULL)) {
-		return false;
-	}
-
-	if (owner->Get_Type () == AudibleSoundClass::TYPE_MUSIC) {
-		return true;
-	}
-
-#if defined(WWAUDIO_USE_SDL3)
-	if (AudibleSound_Is_Dialog_Sound (owner)) {
-		return true;
-	}
-#else
-	if (owner->Get_Type () == AudibleSoundClass::TYPE_DIALOG) {
-		return true;
-	}
-#endif
-
-	return AudibleSound_Is_Ambient_Loop_Sound (owner);
-}
-
-
-#if defined(RENEGADE_LINUX)
-/*
-** Shim loop_count 0 = infinite bed still bound to this voice (log line 329).
-** user_data can be stale; trust voice state when assigning pool handles.
-*/
-static bool wwaudio_2d_voice_is_infinite_bed (HSAMPLE sample)
-{
-	AudibleSoundClass *owner;
-
-	if (sample == NULL || ::AIL_sample_loop_count (sample) != 0) {
-		return false;
-	}
-
-	owner = (AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
-	if (owner != NULL) {
-		return AudibleSound_Is_Ambient_Loop_Sound (owner);
-	}
-
-	return false;
-}
-
-
-static bool wwaudio_may_assign_2d_voice (
-	HSAMPLE sample,
-	AudibleSoundClass *owner,
-	const AudibleSoundClass &requester)
-{
-	if (!wwaudio_2d_voice_is_infinite_bed (sample)) {
-		return true;
-	}
-
-	if (owner == const_cast<AudibleSoundClass *>(&requester)) {
-		return true;
-	}
-
-	if (owner != NULL && !AudibleSound_Is_Ambient_Loop_Sound (owner)) {
-		return true;
-	}
-
-	return false;
-}
-
-
-static bool wwaudio_may_assign_3d_voice (
-	H3DSAMPLE sample,
-	AudibleSoundClass *owner,
-	const AudibleSoundClass &requester)
-{
-	return wwaudio_may_assign_2d_voice ((HSAMPLE)sample, owner, requester);
-}
-
-
-static bool wwaudio_is_protected_3d_owner (const AudibleSoundClass *owner)
-{
-	if (owner == NULL || !(owner != NULL)) {
-		return false;
-	}
-
-	if (owner->Get_Type () == AudibleSoundClass::TYPE_MUSIC) {
-		return true;
-	}
-
-#if defined(WWAUDIO_USE_SDL3)
-	if (AudibleSound_Is_Dialog_Sound (owner)) {
-		return true;
-	}
-#else
-	if (owner->Get_Type () == AudibleSoundClass::TYPE_DIALOG) {
-		return true;
-	}
-#endif
-
-	if (owner->Get_Loop_Count () == INFINITE_LOOPS) {
-		return true;
-	}
-
-	return false;
-}
+#include "..\wwlib\argv.h"
 #endif
 
 
@@ -440,8 +140,8 @@ WWAudioClass::WWAudioClass (bool lite)
 	  m_PlaybackBits (16),
 	  m_PlaybackStereo (true),
 	  m_SpeakerType (0),
-	  m_ReverbFilter (NULL),
-	  m_UpdateTimer (NULL),
+	  m_ReverbFilter (INVALID_MILES_HANDLE),
+	  m_UpdateTimer (-1),
 	  m_Driver3DPseudo (NULL),
 	  m_MusicVolume (DEF_MUSIC_VOL),
 	  m_SoundVolume (DEF_SFX_VOL),
@@ -449,13 +149,7 @@ WWAudioClass::WWAudioClass (bool lite)
 	  m_RealSoundVolume (DEF_SFX_VOL),
 	  m_MaxCacheSize (DEF_CACHE_SIZE * 1024),
 	  m_CurrentCacheSize (0),
-	  m_Max2DSamples (
-#if defined(RENEGADE_LINUX)
-			DEF_2D_SAMPLE_COUNT_LINUX
-#else
-			DEF_2D_SAMPLE_COUNT
-#endif
-	  ),
+	  m_Max2DSamples (DEF_2D_SAMPLE_COUNT),
 	  m_Max3DSamples (DEF_3D_SAMPLE_COUNT),
 	  m_Max2DBufferSize (DEF_MAX_2D_BUFFER_SIZE),
 	  m_Max3DBufferSize (DEF_MAX_3D_BUFFER_SIZE),
@@ -469,18 +163,6 @@ WWAudioClass::WWAudioClass (bool lite)
 	  m_CurrPage (PAGE_PRIMARY),
 	  m_AreNewSoundsEnabled (true),
 	  m_BackgroundMusic (NULL),
-#if defined(RENEGADE_LINUX)
-	  m_MenuMusicOnBus (false),
-	  m_GameMusicBusPaused (false),
-#endif
-	  m_DedicatedMusicSample (NULL),
-	  m_DedicatedReloadSample (NULL),
-	  m_DedicatedCombat2DSample (NULL),
-	  m_DedicatedDialog2DSample (NULL),
-	  m_DedicatedUISample (NULL),
-	  m_ReloadSfxQuietUntilMs (0),
-	  m_LastReloadSoundMs (0),
-	  m_DedicatedDialog3DSample (NULL),
 	  m_ReverbRoomType (ENVIRONMENT_GENERIC),
 	  m_NonDialogFadeTime (DEF_FADE_TIME),
 	  m_FadeType (FADE_NONE),
@@ -595,270 +277,6 @@ WWAudioClass::Flush_Cache (void)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //
-//	Remove_Cached_Buffer
-//
-////////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Remove_Cached_Buffer (const char *string_id)
-{
-	if (string_id == NULL) {
-		return;
-	}
-
-	int hash_index = ::CRC_Stringi (string_id) & CACHE_HASH_MASK;
-
-	for (int index = 0; index < m_CachedBuffers[hash_index].Count (); index ++) {
-		CACHE_ENTRY_STRUCT &info = m_CachedBuffers[hash_index][index];
-		if (info.string_id != NULL && ::lstrcmpi (info.string_id, string_id) == 0) {
-			if (info.buffer != NULL) {
-				m_CurrentCacheSize -= info.buffer->Get_Raw_Length ();
-				if (m_CurrentCacheSize < 0) {
-					m_CurrentCacheSize = 0;
-				}
-			}
-			SAFE_FREE (info.string_id);
-			REF_PTR_RELEASE (info.buffer);
-			m_CachedBuffers[hash_index].Delete (index);
-			break;
-		}
-	}
-
-	return;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Stop_Combat_2D_Samples
-//
-////////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Stop_Combat_2D_Samples (void)
-{
-	MMSLockClass lock;
-	int stopped = 0;
-
-	for (int index = 0; index < m_2DSampleHandles.Count (); index ++) {
-		HSAMPLE sample = m_2DSampleHandles[index];
-
-		if (	sample == NULL ||
-				sample == m_DedicatedMusicSample ||
-				sample == m_DedicatedReloadSample ||
-				wwaudio_is_ui_pool_index (m_2DSampleHandles.Count (), index))
-		{
-			continue;
-		}
-
-		AudibleSoundClass *owner =
-			(AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
-		if (owner != NULL &&
-				(owner != NULL) &&
-				wwaudio_is_protected_2d_owner (owner))
-		{
-			continue;
-		}
-
-		::AIL_end_sample (sample);
-		stopped++;
-	}
-
-
-	return;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Stop_Combat_3D_Samples
-//
-void
-WWAudioClass::Stop_Combat_3D_Samples (void)
-{
-	MMSLockClass lock;
-	int stopped = 0;
-	int skipped_ambient = 0;
-
-	for (int index = 0; index < m_3DSampleHandles.Count (); index ++) {
-		H3DSAMPLE sample = m_3DSampleHandles[index];
-
-		if (sample != NULL) {
-			AudibleSoundClass *owner =
-				(AudibleSoundClass *)::AIL_3D_object_user_data (sample, INFO_OBJECT_PTR);
-			if (	owner != NULL &&
-					(owner != NULL) &&
-					owner->Get_Loop_Count () == INFINITE_LOOPS)
-			{
-				skipped_ambient++;
-				continue;
-			}
-
-			::AIL_end_3D_sample (sample);
-			stopped++;
-		}
-	}
-
-
-	return;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Arm_Reload_Sfx_Quiet_Window
-//
-////////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Arm_Reload_Sfx_Quiet_Window (void)
-{
-	/*
-	** FAudio/Wine: block combat SFX on the general 2D pool while reload plays.
-	** SDL3/Linux: reload uses dedicated handle[1] — no pool contention (logs: gunshot
-	** quiet_block 2.5 s after reload delayed first shot).
-	*/
-#if !defined(RENEGADE_LINUX)
-	m_ReloadSfxQuietUntilMs = ::GetTickCount () + DEF_RELOAD_QUIET_MS;
-#endif
-	return;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Prepare_Reload_Sound
-//
-////////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Prepare_Reload_Sound (void)
-{
-	MMSLockClass lock;
-	int was_busy = 0;
-
-	if (m_DedicatedReloadSample != NULL) {
-		was_busy = (::AIL_sample_playback_busy (m_DedicatedReloadSample) != 0) ? 1 : 0;
-		::AIL_end_sample (m_DedicatedReloadSample);
-		::AIL_set_sample_user_data (m_DedicatedReloadSample, INFO_OBJECT_PTR, 0);
-		::AIL_set_sample_loop_count (m_DedicatedReloadSample, 1);
-	}
-
-
-	return;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Is_Dialog_Playback_Active
-//
-////////////////////////////////////////////////////////////////////////////////////////////////
-bool
-WWAudioClass::Is_Dialog_Playback_Active (void) const
-{
-	if (	m_DedicatedDialog2DSample != NULL &&
-			::AIL_sample_playback_busy (m_DedicatedDialog2DSample) != 0)
-	{
-		return true;
-	}
-
-	if (	m_DedicatedDialog3DSample != NULL &&
-			::AIL_sample_playback_busy ((HSAMPLE)m_DedicatedDialog3DSample) != 0)
-	{
-		return true;
-	}
-
-	for (int page = 0; page < PAGE_COUNT; page ++) {
-		for (int index = 0; index < m_Playlist[page].Count (); index ++) {
-			AudibleSoundClass *sound_obj = m_Playlist[page][index];
-
-			if (sound_obj == NULL) {
-				continue;
-			}
-
-#if defined(WWAUDIO_USE_SDL3)
-			if (	AudibleSound_Is_Dialog_Sound (sound_obj) &&
-					sound_obj->Is_Sound_Culled () == false &&
-					sound_obj->Get_State () == AudibleSoundClass::STATE_PLAYING)
-			{
-				return true;
-			}
-#else
-			if (	sound_obj->Get_Type () == AudibleSoundClass::TYPE_DIALOG &&
-					sound_obj->Is_Sound_Culled () == false &&
-					sound_obj->Get_State () == AudibleSoundClass::STATE_PLAYING)
-			{
-				return true;
-			}
-#endif
-		}
-	}
-
-	return false;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Begin_Reload_Sound_Playback
-//
-////////////////////////////////////////////////////////////////////////////////////////////////
-bool
-WWAudioClass::Begin_Reload_Sound_Playback (void)
-{
-	DWORD now = ::GetTickCount ();
-	int playing = 0;
-	int debounce_blocked = 0;
-
-#if defined(RENEGADE_LINUX)
-	if (Is_Dialog_Playback_Active ()) {
-		return false;
-	}
-#endif
-
-	if (m_DedicatedReloadSample != NULL) {
-		playing = (::AIL_sample_playback_busy (m_DedicatedReloadSample) != 0) ? 1 : 0;
-	}
-
-	/*
-	** Wine/FAudio: BuffersQueued==0 while reload still audible (logs: was_busy always 0).
-	** Do not end_sample / re-upload until the voice play window finishes.
-	*/
-	if (playing) {
-		return false;
-	}
-
-	/*
-	** Linux/SDL3: short debounce blocks same-frame double Force_Reload.
-	*/
-#if defined(RENEGADE_LINUX)
-	if (m_LastReloadSoundMs != 0 && (now - m_LastReloadSoundMs) < 250) {
-		debounce_blocked = 1;
-	}
-#elif !defined(RENEGADE_LINUX)
-	if (m_LastReloadSoundMs != 0 && (now - m_LastReloadSoundMs) < 3000) {
-		debounce_blocked = 1;
-	}
-#endif
-
-	if (debounce_blocked) {
-		return false;
-	}
-
-	Prepare_Reload_Sound ();
-	m_LastReloadSoundMs = now;
-
-#if !defined(RENEGADE_LINUX)
-	{
-		DWORD quiet_until = now + DEF_RELOAD_QUIET_MS;
-		if (quiet_until > m_ReloadSfxQuietUntilMs) {
-			m_ReloadSfxQuietUntilMs = quiet_until;
-		}
-	}
-#endif
-	return true;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//
 //	Open_2D_Device
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -890,7 +308,7 @@ WWAudioClass::Open_2D_Device (LPWAVEFORMAT format)
 	//WWASSERT (success == AIL_NO_ERROR);		// This assert fires if there is no sound card.
 
 	// Open the driver
-	success = ::AIL_waveOutOpen (&m_Driver2D, NULL, 0, format, 0);
+	success = ::AIL_waveOutOpen (&m_Driver2D, NULL, 0, format);
 
 	// Do we need to switch from direct sound to waveout?
 	if ((success == AIL_NO_ERROR) &&
@@ -910,7 +328,7 @@ WWAudioClass::Open_2D_Device (LPWAVEFORMAT format)
 		//WWASSERT (success == AIL_NO_ERROR);	// This assert fires if there is no sound card.
 
 		// Open the driver
-		success = ::AIL_waveOutOpen (&m_Driver2D, NULL, 0, format, 0);
+		success = ::AIL_waveOutOpen (&m_Driver2D, NULL, 0, format);
 		type = (success == AIL_NO_ERROR) ? DRIVER2D_WAVEOUT : DRIVER2D_ERROR;
 	}
 
@@ -1051,25 +469,18 @@ WWAudioClass::Get_Sound_Buffer (const char *filename, bool is_3d)
 	// Try to find the buffer in our cache, otherwise create a new buffer.
 	//
 	SoundBufferClass *buffer = Find_Cached_Buffer (filename);
-	FileClass *file = Get_File (filename);
-	if (file != NULL && file->Is_Available ()) {
-		if (	buffer != NULL && !is_3d && !buffer->Is_Streaming () &&
-				file->Size () > m_Max2DBufferSize)
-		{
-			Remove_Cached_Buffer (filename);
-			REF_PTR_RELEASE (buffer);
-			buffer = NULL;
-		}
-		if (buffer == NULL) {
+	if (buffer == NULL) {
+		FileClass *file = Get_File (filename);
+		if (file != NULL && file->Is_Available ()) {
 			buffer = Create_Sound_Buffer (*file, filename, is_3d);
+		} else {
+			static int count = 0;
+			if ( ++count < 10 ) {
+				WWDEBUG_SAY(( "Sound \"%s\" not found\r\n", filename ));
+			}
 		}
-	} else {
-		static int count = 0;
-		if (buffer == NULL && ++count < 10) {
-			WWDEBUG_SAY(( "Sound \"%s\" not found\r\n", filename ));
-		}
+		Return_File (file);
 	}
-	Return_File (file);
 
 	return buffer;
 }
@@ -1089,13 +500,6 @@ WWAudioClass::Get_Sound_Buffer (FileClass &file, const char *string_id, bool is_
 	// Try to find the buffer in our cache, otherwise create a new buffer.
 	//
 	SoundBufferClass *buffer = Find_Cached_Buffer (string_id);
-	if (	buffer != NULL && !is_3d && !buffer->Is_Streaming () &&
-			file.Size () > m_Max2DBufferSize)
-	{
-		Remove_Cached_Buffer (string_id);
-		REF_PTR_RELEASE (buffer);
-		buffer = NULL;
-	}
 	if (buffer == NULL) {
 		buffer = Create_Sound_Buffer (file, string_id, is_3d);
 	}
@@ -1373,9 +777,6 @@ WWAudioClass::Create_Sound_Effect (FileClass &file, const char *string_id)
 
 		// Pass the actual sound data onto the sound object
 		sound_obj->Set_Buffer (buffer);
-#if defined(WWAUDIO_USE_SDL3)
-		AudibleSound_Apply_Dialog_Classification (sound_obj);
-#endif
 		REF_PTR_RELEASE (buffer);
 	}
 
@@ -1484,12 +885,6 @@ WWAudioClass::Create_3D_Sound (FileClass &file, const char *string_id, int class
 			sound_obj->Set_Buffer (buffer);
 		}
 
-		if (sound_obj != NULL) {
-#if defined(WWAUDIO_USE_SDL3)
-			AudibleSound_Apply_Dialog_Classification (sound_obj);
-#endif
-		}
-
 		REF_PTR_RELEASE (buffer);
 	}
 
@@ -1541,12 +936,6 @@ WWAudioClass::Create_3D_Sound
 				if ( ++count < 10 ) {
 					WWDEBUG_SAY(( "Sound File not Found \"%s\"\r\n", filename ));
 				}
-			}
-
-			if (sound_obj != NULL) {
-#if defined(WWAUDIO_USE_SDL3)
-				AudibleSound_Apply_Dialog_Classification (sound_obj);
-#endif
 			}
 
 			REF_PTR_RELEASE (buffer);
@@ -1622,9 +1011,6 @@ WWAudioClass::Create_Sound
 )
 {
 	WWPROFILE ("Create_Sound");
-	if (Is_Disabled ()) {
-		return NULL;
-	}
 	AudibleSoundClass *sound = NULL;
 
 	//
@@ -1669,9 +1055,6 @@ WWAudioClass::Create_Sound
 )
 {
 	WWPROFILE ("Create_Sound");
-	if (Is_Disabled ()) {
-		return NULL;
-	}
 	AudibleSoundClass *sound = NULL;
 
 	//
@@ -1748,9 +1131,6 @@ WWAudioClass::Create_Instant_Sound
 )
 {
 	WWPROFILE ("Create_Instant_Sound");
-	if (Is_Disabled ()) {
-		return 0;
-	}
 
 	int sound_id = 0;
 
@@ -1766,7 +1146,7 @@ WWAudioClass::Create_Instant_Sound
 
 		sound_id = sound->Get_ID ();
 		sound->Set_Transform (tm);
-		wwaudio_start_instant_sound (sound, classid_hint);
+		sound->Add_To_Scene ();
 		sound->Release_Ref ();
 	}
 
@@ -1822,9 +1202,6 @@ WWAudioClass::Create_Instant_Sound
 )
 {
 	WWPROFILE ("Create_Instant_Sound");
-	if (Is_Disabled ()) {
-		return 0;
-	}
 	int sound_id = 0;
 
 	//
@@ -1839,7 +1216,7 @@ WWAudioClass::Create_Instant_Sound
 
 		sound_id = sound->Get_ID ();
 		sound->Set_Transform (tm);
-		wwaudio_start_instant_sound (sound, classid_hint);
+		sound->Add_To_Scene ();
 		sound->Release_Ref ();
 	}
 
@@ -1902,89 +1279,51 @@ WWAudioClass::Flush_Playlist (void)
 void
 WWAudioClass::Free_Completed_Sounds (void)
 {
-	if (scrub_playlist_vector(m_Playlist[PAGE_PRIMARY]) ||
-			scrub_playlist_vector(m_Playlist[PAGE_SECONDARY])) {
-		m_CompletedSounds.Abandon_Corrupted_Storage();
-		return;
-	}
-
-#if defined(__GNUC__) && defined(_WIN32)
-	if (!m_CompletedSounds.Has_Valid_Storage()) {
-		m_CompletedSounds.Abandon_Corrupted_Storage();
-		return;
-	}
-#endif
-
-	int completed_count = m_CompletedSounds.Count ();
-	if (completed_count <= 0) {
-		return;
-	}
-
-	if (completed_count > 256) {
-		m_CompletedSounds.Abandon_Corrupted_Storage();
-		return;
-	}
-
-
-	//
-	// Loop through all the entries in the completed sounds list
-	//
-	for (int index = 0; index < completed_count; index ++) {
-		AudibleSoundClass *sound_obj = m_CompletedSounds[index];
-		if (sound_obj == NULL) {
-			continue;
-		}
-
-		if (!(sound_obj != NULL)) {
-			m_CompletedSounds.Abandon_Corrupted_Storage();
-			return;
-		}
+	if (m_CompletedSounds.Count () > 0) {
 
 		//
-		//	Be careful not to remove the sound from the playlist unless
-		// its really done playing
+		// Loop through all the entries in the completed sounds list
 		//
-		if (sound_obj->Get_State () == AudibleSoundClass::STATE_STOPPED) {
+		for (int index = 0; index < m_CompletedSounds.Count (); index ++) {
+			AudibleSoundClass *sound_obj = m_CompletedSounds[index];
+         WWASSERT(sound_obj != NULL); //TSS 05/24/99
 
 			//
-			// Remove this sound from the playlist
+			//	Be careful not to remove the sound from the playlist unless
+			// its really done playing
 			//
-			bool found = false;
-			for (int page = 0; page < PAGE_COUNT && !found; page ++) {
-				for (int play_index = 0; (play_index < m_Playlist[page].Count ()) && !found; play_index ++) {
-					if (m_Playlist[page][play_index] == sound_obj) {
+			if (sound_obj->Get_State () == AudibleSoundClass::STATE_STOPPED) {
 
-						//
-						// Free our hold on this sound object
-						//
-						m_Playlist[page].Delete (play_index);
-						AudibleSoundClass *released = sound_obj;
-						//
-						// Null every completed-list slot holding this pointer so we
-						// never call Get_State on a freed object (duplicate entries).
-						//
-						for (int j = 0; j < m_CompletedSounds.Count (); j ++) {
-							if (m_CompletedSounds[j] == released) {
-								m_CompletedSounds[j] = NULL;
-							}
+				//
+				// Remove this sound from the playlist
+				//
+				bool found = false;
+				for (int page = 0; page < PAGE_COUNT && !found; page ++) {
+					for (int play_index = 0; (play_index < m_Playlist[page].Count ()) && !found; play_index ++) {
+						if (m_Playlist[page][play_index] == sound_obj) {
+
+							//
+							// Free our hold on this sound object
+							//
+							m_Playlist[page].Delete (play_index);
+							REF_PTR_RELEASE (sound_obj);
+							found = true;
 						}
-						REF_PTR_RELEASE (sound_obj);
-						found = true;
 					}
 				}
 			}
 		}
+
+		//
+		// Free the list structure
+		//
+		m_CompletedSounds.Delete_All ();
+
+		//
+		// Try to give a play-handle back to a sound that was priority-bumped.
+		//
+		Reprioritize_Playlist ();
 	}
-
-	//
-	// Free the list structure
-	//
-	m_CompletedSounds.Delete_All ();
-
-	//
-	// Try to give a play-handle back to a sound that was priority-bumped.
-	//
-	Reprioritize_Playlist ();
 
 	return;
 }
@@ -2003,8 +1342,8 @@ WWAudioClass::Get_Playlist_Entry (int index) const
 	// Params OK?
 	WWASSERT (index >= 0 && index < m_Playlist[m_CurrPage].Count ());
 	if ((index >= 0) && (index < m_Playlist[m_CurrPage].Count ())) {
-		m_Playlist[m_CurrPage][index]->Add_Ref ();
-		m_Playlist[m_CurrPage][index];
+		sound_obj = m_Playlist[m_CurrPage][index];
+		sound_obj->Add_Ref ();
 	}
 
 	// Return a pointer to the sound object
@@ -2071,18 +1410,9 @@ WWAudioClass::Remove_From_Playlist (AudibleSoundClass *sound_obj)
 				if (sound_obj == m_Playlist[page][index]) {
 
 					//
-					// Add this sound to the 'completed' list (once per pointer)
+					// Add this sound to the 'completed' list
 					//
-					bool already_completed = false;
-					for (int c = 0; c < m_CompletedSounds.Count (); c ++) {
-						if (m_CompletedSounds[c] == sound_obj) {
-							already_completed = true;
-							break;
-						}
-					}
-					if (!already_completed) {
-						m_CompletedSounds.Add (sound_obj);
-					}
+					m_CompletedSounds.Add (sound_obj);
 					retval = true;
 				}
 			}
@@ -2149,26 +1479,9 @@ WWAudioClass::Reprioritize_Playlist (void)
 		// Is this the highest priority without a miles handle?
 		//
 		AudibleSoundClass *sound_obj = m_Playlist[m_CurrPage][index];
-		if (!(sound_obj != NULL)) {
-			m_Playlist[m_CurrPage][index] = NULL;
-			continue;
-		}
 		if ((sound_obj->Get_Miles_Handle () == NULL) &&
-			 (sound_obj->Is_Sound_Culled () == false))
-		{
-#if defined(RENEGADE_LINUX)
-			/*
-			** Menu / device reclaim drops 2D handles; Reprioritize used to restart
-			** rifle_reload from the playlist (logs: reload_dedicated without Force_Reload).
-			*/
-			if (	sound_obj->Get_Runtime_Priority () >= DEF_RELOAD_RUNTIME_PRIORITY &&
-					sound_obj->Get_Loop_Count () == 1)
-			{
-				sound_obj->Stop (true, true);
-				continue;
-			}
-#endif
-		if ((sound_obj->Get_Priority () > hightest_priority))
+			 (sound_obj->Is_Sound_Culled () == false) &&
+			 (sound_obj->Get_Priority () > hightest_priority))
 		{
 			//
 			// This is now the highest priority sound effect without
@@ -2176,7 +1489,6 @@ WWAudioClass::Reprioritize_Playlist (void)
 			//
 			sound_to_get_handle = sound_obj;
 			hightest_priority = sound_obj->Get_Priority ();
-		}
 		}
 	}
 
@@ -2199,43 +1511,10 @@ WWAudioClass::Reprioritize_Playlist (void)
 void
 WWAudioClass::On_Frame_Update (unsigned int milliseconds)
 {
-	if (Is_Disabled ()) {
-		return;
-	}
-
 	//
 	// Free any sounds we completed last frame
 	//
-	{ WWPROFILE( "Audio:FreeCompleted" );
-		Free_Completed_Sounds ();
-	}
-
-#if defined(RENEGADE_LINUX)
-	/*
-	** Dedicated reload[1] can orphan with loop_count==0 (infinite mix) after a bad
-	** takeover — silence it when no valid reload owner is bound.
-	*/
-	if (	m_DedicatedReloadSample != NULL)
-	{
-		AudibleSoundClass *owner =
-			(AudibleSoundClass *)::AIL_sample_user_data (
-				m_DedicatedReloadSample, INFO_OBJECT_PTR);
-		bool stop_orphan = false;
-
-		if (owner == NULL) {
-			stop_orphan =
-				(::AIL_sample_playback_busy (m_DedicatedReloadSample) != 0);
-		} else if (::AIL_sample_loop_count (m_DedicatedReloadSample) == 0) {
-			stop_orphan = !AudibleSound_Is_Ambient_Loop_Sound (owner);
-		}
-
-		if (stop_orphan) {
-			::AIL_end_sample (m_DedicatedReloadSample);
-			::AIL_set_sample_user_data (m_DedicatedReloadSample, INFO_OBJECT_PTR, 0);
-			::AIL_set_sample_loop_count (m_DedicatedReloadSample, 1);
-		}
-	}
-#endif
+	Free_Completed_Sounds ();
 
 	//
 	// Calculate the time in ms since the last frame
@@ -2249,12 +1528,8 @@ WWAudioClass::On_Frame_Update (unsigned int milliseconds)
 	//	Update the sound scene as necessary
 	//
 	if (m_CurrPage == PAGE_PRIMARY && m_SoundScene != NULL) {
-		{ WWPROFILE( "Audio:SceneUpdate" );
-			m_SoundScene->On_Frame_Update (milliseconds);
-		}
-		{ WWPROFILE( "Audio:CollectLogical" );
-			m_SoundScene->Collect_Logical_Sounds ();
-		}
+		m_SoundScene->On_Frame_Update (milliseconds);
+		m_SoundScene->Collect_Logical_Sounds ();
 	}
 
 	//int dialog_count = 0;
@@ -2262,20 +1537,13 @@ WWAudioClass::On_Frame_Update (unsigned int milliseconds)
 	//
 	// Loop through all the entries in the playlist
 	//
-	{ WWPROFILE( "Audio:PlaylistLoop" );
 	for (int index = 0; index < m_Playlist[m_CurrPage].Count (); index ++) {
 
 		//
 		// Update this sound object
 		//
 		AudibleSoundClass *sound_obj = m_Playlist[m_CurrPage][index];
-		if (!(sound_obj != NULL)) {
-			m_Playlist[m_CurrPage].Abandon_Corrupted_Storage();
-			break;
-		}
-		{ WWPROFILE( "Audio:AudibleUpdate" );
-			sound_obj->On_Frame_Update (time_delta);
-		}
+		sound_obj->On_Frame_Update (time_delta);
 
 		//
 		//	Is this an important piece of dialog?
@@ -2286,7 +1554,6 @@ WWAudioClass::On_Frame_Update (unsigned int milliseconds)
 		{
 			dialog_count ++;
 		}*/
-	}
 	}
 
 	//
@@ -2299,14 +1566,20 @@ WWAudioClass::On_Frame_Update (unsigned int milliseconds)
 	}*/
 
 	//
+	//	If background music is supposed to be playing but lost its
+	//	Miles handle (e.g. stolen by Get_2D_Sample), reallocate it.
+	//
+	if (m_BackgroundMusic != NULL &&
+		 m_BackgroundMusic->Get_State () == AudibleSoundClass::STATE_PLAYING &&
+		 m_BackgroundMusic->Get_Miles_Handle () == NULL)
+	{
+		m_BackgroundMusic->Allocate_Miles_Handle ();
+	}
+
+	//
 	//	Update any fading we have going on
 	//
 	//Update_Fade ();
-
-#if defined(WWAUDIO_USE_SDL3)
-	sdl3_mixer_pump(time_delta);
-#endif
-
 	return;
 }
 
@@ -2330,11 +1603,6 @@ WWAudioClass::Release_2D_Handles (void)
 	}
 
 	m_2DSampleHandles.Delete_All ();
-	m_DedicatedMusicSample = NULL;
-	m_DedicatedReloadSample = NULL;
-	m_DedicatedCombat2DSample = NULL;
-	m_DedicatedDialog2DSample = NULL;
-	m_DedicatedUISample = NULL;
 	return;
 }
 
@@ -2365,184 +1633,9 @@ WWAudioClass::Allocate_2D_Handles (void)
 
 		// Record our actual number of available 2D sample handles
 		m_Max2DSamples = m_2DSampleHandles.Count ();
-		if (m_2DSampleHandles.Count () > 0) {
-			m_DedicatedMusicSample = m_2DSampleHandles[0];
-		}
-		if (m_2DSampleHandles.Count () > 2) {
-			m_DedicatedReloadSample = m_2DSampleHandles[1];
-		}
-		if (m_2DSampleHandles.Count () > 3) {
-			m_DedicatedCombat2DSample = m_2DSampleHandles[2];
-		}
-		if (m_2DSampleHandles.Count () > 4) {
-			m_DedicatedDialog2DSample = m_2DSampleHandles[3];
-		}
-		if (m_2DSampleHandles.Count () > 1) {
-			m_DedicatedUISample = m_2DSampleHandles[m_2DSampleHandles.Count () - 1];
-		}
 	}
 
 	return;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Release_2D_Sample_Owner
-//
-////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Release_2D_Sample_Owner (HSAMPLE sample)
-{
-	AudibleSoundClass *owner =
-		(AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
-
-	if (owner != NULL) {
-		if ((owner != NULL)) {
-			owner->Free_Miles_Handle ();
-			return;
-		}
-
-		::AIL_set_sample_user_data (sample, INFO_OBJECT_PTR, 0);
-	}
-
-	if (::AIL_sample_playback_busy (sample) != 0) {
-		::AIL_end_sample (sample);
-	}
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Detach_2D_Sample_Holders
-//
-////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Detach_2D_Sample_Holders (HSAMPLE sample)
-{
-	if (sample == NULL || sample == (HSAMPLE)INVALID_MILES_HANDLE) {
-		return;
-	}
-
-	MMSLockClass lock;
-	int detached = 0;
-
-	if (m_SoundScene != NULL) {
-		detached += m_SoundScene->Detach_Miles_Sample_Holders ((void *)sample);
-	}
-
-	for (int page = 0; page < PAGE_COUNT; page ++) {
-		for (int index = 0; index < m_Playlist[page].Count (); index ++) {
-			AudibleSoundClass *sound = m_Playlist[page][index];
-
-			if (sound == NULL || !(sound != NULL)) {
-				continue;
-			}
-
-			SoundHandleClass *handle = sound->Get_Miles_Handle ();
-			if (handle == NULL) {
-				continue;
-			}
-
-			if (handle->Get_Miles_Sample () != sample) {
-				continue;
-			}
-
-			sound->Free_Miles_Handle ();
-			detached ++;
-		}
-	}
-
-#if defined(RENEGADE_LINUX)
-	if (detached > 0) {
-		(void)detached;
-	}
-#endif
-}
-
-
-#if defined(RENEGADE_LINUX)
-
-void
-WWAudioClass::Detach_3D_Sample_Holders (H3DSAMPLE sample)
-{
-	Detach_2D_Sample_Holders ((HSAMPLE)sample);
-}
-
-
-void
-WWAudioClass::Takeover_3D_Sample (H3DSAMPLE sample, const AudibleSoundClass &new_owner)
-{
-	AudibleSoundClass *owner =
-		(AudibleSoundClass *)::AIL_3D_object_user_data (sample, INFO_OBJECT_PTR);
-
-	if (owner != NULL && owner != &new_owner) {
-		Release_3D_Sample_Owner (sample);
-	} else if (owner == NULL && ::AIL_sample_playback_busy ((HSAMPLE)sample) != 0) {
-		if (!wwaudio_2d_voice_is_infinite_bed ((HSAMPLE)sample)) {
-			::AIL_end_sample ((HSAMPLE)sample);
-		}
-	}
-
-#if defined(WWAUDIO_USE_SDL3)
-	wwaudio_sdl3_assign_voice_bus ((HSAMPLE)sample, new_owner);
-#endif
-}
-
-#endif
-
-
-////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Release_3D_Sample_Owner
-//
-////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Release_3D_Sample_Owner (H3DSAMPLE sample)
-{
-	AudibleSoundClass *owner =
-		(AudibleSoundClass *)::AIL_3D_object_user_data (sample, INFO_OBJECT_PTR);
-
-	if (owner != NULL) {
-		if ((owner != NULL)) {
-			owner->Free_Miles_Handle ();
-			return;
-		}
-
-		::AIL_set_3D_object_user_data (sample, INFO_OBJECT_PTR, 0);
-	}
-
-	::AIL_end_3D_sample (sample);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Takeover_2D_Sample
-//
-////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Takeover_2D_Sample (HSAMPLE sample, const AudibleSoundClass &new_owner)
-{
-	AudibleSoundClass *owner =
-		(AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
-
-	if (owner != NULL && owner != &new_owner) {
-		Release_2D_Sample_Owner (sample);
-#if defined(RENEGADE_LINUX)
-	} else if (owner == NULL && ::AIL_sample_playback_busy (sample) != 0) {
-		if (!wwaudio_2d_voice_is_infinite_bed (sample)) {
-			::AIL_end_sample (sample);
-		}
-#else
-	} else if (owner == NULL && ::AIL_sample_playback_busy (sample) != 0) {
-		::AIL_end_sample (sample);
-#endif
-	}
-
-#if defined(WWAUDIO_USE_SDL3)
-	wwaudio_sdl3_assign_voice_bus (sample, new_owner);
-#endif
 }
 
 
@@ -2560,129 +1653,10 @@ WWAudioClass::Get_2D_Sample (const AudibleSoundClass &sound_obj)
 
 	MMSLockClass lock;
 
-	/*
-	** Menu/UI via Simple_Play_2D_Sound_Effect (runtime priority 1000): small pool of
-	** handles at the end of the 2D list so rapid menu hover does not cut the prior clip.
-	*/
-	if (sound_obj.Get_Runtime_Priority () >= 100.0F && m_2DSampleHandles.Count () > 0) {
-		const int ui_pool_size = 4;
-		const int handle_count = m_2DSampleHandles.Count ();
-		const int pool_start = (handle_count > ui_pool_size)
-			? (handle_count - ui_pool_size)
-			: 0;
-
-		for (int index = pool_start; index < handle_count; index ++) {
-			HSAMPLE sample = m_2DSampleHandles[index];
-			if (	sample == NULL ||
-					sample == m_DedicatedMusicSample ||
-					sample == m_DedicatedReloadSample ||
-					sample == m_DedicatedCombat2DSample ||
-					sample == m_DedicatedDialog2DSample)
-			{
-				continue;
-			}
-
-			if (::AIL_sample_playback_busy (sample) != 0) {
-				continue;
-			}
-
-#if defined(RENEGADE_LINUX)
-			{
-				AudibleSoundClass *owner =
-					(AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
-
-				if (!wwaudio_may_assign_2d_voice (sample, owner, sound_obj)) {
-					continue;
-				}
-			}
-#endif
-
-			Takeover_2D_Sample (sample, sound_obj);
-			return sample;
-		}
-
-		HSAMPLE sample = m_DedicatedUISample;
-		if (sample == NULL) {
-			sample = m_2DSampleHandles[handle_count - 1];
-		}
-
-		Takeover_2D_Sample (sample, sound_obj);
-		return sample;
-	}
-
-	/*
-	** Dialog/EVA: use general 2D pool + dialog bus (SDL3 mixer). A single dedicated
-	** handle serialized playback — logs: ITOS/TDFA promoted but no voice_start.
-	*/
-
-	/*
-	** Weapon reload (Force_Reload runtime priority 75): isolated from gunshot 2D pool.
-	*/
-	if (	sound_obj.Get_Type () == AudibleSoundClass::TYPE_SOUND_EFFECT &&
-			sound_obj.Get_Runtime_Priority () >= DEF_RELOAD_RUNTIME_PRIORITY &&
-			sound_obj.Get_Runtime_Priority () < 100.0F &&
-			m_DedicatedReloadSample != NULL)
-	{
-		HSAMPLE sample = m_DedicatedReloadSample;
-		Takeover_2D_Sample (sample, sound_obj);
-		::AIL_set_sample_loop_count (sample, 1);
-		return sample;
-	}
-
-	/*
-	** First-person gunshots (CLASSID_2D, runtime priority 50): dedicated handle[2].
-	*/
-	if (	sound_obj.Get_Runtime_Priority () >= (DEF_WEAPON_FIRE_RUNTIME_PRIORITY - 1.0F) &&
-			sound_obj.Get_Runtime_Priority () < DEF_RELOAD_RUNTIME_PRIORITY &&
-			sound_obj.Get_Type () == AudibleSoundClass::TYPE_SOUND_EFFECT &&
-			!AudibleSound_Is_Level_Ambient_Bed (&sound_obj) &&
-			m_DedicatedCombat2DSample != NULL)
-	{
-		HSAMPLE sample = m_DedicatedCombat2DSample;
-		Takeover_2D_Sample (sample, sound_obj);
-		return sample;
-	}
-
-	/*
-	** After reload: deny general-pool 2D handles for combat SFX only (FAudio/Wine).
-	** Linux/SDL3: reload on dedicated handle — no quiet window (logs: gunshot delayed).
-	*/
-#if defined(RENEGADE_LINUX)
-	if (m_ReloadSfxQuietUntilMs != 0) {
-		m_ReloadSfxQuietUntilMs = 0;
-	}
-#else
-	if (	m_ReloadSfxQuietUntilMs != 0 &&
-			sound_obj.Get_Type () == AudibleSoundClass::TYPE_SOUND_EFFECT &&
-			sound_obj.Get_Runtime_Priority () < DEF_RELOAD_RUNTIME_PRIORITY)
-	{
-		DWORD now = ::GetTickCount ();
-		if (now < m_ReloadSfxQuietUntilMs) {
-			return (HSAMPLE)INVALID_MILES_HANDLE;
-		}
-		m_ReloadSfxQuietUntilMs = 0;
-	}
-#endif
-
-	if (	m_BackgroundMusic != NULL &&
-			&sound_obj == m_BackgroundMusic &&
-			m_DedicatedMusicSample != NULL)
-	{
-		HSAMPLE sample = m_DedicatedMusicSample;
-		Takeover_2D_Sample(sample, sound_obj);
-		return sample;
-	}
-
 	float lowest_priority					= sound_obj.Get_Priority ();
 	float lowest_runtime_priority			= sound_obj.Get_Runtime_Priority ();
 	AudibleSoundClass *lowest_pri_sound = NULL;
 	HSAMPLE lowest_pri_sample				= NULL;
-#if defined(RENEGADE_LINUX)
-	float lowest_not_busy_priority			= sound_obj.Get_Priority ();
-	float lowest_not_busy_runtime_priority	= sound_obj.Get_Runtime_Priority ();
-	AudibleSoundClass *lowest_not_busy_sound = NULL;
-	HSAMPLE lowest_not_busy_sample			= NULL;
-#endif
 	HSAMPLE free_sample						= (HSAMPLE)INVALID_MILES_HANDLE;
 
 	// Loop through all the available sample handles and try to find
@@ -2693,168 +1667,42 @@ WWAudioClass::Get_2D_Sample (const AudibleSoundClass &sound_obj)
 		HSAMPLE sample = m_2DSampleHandles[index];
 		if (sample != NULL) {
 
-			if (	sample == m_DedicatedMusicSample ||
-					sample == m_DedicatedReloadSample ||
-					sample == m_DedicatedCombat2DSample ||
-					sample == m_DedicatedDialog2DSample ||
-					wwaudio_is_ui_pool_index (m_2DSampleHandles.Count (), index))
-			{
-				continue;
-			}
+			// Get a pointer to the object that is currently using this sample
+			AudibleSoundClass *sound_obj = (AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
+			if (sound_obj == NULL) {
 
-			AudibleSoundClass *owner = (AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
+				// Return this sample handle to the caller
+				free_sample = sample;
+				found = true;
+			} else {
 
-#if defined(RENEGADE_LINUX)
-			if (!wwaudio_may_assign_2d_voice (sample, owner, sound_obj)) {
-				if (owner == NULL || !(owner != NULL)) {
-					Detach_2D_Sample_Holders (sample);
-					::AIL_set_sample_user_data (sample, INFO_OBJECT_PTR, 0);
-				}
-				continue;
-			}
-#endif
-
-			if (owner == NULL) {
-				if (::AIL_sample_playback_busy (sample) == 0) {
-					free_sample = sample;
-					found = true;
-				}
-#if defined(RENEGADE_LINUX)
-				else if (!wwaudio_2d_voice_is_infinite_bed (sample)) {
-					::AIL_end_sample (sample);
-					free_sample = sample;
-					found = true;
-				}
-#elif !defined(RENEGADE_LINUX)
-				else {
-					::AIL_end_sample (sample);
-					free_sample = sample;
-					found = true;
-				}
-#endif
-			} else if ((owner != NULL) &&
-					!wwaudio_is_protected_2d_owner (owner)) {
-
-				float priority				= owner->Get_Priority ();
-				float runtime_priority	= owner->Get_Runtime_Priority ();
-#if defined(RENEGADE_LINUX)
-				if (::AIL_sample_playback_busy (sample) == 0) {
-					if (	(priority < lowest_not_busy_priority) ||
-							(priority == lowest_not_busy_priority &&
-							 runtime_priority <= lowest_not_busy_runtime_priority))
-					{
-						lowest_not_busy_priority			= priority;
-						lowest_not_busy_sound				= owner;
-						lowest_not_busy_sample				= sample;
-						lowest_not_busy_runtime_priority	= runtime_priority;
-					}
-				}
-#endif
+				//
+				//	Determine if this sound's priority is lesser then the sound we want to play.
+				// This is done by comparing both the designer-specified priority and the current
+				// runtime priority (which is calculated by distance to the listener).
+				//
+				float priority				= sound_obj->Get_Priority ();
+				float runtime_priority	= sound_obj->Get_Runtime_Priority ();
 				if (	(priority < lowest_priority) ||
 						(priority == lowest_priority && runtime_priority <= lowest_runtime_priority))
 				{
 					lowest_priority			= priority;
-					lowest_pri_sound			= owner;
+					lowest_pri_sound			= sound_obj;
 					lowest_pri_sample			= sample;
 					lowest_runtime_priority = runtime_priority;
 				}
-			} else if (owner != NULL && !wwaudio_is_protected_2d_owner (owner)) {
-				/*
-				** Stale owner pointer only — never touch active voices or protected beds.
-				** Clearing user_data while playback_busy breaks live sounds (ghost pan updates).
-				*/
-#if defined(RENEGADE_LINUX)
-				if (::AIL_sample_playback_busy (sample) != 0) {
-					continue;
-				}
-
-				if ((owner != NULL)) {
-					Release_2D_Sample_Owner (sample);
-				} else {
-					Detach_2D_Sample_Holders (sample);
-					::AIL_set_sample_user_data (sample, INFO_OBJECT_PTR, 0);
-					::AIL_end_sample (sample);
-				}
-				free_sample = sample;
-				found = true;
-#else
-				::AIL_set_sample_user_data (sample, INFO_OBJECT_PTR, 0);
-				if (::AIL_sample_playback_busy (sample) == 0) {
-					free_sample = sample;
-					found = true;
-				} else {
-					::AIL_end_sample (sample);
-					free_sample = sample;
-					found = true;
-				}
-#endif
 			}
 		}
 	}
-
-#if defined(WWAUDIO_USE_SDL3)
-	/*
-	** Dialog must preempt ambient beds when the general pool is saturated (logs:
-	** dialog_no_handle during comloop1/wamb1 burst at level load).
-	*/
-	if (	!found &&
-			free_sample == (HSAMPLE)INVALID_MILES_HANDLE &&
-			AudibleSound_Is_Dialog_Sound (&sound_obj))
-	{
-		for (int index = 0; index < m_2DSampleHandles.Count (); index ++) {
-			HSAMPLE sample = m_2DSampleHandles[index];
-
-			if (	sample == NULL ||
-					sample == m_DedicatedMusicSample ||
-					sample == m_DedicatedReloadSample ||
-					sample == m_DedicatedCombat2DSample ||
-					sample == m_DedicatedDialog2DSample ||
-					wwaudio_is_ui_pool_index (m_2DSampleHandles.Count (), index))
-			{
-				continue;
-			}
-
-			AudibleSoundClass *owner =
-				(AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
-
-			if (owner != NULL && AudibleSound_Is_Dialog_Sound (owner)) {
-				continue;
-			}
-
-			if (owner != NULL) {
-				owner->Free_Miles_Handle ();
-			} else if (::AIL_sample_playback_busy (sample) != 0) {
-				::AIL_end_sample (sample);
-			}
-
-			free_sample = sample;
-			found = true;
-			break;
-		}
-	}
-#endif
 
 	// Steal the sample handle from the lower priority
 	// sound and return the handle to the caller.
 	if ((found == false) && (lowest_pri_sound != NULL)) {
-#if defined(RENEGADE_LINUX)
-		if (lowest_not_busy_sound != NULL) {
-			lowest_not_busy_sound->Free_Miles_Handle ();
-			free_sample = lowest_not_busy_sample;
-		} else {
-			lowest_pri_sound->Free_Miles_Handle ();
-			free_sample = lowest_pri_sample;
-		}
-#else
 		lowest_pri_sound->Free_Miles_Handle ();
 		free_sample = lowest_pri_sample;
-#endif
 	}
 
-	if (free_sample != (HSAMPLE)INVALID_MILES_HANDLE) {
-		Takeover_2D_Sample (free_sample, sound_obj);
-	}
-
+	// Return the free sample handle if we found one
 	return free_sample;
 }
 
@@ -2871,39 +1719,12 @@ WWAudioClass::Get_3D_Sample (const Sound3DClass &sound_obj)
 		return (H3DSAMPLE)INVALID_MILES_HANDLE;
 	}
 
-#if defined(RENEGADE_LINUX)
-	if (m_ReloadSfxQuietUntilMs != 0) {
-		m_ReloadSfxQuietUntilMs = 0;
-	}
-#else
-	if (	m_ReloadSfxQuietUntilMs != 0 &&
-			sound_obj.Get_Type () == AudibleSoundClass::TYPE_SOUND_EFFECT &&
-			sound_obj.Get_Runtime_Priority () < DEF_RELOAD_RUNTIME_PRIORITY)
-	{
-		DWORD now = ::GetTickCount ();
-		if (now < m_ReloadSfxQuietUntilMs) {
-			return (H3DSAMPLE)INVALID_MILES_HANDLE;
-		}
-		m_ReloadSfxQuietUntilMs = 0;
-	}
-#endif
-
 	MMSLockClass lock;
-
-	/*
-	** 3D dialog uses general 3D pool + dialog bus (see Get_2D_Sample comment).
-	*/
 
 	float lowest_priority					= sound_obj.Get_Priority ();
 	float lowest_runtime_priority			= sound_obj.Get_Runtime_Priority ();
 	AudibleSoundClass *lowest_pri_sound = NULL;
 	H3DSAMPLE lowest_pri_sample			= NULL;
-#if defined(RENEGADE_LINUX)
-	float lowest_not_busy_priority			= sound_obj.Get_Priority ();
-	float lowest_not_busy_runtime_priority	= sound_obj.Get_Runtime_Priority ();
-	AudibleSoundClass *lowest_not_busy_sound = NULL;
-	H3DSAMPLE lowest_not_busy_sample		= NULL;
-#endif
 	H3DSAMPLE free_sample					= (H3DSAMPLE)INVALID_MILES_HANDLE;
 
 
@@ -2915,82 +1736,30 @@ WWAudioClass::Get_3D_Sample (const Sound3DClass &sound_obj)
 		H3DSAMPLE sample = m_3DSampleHandles[index];
 		if (sample != NULL) {
 
-			if (sample == m_DedicatedDialog3DSample) {
-				continue;
-			}
+			// Get a pointer to the object that is currently using this sample
+			AudibleSoundClass *sound_obj = (AudibleSoundClass *)::AIL_3D_object_user_data (sample, INFO_OBJECT_PTR);
+			if (sound_obj == NULL) {
 
-			AudibleSoundClass *owner =
-				(AudibleSoundClass *)::AIL_3D_object_user_data (sample, INFO_OBJECT_PTR);
+				// Return this sample handle to the caller
+				free_sample = sample;
+				found = true;
+			} else {
 
-#if defined(RENEGADE_LINUX)
-			if (!wwaudio_may_assign_3d_voice (sample, owner, sound_obj)) {
-				if (owner == NULL || !(owner != NULL)) {
-					Detach_3D_Sample_Holders (sample);
-					::AIL_set_3D_object_user_data (sample, INFO_OBJECT_PTR, 0);
-				}
-				continue;
-			}
-#endif
-
-			if (owner == NULL) {
-				if (::AIL_sample_playback_busy ((HSAMPLE)sample) == 0) {
-					free_sample = sample;
-					found = true;
-				}
-#if defined(RENEGADE_LINUX)
-				else if (!wwaudio_2d_voice_is_infinite_bed ((HSAMPLE)sample)) {
-					::AIL_end_sample ((HSAMPLE)sample);
-					free_sample = sample;
-					found = true;
-				}
-#endif
-			} else if ((owner != NULL) &&
-#if defined(RENEGADE_LINUX)
-					!wwaudio_is_protected_3d_owner (owner))
-#else
-					owner->Get_Type () != AudibleSoundClass::TYPE_MUSIC)
-#endif
-			{
-
-				float priority				= owner->Get_Priority ();
-				float runtime_priority	= owner->Get_Runtime_Priority ();
-#if defined(RENEGADE_LINUX)
-				if (::AIL_sample_playback_busy ((HSAMPLE)sample) == 0) {
-					if (	(priority < lowest_not_busy_priority) ||
-							(priority == lowest_not_busy_priority &&
-							 runtime_priority <= lowest_not_busy_runtime_priority))
-					{
-						lowest_not_busy_priority			= priority;
-						lowest_not_busy_sound				= owner;
-						lowest_not_busy_sample				= sample;
-						lowest_not_busy_runtime_priority	= runtime_priority;
-					}
-				}
-#endif
+				//
+				//	Determine if this sound's priority is lesser then the sound we want to play.
+				// This is done by comparing both the designer-specified priority and the current
+				// runtime priority (which is calculated by distance to the listener).
+				//
+				float priority				= sound_obj->Get_Priority ();
+				float runtime_priority	= sound_obj->Get_Runtime_Priority ();
 				if (	(priority < lowest_priority) ||
 						(priority == lowest_priority && runtime_priority <= lowest_runtime_priority))
 				{
 					lowest_priority			= priority;
-					lowest_pri_sound			= owner;
+					lowest_pri_sound			= sound_obj;
 					lowest_pri_sample			= sample;
 					lowest_runtime_priority = runtime_priority;
 				}
-#if defined(RENEGADE_LINUX)
-			} else if (owner != NULL && !wwaudio_is_protected_3d_owner (owner)) {
-				if (::AIL_sample_playback_busy ((HSAMPLE)sample) != 0) {
-					continue;
-				}
-
-				if ((owner != NULL)) {
-					Release_3D_Sample_Owner (sample);
-				} else {
-					Detach_3D_Sample_Holders (sample);
-					::AIL_set_3D_object_user_data (sample, INFO_OBJECT_PTR, 0);
-					::AIL_end_3D_sample (sample);
-				}
-				free_sample = sample;
-				found = true;
-#endif
 			}
 		}
 	}
@@ -2998,26 +1767,11 @@ WWAudioClass::Get_3D_Sample (const Sound3DClass &sound_obj)
 	// Steal the sample handle from the lower priority
 	// sound and return the handle to the caller.
 	if ((found == false) && (lowest_pri_sound != NULL)) {
-#if defined(RENEGADE_LINUX)
-		if (lowest_not_busy_sound != NULL) {
-			lowest_not_busy_sound->Free_Miles_Handle ();
-			free_sample = lowest_not_busy_sample;
-		} else {
-			lowest_pri_sound->Free_Miles_Handle ();
-			free_sample = lowest_pri_sample;
-		}
-#else
 		lowest_pri_sound->Free_Miles_Handle ();
 		free_sample = lowest_pri_sample;
-#endif
 	}
 
-#if defined(RENEGADE_LINUX)
-	if (free_sample != (H3DSAMPLE)INVALID_MILES_HANDLE) {
-		Takeover_3D_Sample (free_sample, sound_obj);
-	}
-#endif
-
+	// Return the free sample handle if we found one
 	return free_sample;
 }
 
@@ -3208,28 +1962,6 @@ WWAudioClass::Select_3D_Device (const char *device_name, HPROVIDER provider)
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 //
-//	Set_Reverb_Room_Type
-//
-////////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Set_Reverb_Room_Type (int type)
-{
-	if (type < ENVIRONMENT_GENERIC) {
-		type = ENVIRONMENT_GENERIC;
-	} else if (type > ENVIRONMENT_PSYCHOTIC) {
-		type = ENVIRONMENT_PSYCHOTIC;
-	}
-
-	m_ReverbRoomType = type;
-
-	if (m_Driver2D != NULL) {
-		::AIL_set_room_type (m_Driver2D, type);
-	}
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////
-//
 //	Select_3D_Device
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3341,11 +2073,6 @@ WWAudioClass::Allocate_3D_Handles (void)
 				m_3DSampleHandles.Add (sample);
 			}
 		}
-
-		if (m_3DSampleHandles.Count () > 0) {
-			m_DedicatedDialog3DSample =
-				m_3DSampleHandles[m_3DSampleHandles.Count () - 1];
-		}
 	}
 
 	return;
@@ -3373,7 +2100,6 @@ WWAudioClass::Release_3D_Handles (void)
 	}
 
 	m_3DSampleHandles.Delete_All ();
-	m_DedicatedDialog3DSample = NULL;
 	return;
 }
 
@@ -3470,7 +2196,13 @@ WWAudioClass::Remove_2D_Sound_Handles (void)
 		HSAMPLE sample = m_2DSampleHandles[index];
 		if (sample != NULL) {
 
-			Release_2D_Sample_Owner (sample);
+			//
+			// Get a pointer to the object that is currently using this sample
+			//
+			AudibleSoundClass *sound_obj = (AudibleSoundClass *)::AIL_sample_user_data (sample, INFO_OBJECT_PTR);
+			if (sound_obj != NULL) {
+				sound_obj->Free_Miles_Handle ();
+			}
 		}
 	}
 
@@ -3493,7 +2225,13 @@ WWAudioClass::Remove_3D_Sound_Handles (void)
 		H3DSAMPLE sample = m_3DSampleHandles[index];
 		if (sample != NULL) {
 
-			Release_3D_Sample_Owner (sample);
+			//
+			// Get a pointer to the object that is currently using this sample
+			//
+			AudibleSoundClass *sound_obj = (AudibleSoundClass *)::AIL_3D_object_user_data (sample, INFO_OBJECT_PTR);
+			if (sound_obj != NULL) {
+				sound_obj->Free_Miles_Handle ();
+			}
 		}
 	}
 
@@ -3624,10 +2362,6 @@ WWAudioClass::Internal_Set_Music_Volume (float volume)
 	m_MusicVolume = min (1.0F, m_MusicVolume);
 	m_MusicVolume = max (0.0F, m_MusicVolume);
 
-#if defined(WWAUDIO_USE_SDL3)
-	music_bus_set_volume (m_MusicVolume);
-#endif
-
 	// Update all currently playing music to
 	// reflect this new volume
 	for (int index = 0; index < m_Playlist[m_CurrPage].Count (); index ++) {
@@ -3654,10 +2388,6 @@ WWAudioClass::Is_Disabled (void) const
 
 	if (_firsttime) {
 		_firsttime = false;
-
-#if defined(RENEGADE_DISABLE_AUDIO)
-		_disabled = true;
-#endif
 
 		#ifdef G_CODE_BASE
 		//
@@ -3702,20 +2432,13 @@ WWAudioClass::Initialize (const char *registry_subkey_name)
 		//
 		Load_From_Registry (registry_subkey_name);
 
-#if defined(RENEGADE_LINUX)
-		if (m_Driver2D == NULL) {
-			Open_2D_Device (true, 16, 44100);
-			Build_3D_Driver_List ();
-		}
-#endif
-
 		//
 		//	Grab the first (and only) filter for use with our 'tinny' effect.
 		//
 		HPROENUM next = HPROENUM_FIRST;
 		char *name = NULL;
 		if (::AIL_enumerate_filters (&next, &m_ReverbFilter, &name) == 0) {
-			m_ReverbFilter = NULL;
+			m_ReverbFilter = INVALID_MILES_HANDLE;
 		}
 
 		m_RealMusicVolume = m_MusicVolume;
@@ -3757,7 +2480,7 @@ WWAudioClass::Initialize
 		HPROENUM next = HPROENUM_FIRST;
 		char *name = NULL;
 		if (::AIL_enumerate_filters (&next, &m_ReverbFilter, &name) == 0) {
-			m_ReverbFilter = NULL;
+			m_ReverbFilter = INVALID_MILES_HANDLE;
 		}
 	}
 
@@ -3782,12 +2505,12 @@ WWAudioClass::Shutdown (void)
 	//
 	// If there is a timer running, then stop the timer...
 	//
-	if (m_UpdateTimer != NULL) {
+	if (m_UpdateTimer != -1) {
 
 		// Kill the timer
 		::AIL_stop_timer (m_UpdateTimer);
 		::AIL_release_timer_handle (m_UpdateTimer);
-		m_UpdateTimer = NULL;
+		m_UpdateTimer = -1;
 
 		// Wait for the timer callback function to end
 		::WaitForSingleObject (_TimerSyncEvent, 20000);
@@ -3827,7 +2550,9 @@ WWAudioClass::Shutdown (void)
 	//
 	// Shutdown Miles Sound System
 	//
-	::AIL_shutdown ();
+	if (m_ForceDisable == false) {
+		::AIL_shutdown ();
+	}
 	return;
 }
 
@@ -3972,16 +2697,6 @@ WWAudioClass::Allow_Music (bool onoff)
 	// Is the state changing?
 	if (m_IsMusicEnabled != onoff) {
 		m_IsMusicEnabled = onoff;
-
-#if defined(WWAUDIO_USE_SDL3)
-		if (m_IsMusicEnabled) {
-			if (m_BackgroundMusicName.Is_Empty () == false) {
-				Play_Background_Music_Bus (m_BackgroundMusicName, 0);
-			}
-		} else {
-			music_bus_stop (0);
-		}
-#endif
 
 		//
 		// Update all the currently playing 'music tracks' to
@@ -4129,11 +2844,6 @@ WWAudioClass::Simple_Play_2D_Sound_Effect
 	AudibleSoundClass *sound = Create_Sound_Effect (filename);
 	if (sound != NULL) {
 		sound->Set_Priority (priority);
-		/*
-		** Set_Priority clamps to 1.0; combat pseudo3D also uses 1.0 but higher
-		** runtime priority from SoundScene — UI/menu clicks lost all 2D handles.
-		*/
-		sound->Set_Runtime_Priority (1000.0F);
 		sound->Set_Loop_Count (1);
 		sound->Set_Volume(volume);
 		sound->Play ();
@@ -4163,7 +2873,6 @@ WWAudioClass::Simple_Play_2D_Sound_Effect
 	AudibleSoundClass *sound = Create_Sound_Effect (file);
 	if (sound != NULL) {
 		sound->Set_Priority (priority);
-		sound->Set_Runtime_Priority (1000.0F);
 		sound->Set_Loop_Count (1);
 		sound->Set_Volume(volume);
 		sound->Play ();
@@ -4351,20 +3060,6 @@ WWAudioClass::Load_From_Registry (const char *subkey_name)
 		//
 		Set_Speaker_Type (m_SpeakerType);
 	}
-#if defined(RENEGADE_LINUX)
-	else {
-		/*
-		** Linux has no Win32 registry; RegOpenKeyEx is stubbed. Open default
-		** 2D/3D devices so WWAudio can allocate sample handles and play audio.
-		*/
-		Free_3D_Driver_List ();
-		Close_2D_Device ();
-		Open_2D_Device (is_stereo, bits, hertz);
-		Build_3D_Driver_List ();
-		retval = (m_Driver2D != NULL);
-		WWDEBUG_SAY (("WWAudio: Linux default audio init (registry unavailable).\r\n"));
-	}
-#endif
 
 	m_RealMusicVolume = m_MusicVolume;
 	m_RealSoundVolume = m_SoundVolume;
@@ -4550,7 +3245,7 @@ WWAudioClass::Save_To_Registry
 //
 ////////////////////////////////////////////////////////////////////////////////////////////
 U32 AILCALLBACK
-WWAudioClass::File_Open_Callback (char const *filename, U32 *file_handle)
+WWAudioClass::File_Open_Callback (char const *filename, intptr_t *file_handle)
 {
 	U32 retval = false;
 
@@ -4561,11 +3256,7 @@ WWAudioClass::File_Open_Callback (char const *filename, U32 *file_handle)
 		//
 		FileClass *file = Get_Instance ()->Get_File (filename);
 		if (file != NULL && file->Open ()) {
-#if defined(RENEGADE_LINUX)
-			(*file_handle) = Miles_File_Alloc_Handle(file);
-#else
-			(*file_handle) = (U32)file;
-#endif
+			(*file_handle) = (intptr_t)file;
 			retval = true;
 		}
 	}
@@ -4580,26 +3271,17 @@ WWAudioClass::File_Open_Callback (char const *filename, U32 *file_handle)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////
 void AILCALLBACK
-WWAudioClass::File_Close_Callback (U32 file_handle)
+WWAudioClass::File_Close_Callback (intptr_t file_handle)
 {
 	if (Get_Instance () != NULL) {
 
 		//
 		//	Close the file (if necessary)
 		//
-		FileClass *file;
-#if defined(RENEGADE_LINUX)
-		file = Miles_File_From_Handle(file_handle);
-		if (file != NULL) {
-			Get_Instance ()->Return_File (file);
-			Miles_File_Free_Handle(file_handle);
-		}
-#else
-		file = reinterpret_cast<FileClass *>(file_handle);
+		FileClass *file = reinterpret_cast<FileClass *> (file_handle);
 		if (file != NULL) {
 			Get_Instance ()->Return_File (file);
 		}
-#endif
 	}
 
 	return ;
@@ -4612,19 +3294,14 @@ WWAudioClass::File_Close_Callback (U32 file_handle)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////
 S32 AILCALLBACK
-WWAudioClass::File_Seek_Callback (U32 file_handle, S32 offset, U32 type)
+WWAudioClass::File_Seek_Callback (intptr_t file_handle, S32 offset, U32 type)
 {
 	S32 retval = 0;
 
 	//
 	//	Convert the handle to a file handle type
 	//
-	FileClass *file;
-#if defined(RENEGADE_LINUX)
-	file = Miles_File_From_Handle(file_handle);
-#else
-	file = reinterpret_cast<FileClass *>(file_handle);
-#endif
+	FileClass *file = reinterpret_cast<FileClass *> (file_handle);
 	if (file != NULL) {
 
 		//
@@ -4662,19 +3339,14 @@ WWAudioClass::File_Seek_Callback (U32 file_handle, S32 offset, U32 type)
 //
 ////////////////////////////////////////////////////////////////////////////////////////////
 U32 AILCALLBACK
-WWAudioClass::File_Read_Callback (U32 file_handle, void *buffer, U32 bytes)
+WWAudioClass::File_Read_Callback (intptr_t file_handle, void *buffer, U32 bytes)
 {
 	U32 retval = 0;
 
 	//
 	//	Convert the handle to a file handle type
 	//
-	FileClass *file;
-#if defined(RENEGADE_LINUX)
-	file = Miles_File_From_Handle(file_handle);
-#else
-	file = reinterpret_cast<FileClass *>(file_handle);
-#endif
+	FileClass *file = reinterpret_cast<FileClass *> (file_handle);
 	if (file != NULL) {
 
 		//
@@ -4695,23 +3367,6 @@ WWAudioClass::File_Read_Callback (U32 file_handle, void *buffer, U32 bytes)
 void
 WWAudioClass::Fade_Background_Music (const char *filename, int fade_out_time, int fade_in_time)
 {
-#if defined(WWAUDIO_USE_SDL3)
-	if (m_BackgroundMusic != NULL) {
-		m_BackgroundMusic->Stop ();
-		REF_PTR_RELEASE (m_BackgroundMusic);
-	}
-
-	m_BackgroundMusicName = filename;
-	if (filename == NULL) {
-		music_bus_stop (fade_out_time);
-		return;
-	}
-
-	music_bus_stop (0);
-	Play_Background_Music_Bus (filename, fade_in_time);
-	return;
-#endif
-
 	//
 	//	Fade-out the background music (as necessary)
 	//
@@ -4738,8 +3393,6 @@ WWAudioClass::Fade_Background_Music (const char *filename, int fade_out_time, in
 			m_BackgroundMusic->Set_Type (AudibleSoundClass::TYPE_MUSIC);
 			m_BackgroundMusic->Cull_Sound (false);
 			m_BackgroundMusic->Fade_In (fade_in_time);
-			Link_Background_Music_To_Primary_Page ();
-			m_BackgroundMusic->Update_Volume ();
 		}
 	}
 
@@ -4755,22 +3408,6 @@ WWAudioClass::Fade_Background_Music (const char *filename, int fade_out_time, in
 void
 WWAudioClass::Set_Background_Music (const char *filename)
 {
-#if defined(WWAUDIO_USE_SDL3)
-	if (m_BackgroundMusic != NULL) {
-		m_BackgroundMusic->Stop ();
-		REF_PTR_RELEASE (m_BackgroundMusic);
-	}
-
-	m_BackgroundMusicName = filename;
-	if (filename == NULL) {
-		music_bus_stop (0);
-		return;
-	}
-
-	Play_Background_Music_Bus (filename, 0);
-	return;
-#endif
-
 	//
 	//	Stop the background music
 	//
@@ -4797,8 +3434,6 @@ WWAudioClass::Set_Background_Music (const char *filename)
 			m_BackgroundMusic->Set_Type (AudibleSoundClass::TYPE_MUSIC);
 			m_BackgroundMusic->Cull_Sound (false);
 			m_BackgroundMusic->Play ();
-			Link_Background_Music_To_Primary_Page ();
-			m_BackgroundMusic->Update_Volume ();
 		}
 	}
 
@@ -4808,36 +3443,75 @@ WWAudioClass::Set_Background_Music (const char *filename)
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 //
-//	Link_Background_Music_To_Primary_Page
+//	Pause_Game_Music_Bus
 //
 ////////////////////////////////////////////////////////////////////////////////////////////
 void
-WWAudioClass::Link_Background_Music_To_Primary_Page (void)
+WWAudioClass::Pause_Game_Music_Bus (void)
 {
-	if (m_BackgroundMusic == NULL) {
-		return ;
+	if (m_BackgroundMusic != NULL) {
+		m_BackgroundMusic->Stop ();
 	}
+	return ;
+}
 
-	for (int index = m_Playlist[PAGE_SECONDARY].Count () - 1; index >= 0; index --) {
-		if (m_Playlist[PAGE_SECONDARY][index] == m_BackgroundMusic) {
-			m_Playlist[PAGE_SECONDARY].Delete (index);
-			REF_PTR_RELEASE (m_BackgroundMusic);
-		}
+
+////////////////////////////////////////////////////////////////////////////////////////////
+//
+//	Resume_Game_Music_Bus
+//
+////////////////////////////////////////////////////////////////////////////////////////////
+void
+WWAudioClass::Resume_Game_Music_Bus (void)
+{
+	if (m_BackgroundMusic != NULL) {
+		m_BackgroundMusic->Play ();
 	}
+	return ;
+}
 
-	bool already_added = false;
-	for (int index = 0; index < m_Playlist[PAGE_PRIMARY].Count (); index ++) {
-		if (m_Playlist[PAGE_PRIMARY][index] == m_BackgroundMusic) {
-			already_added = true;
-			break;
-		}
+
+////////////////////////////////////////////////////////////////////////////////////////////
+//
+//	Stop_Menu_Music
+//
+////////////////////////////////////////////////////////////////////////////////////////////
+void
+WWAudioClass::Stop_Menu_Music (void)
+{
+	if (m_BackgroundMusic != NULL) {
+		m_BackgroundMusic->Stop ();
 	}
+	return ;
+}
 
-	if (already_added == false) {
-		m_BackgroundMusic->Add_Ref ();
-		m_Playlist[PAGE_PRIMARY].Add (m_BackgroundMusic);
+
+////////////////////////////////////////////////////////////////////////////////////////////
+//
+//	Is_Menu_Music_Active
+//
+////////////////////////////////////////////////////////////////////////////////////////////
+bool
+WWAudioClass::Is_Menu_Music_Active (void)
+{
+	if (m_BackgroundMusic != NULL) {
+		return (m_BackgroundMusic->Get_State () == AudibleSoundClass::STATE_PLAYING);
 	}
+	return false;
+}
 
+
+////////////////////////////////////////////////////////////////////////////////////////////
+//
+//	Play_Menu_Music
+//
+////////////////////////////////////////////////////////////////////////////////////////////
+void
+WWAudioClass::Play_Menu_Music (const char *filename)
+{
+	if (filename != NULL) {
+		Set_Background_Music (filename);
+	}
 	return ;
 }
 
@@ -4850,21 +3524,7 @@ WWAudioClass::Link_Background_Music_To_Primary_Page (void)
 void
 WWAudioClass::Set_Active_Sound_Page (SOUND_PAGE page)
 {
-	if (page >= PAGE_COUNT) {
-		return ;
-	}
-
 	if (page == m_CurrPage) {
-#if defined(WWAUDIO_USE_SDL3)
-		if (page == PAGE_PRIMARY) {
-			Stop_Menu_Music ();
-			if (m_GameMusicBusPaused) {
-				Resume_Game_Music_Bus ();
-			} else if (m_BackgroundMusicName.Is_Empty () == false && Is_Music_On ()) {
-				Play_Background_Music_Bus (m_BackgroundMusicName, 0);
-			}
-		}
-#endif
 		return ;
 	}
 
@@ -4875,56 +3535,14 @@ WWAudioClass::Set_Active_Sound_Page (SOUND_PAGE page)
 		m_Playlist[m_CurrPage][index]->Pause ();
 	}
 
-	if (m_CurrPage == PAGE_PRIMARY && page != PAGE_PRIMARY) {
-#if defined(WWAUDIO_USE_SDL3)
-		Pause_Game_Music_Bus ();
-#else
-		if (m_BackgroundMusic != NULL && m_BackgroundMusic->Is_Playing ()) {
-			m_BackgroundMusic->Pause ();
-		}
-#endif
-	}
-
 	//
 	//	Resume any sounds that are playing in the new page
 	//
-	if (page == PAGE_PRIMARY && m_CurrPage != PAGE_PRIMARY) {
-#if defined(WWAUDIO_USE_SDL3)
-		Stop_Menu_Music ();
-		if (m_GameMusicBusPaused) {
-			Resume_Game_Music_Bus ();
-		} else if (m_BackgroundMusicName.Is_Empty () == false && Is_Music_On ()) {
-			Play_Background_Music_Bus (m_BackgroundMusicName, 0);
-		}
-#endif
-	}
-
 	for (int index = 0; index < m_Playlist[page].Count ();index ++) {
 		m_Playlist[page][index]->Resume ();
 	}
 
-	if (page == PAGE_PRIMARY && m_CurrPage != PAGE_PRIMARY) {
-#if !defined(WWAUDIO_USE_SDL3)
-		if (	m_BackgroundMusic != NULL &&
-				m_BackgroundMusic->Get_State () == AudibleSoundClass::STATE_PAUSED)
-		{
-			m_BackgroundMusic->Resume ();
-		}
-#endif
-	}
-
 	m_CurrPage = page;
-
-#if defined(RENEGADE_LINUX)
-	/*
-	** Scene culling was frozen on PAGE_SECONDARY; refresh audible beds immediately
-	** after the pause menu returns so uncull / handle recovery is not delayed a frame.
-	*/
-	if (page == PAGE_PRIMARY && m_SoundScene != NULL) {
-		m_SoundScene->On_Frame_Update (0);
-	}
-#endif
-
 	return ;
 }
 
@@ -5215,19 +3833,6 @@ WWAudioClass::Pop_Active_Sound_Page (void)
 		Set_Active_Sound_Page (new_page);
 	}
 
-	return ;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////
-//
-//	Enable_New_Sounds
-//
-////////////////////////////////////////////////////////////////////////////////////////////
-void
-WWAudioClass::Enable_New_Sounds (bool onoff)
-{
-	m_AreNewSoundsEnabled = onoff;
 	return ;
 }
 

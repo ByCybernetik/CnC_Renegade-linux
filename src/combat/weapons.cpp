@@ -62,6 +62,11 @@
 #include "rbody.h"
 #include "timeddecophys.h"
 #include "wwphysids.h"
+/* Port addition: runtime priority for weapon fire sounds */
+#ifndef DEF_WEAPON_FIRE_RUNTIME_PRIORITY
+#define DEF_WEAPON_FIRE_RUNTIME_PRIORITY 0.5f
+#endif
+
 #include "part_emt.h"
 #include "vehicle.h"
 #include "c4.h"
@@ -1504,13 +1509,6 @@ void	WeaponClass::Update_State( float pending_time )
 
 		// If we can fire, start charging, it will fire and go back to READY
 		if ( (State == STATE_READY) || (State == STATE_IDLE) ) {
-			/*
-			** Logs: gunshot 2D uploads ~1 s after reload when 800 ms quiet expired; arm early.
-			*/
-			if ( Is_Reload_Needed() ) {
-				WWAudioClass::Get_Instance ()->Arm_Reload_Sfx_Quiet_Window ();
-			}
-
 			if ( (IsPrimaryTriggered || IsSecondaryTriggered) && (BurstCount != 0) && CombatManager::Is_Gameplay_Permitted() && trigger_ok ) {
 				if ( SafetySet ) {
 					LockTriggers = true;
@@ -1621,76 +1619,24 @@ void	WeaponClass::Update_State( float pending_time )
 
 void	WeaponClass::Force_Reload( void )
 {
-	if ( !Is_Reload_OK() ) {
-		return;
-	}
-
-	if ( State > STATE_READY ) {
-		return;
-	}
-
-	/*
-	** smartgameobj calls Force_Reload every frame while R is held. After Do_Reload the
-	** clip is full but the key is still down — replayed reload SFX (not an audio loop).
-	*/
-	if ( (int)ClipRounds >= (int)Definition->ClipSize ) {
-		return;
-	}
-
 	// Stop reloading on last bullet to fire faster
-	{
-		/*
-		** Release the looping fire sound so reload does not share / fight over the same
-		** 2D sample handle (distorted noise under FAudio).
-		** Linux/SDL3: reload uses dedicated handle[1] — do not Stop_Combat (kills wind/rain 2D ambients).
-		*/
-		WWAudioClass::Get_Instance ()->Arm_Reload_Sfx_Quiet_Window ();
-#if !defined(RENEGADE_LINUX)
-		WWAudioClass::Get_Instance ()->Stop_Combat_2D_Samples ();
-		WWAudioClass::Get_Instance ()->Stop_Combat_3D_Samples ();
-#endif
-		Stop_Firing_Sound();
-
+//	if ( Is_Reload_OK() && State != STATE_RELOAD ) {
+	if ( Is_Reload_OK() && State <= STATE_READY ) {
 		Set_State( STATE_RELOAD );
 
 		if ( Definition->ReloadSoundDefID != 0 ) {
+			// Make the reload sound
 			Matrix3D	muzzle = Get_Muzzle();
 
 			RefCountedGameObjReference *owner_ref = new RefCountedGameObjReference;
 			owner_ref->Set_Ptr( Get_Owner() );
 
-			/*
-			** Drop stale RAM cache so reload re-decodes (Sound2DHandle / FA_KIND_2D).
-			*/
-			AudibleSoundClass *reload_sound = NULL;
-			if (WWAudioClass::Get_Instance ()->Begin_Reload_Sound_Playback ()) {
-				DefinitionClass *definition = DefinitionMgrClass::Find_Definition (Definition->ReloadSoundDefID);
-				if (	definition != NULL &&
-						definition->Get_Class_ID () == CLASSID_SOUND)
-				{
-					AudibleSoundDefinitionClass *sound_def =
-						(AudibleSoundDefinitionClass *)definition;
-					StringClass real_filename = sound_def->Get_Filename ();
-					const char *dir_delimiter = ::strrchr (real_filename, '\\');
-					if (	dir_delimiter != NULL &&
-							real_filename.Get_Length () > 2 &&
-							real_filename[1] != ':')
-					{
-						real_filename = (dir_delimiter + 1);
-					}
-					WWAudioClass::Get_Instance ()->Remove_Cached_Buffer (real_filename);
-				}
-
-				reload_sound = WWAudioClass::Get_Instance()->Create_Sound(
-					Definition->ReloadSoundDefID, owner_ref, 0, CLASSID_2D );
-			}
-			if ( reload_sound != NULL ) {
-				reload_sound->Set_Loop_Count (1);
-				reload_sound->Set_Runtime_Priority (DEF_RELOAD_RUNTIME_PRIORITY);
-				reload_sound->Set_Transform (muzzle);
-				reload_sound->Cull_Sound (false);
-				reload_sound->Play ();
-				reload_sound->Release_Ref ();
+			AudibleSoundClass * sound = WWAudioClass::Get_Instance()->Create_Sound( Definition->ReloadSoundDefID, owner_ref );
+			if ( sound != NULL ) {
+				sound->Set_Transform( muzzle );
+				sound->Attach_To_Object( Model );
+				sound->Add_To_Scene( true );
+				sound->Release_Ref();
 			}
 
 			REF_PTR_RELEASE( owner_ref );

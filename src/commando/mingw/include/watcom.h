@@ -1,1 +1,1 @@
-../../../scripts/watcom.h
+../../../wwlib/watcom.h

@@ -53,7 +53,6 @@ _wwui_inc_dirs = [
   '../wwsaveload',
   '../wwtranslatedb',
   '../wwaudio',
-  '../wwaudio/mingw',
 ]
 if get_option('platform') == 'linux'
   _wwui_inc_dirs += '../platform/linux'

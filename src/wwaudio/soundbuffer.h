@@ -43,7 +43,11 @@
 #define __SOUNDBUFFER_H
 
 #pragma warning (push, 3)
+#if defined(RENEGADE_LINUX)
+#include "mss_stub.h"
+#else
 #include "mss.h"
+#endif
 #pragma warning (pop)
 
 #include "refcount.h"

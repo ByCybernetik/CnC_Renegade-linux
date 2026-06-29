@@ -34,12 +34,9 @@
 #include "threads.h"
 #include "refcount.h"
 #include "utils.h"
-#include <process.h>
+#include <Process.h>
 #include "wwdebug.h"
 #include "systimer.h"
-#if defined(RENEGADE_LINUX)
-#include "../platform/sdl3_host.h"
-#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -106,25 +103,7 @@ WWAudioThreadsClass::End_Delayed_Release_Thread (DWORD timeout)
 	//
 	if (m_hDelayedReleaseThread != (HANDLE)-1) {
 		::SetEvent (m_hDelayedReleaseEvent);
-#if defined(RENEGADE_LINUX)
-		for (int i = 0; i < 8; ++i) {
-			Platform_Pump_Events();
-		}
-#endif
-		const DWORD join_timeout =
-#if defined(RENEGADE_LINUX)
-			(timeout > 2000u) ? 2000u : timeout;
-#else
-			timeout;
-#endif
-		::WaitForSingleObject (m_hDelayedReleaseThread, join_timeout);
-
-		if (m_hDelayedReleaseEvent != (HANDLE)-1) {
-			::CloseHandle (m_hDelayedReleaseEvent);
-		}
-		if (m_hDelayedReleaseThread != (HANDLE)-1) {
-			::CloseHandle (m_hDelayedReleaseThread);
-		}
+		::WaitForSingleObject (m_hDelayedReleaseThread, timeout);
 
 		m_hDelayedReleaseEvent	= (HANDLE)-1;
 		m_hDelayedReleaseThread	= (HANDLE)-1;

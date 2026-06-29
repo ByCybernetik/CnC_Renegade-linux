@@ -78,7 +78,7 @@ public:
 	//
 	//	Inherited
 	//
-	void							Set_Miles_Handle (HSAMPLE handle);
+	void							Set_Miles_Handle (uint32 handle);
 	void							Initialize (SoundBufferClass *buffer);
 	void							Start_Sample (void);
 	void							Stop_Sample (void);

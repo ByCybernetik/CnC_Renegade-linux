@@ -42,7 +42,11 @@
 #define __SOUNDOBJ_H
 
 #pragma warning (push, 3)
+#if defined(RENEGADE_LINUX)
+#include "mss_stub.h"
+#else
 #include "mss.h"
+#endif
 #pragma warning (pop)
 
 //#include <malloc.h>
@@ -163,7 +167,7 @@ class AudibleSoundClass : public SoundSceneObjClass
 		virtual bool				Play (bool alloc_handle = true);
 		virtual bool				Pause (void);
 		virtual bool				Resume (void);
-		virtual bool				Stop (bool remove_from_playlist = true, bool sfx_natural_end = false);
+		virtual bool				Stop (bool remove_from_playlist = true);
 		virtual void				Seek (unsigned long milliseconds);
 		virtual SOUND_STATE		Get_State (void) const	{ return m_State; }
 
@@ -270,10 +274,6 @@ class AudibleSoundClass : public SoundSceneObjClass
 		virtual void			Add_To_Scene (bool start_playing = true);
 		virtual void			Remove_From_Scene (void);
 
-#if defined(RENEGADE_LINUX) || defined(WWAUDIO_USE_MSS)
-		bool					Linux_Detach_If_Holding_Sample (void *miles_sample);
-#endif
-
 		//////////////////////////////////////////////////////////////////////
 		//	Attenuation settings
 		//////////////////////////////////////////////////////////////////////
@@ -326,12 +326,9 @@ class AudibleSoundClass : public SoundSceneObjClass
 		//////////////////////////////////////////////////////////////////////
 		virtual SoundHandleClass *	Get_Miles_Handle (void) const			{ return m_SoundHandle; }
 		virtual void				Set_Miles_Handle (MILES_HANDLE handle = INVALID_MILES_HANDLE);
-		virtual void				Free_Miles_Handle (bool force_end = true);
+		virtual void				Free_Miles_Handle (void);
 		virtual void				Initialize_Miles_Handle (void);
 		virtual void				Allocate_Miles_Handle (void);
-#if defined(RENEGADE_LINUX)
-		bool							Verify_Linux_Miles_Handle_Ownership (void);
-#endif
 
 		//////////////////////////////////////////////////////////////////////
 		//	Buffer information
@@ -504,22 +501,6 @@ protected:
 	// Misc UI info
 	Vector3				m_AttenuationSphereColor;
 };
-
-
-#if defined(RENEGADE_LINUX) || defined(WWAUDIO_USE_MSS)
-bool AudibleSound_Is_Level_Ambient_Bed (const AudibleSoundClass *sound);
-#endif
-
-#if defined(RENEGADE_LINUX) || defined(WWAUDIO_USE_SDL3) || defined(WWAUDIO_USE_MSS) || defined(WWAUDIO_USE_FAUDIO) || defined(WWAUDIO_USE_OPENAL)
-bool AudibleSound_Is_2D_Environmental_Loop (const AudibleSoundClass *sound);
-bool AudibleSound_Is_Ambient_Loop_Sound (const AudibleSoundClass *sound);
-#endif
-
-#if defined(WWAUDIO_USE_SDL3)
-bool AudibleSound_Is_Dialog_Sound (const AudibleSoundClass *sound);
-void AudibleSound_Apply_Dialog_Classification (AudibleSoundClass *sound);
-int AudibleSound_Resolve_Voice_Bus (const AudibleSoundClass *sound);
-#endif
 
 
 #endif //__SOUNDOBJ_H

@@ -45,7 +45,6 @@
 #include "persist.h"
 #include "multilist.h"
 #include "mutex.h"
-#include <stdint.h>
 
 /////////////////////////////////////////////////////////////////////////////////
 // Forward declarations
